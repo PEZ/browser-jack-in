@@ -1,0 +1,4 @@
+# Scittle vendor files
+# Download these:
+# curl -o scittle.js https://cdn.jsdelivr.net/npm/scittle@0.7.30/dist/scittle.js
+# curl -o scittle.nrepl.js https://cdn.jsdelivr.net/npm/scittle@0.7.30/dist/scittle.nrepl.js

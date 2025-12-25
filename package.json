@@ -1,0 +1,14 @@
+{
+  "name": "dom-repl",
+  "version": "0.1.0",
+  "description": "A cross-browser extension for DOM REPL",
+  "scripts": {
+    "build": "node scripts/build.js",
+    "build:chrome": "node scripts/build.js chrome",
+    "build:firefox": "node scripts/build.js firefox",
+    "build:safari": "node scripts/build.js safari"
+  },
+  "devDependencies": {
+    "archiver": "^6.0.1"
+  }
+}
