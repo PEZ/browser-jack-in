@@ -1,4 +1,8 @@
 node_modules/
 dist/
+dist-vite/
 *.zip
 .DS_Store
+
+# Squint compiled output
+src/*.mjs

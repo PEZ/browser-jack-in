@@ -1,0 +1,19 @@
+{
+  "name": "dom-repl",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "squint-cljs": "^0.9.102",
+    "vite": "^6.4.1"
+  },
+  "dependencies": {
+    "reagami": "^0.0.36"
+  },
+  "scripts": {
+    "compile": "squint compile",
+    "watch": "squint watch",
+    "dev": "squint watch & vite",
+    "build": "squint compile && vite build"
+  }
+}

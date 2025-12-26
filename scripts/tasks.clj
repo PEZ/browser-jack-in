@@ -1,6 +1,7 @@
 (ns tasks
   (:require [babashka.fs :as fs]
             [babashka.http-client :as http]
+            [babashka.process :as p]
             [clojure.data.json :as json]))
 
 (defn bundle-scittle
@@ -18,6 +19,15 @@
         (spit (str vendor-dir "/" filename) (:body response))))
     (println "✓ Scittle" version "bundled to" vendor-dir)))
 
+(defn compile-squint
+  "Compile ClojureScript files with Squint and bundle with Vite"
+  []
+  (println "Compiling Squint...")
+  (p/shell "npx squint compile")
+  (println "Bundling with Vite...")
+  (p/shell "npx vite build")
+  (println "✓ Squint + Vite compilation complete"))
+
 (defn- adjust-manifest
   "Adjust manifest.json for specific browser"
   [manifest browser]
@@ -33,7 +43,10 @@
   [& browsers]
   (let [browsers (if (seq browsers) browsers ["chrome" "firefox" "safari"])
         src-dir "src"
+        vite-dir "dist-vite"
         dist-dir "dist"]
+    ;; Compile Squint + bundle with Vite
+    (compile-squint)
     (fs/create-dirs dist-dir)
     (doseq [browser browsers]
       (println (str "Building for " browser "..."))
@@ -42,6 +55,14 @@
         (when (fs/exists? browser-dir)
           (fs/delete-tree browser-dir))
         (fs/copy-tree src-dir browser-dir)
+
+        ;; Copy Vite-bundled popup files over the source ones
+        (fs/copy (str vite-dir "/popup.html") (str browser-dir "/popup.html")
+                 {:replace-existing true})
+        (fs/copy (str vite-dir "/popup.js") (str browser-dir "/popup.js")
+                 {:replace-existing true})
+        ;; Remove the unbundled mjs file
+        (fs/delete-if-exists (str browser-dir "/popup.mjs"))
 
         ;; Adjust manifest
         (let [manifest-path (str browser-dir "/manifest.json")

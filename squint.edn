@@ -1,0 +1,3 @@
+{:paths ["src-cljs"]
+ :output-dir "src"
+ :extension "mjs"}
