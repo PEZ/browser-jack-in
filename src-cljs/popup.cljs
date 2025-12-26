@@ -9,6 +9,16 @@
          :ui/status nil
          :ui/copy-feedback nil}))
 
+(defn brave-browser? []
+  (some? (.-brave js/navigator)))
+
+(defn status-class [status]
+  (when status
+    (cond
+      (or (.startsWith status "Failed") (.startsWith status "Error")) "status status-failed"
+      (or (.endsWith status "...") (.includes status "not connected")) "status status-pending"
+      :else "status")))
+
 (defn generate-server-cmd [{:keys [ports/nrepl ports/ws]}]
   (str "bb -Sdeps '{:deps {io.github.babashka/sci.nrepl {:git/sha \"1042578d5784db07b4d1b6d974f1db7cabf89e3f\"}}}' "
        "-e \"(require '[sci.nrepl.browser-server :as server]) "
@@ -182,7 +192,9 @@
                             (case ws-state
                               1 (str "Connected to ws://localhost:" ws-port)
                               0 "Connecting..."
-                              3 "Failed: WebSocket connection failed. Is the server running?"
+                              3 (str "Failed: WebSocket connection failed. Is the server running?"
+                                     (when (brave-browser?)
+                                       " Brave Shields may block WebSocket connections."))
                               (when (.-hasScittle result)
                                 "Scittle loaded, not connected"))))))))
 
@@ -252,7 +264,7 @@
      [:span.connect-target (str "ws://localhost:" ws)]
      [:button#connect {:on-click #(dispatch! [:connect])} "Connect"]]
     (when status
-         [:div#status.status status])]
+      [:div#status {:class (status-class status)} status])]
 
    [:div.step
     [:div.step-header "3. Connect editor to browser (via server)"]
