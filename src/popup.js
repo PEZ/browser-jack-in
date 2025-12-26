@@ -158,27 +158,43 @@ async function updateStatusOnLoad() {
 // Check status when popup opens
 updateStatusOnLoad();
 
+// Get storage key based on current tab's hostname
+async function getStorageKey() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  try {
+    const url = new URL(tab.url);
+    return 'ports_' + url.hostname;
+  } catch {
+    return 'ports_default';
+  }
+}
+
 // Generate server command with both ports
-function updateServerCommand() {
+async function updateServerCommand() {
   const nreplPort = document.getElementById('nrepl-port').value;
   const wsPort = document.getElementById('ws-port').value;
   const cmd = `bb -Sdeps '{:deps {io.github.babashka/sci.nrepl {:git/sha "1042578d5784db07b4d1b6d974f1db7cabf89e3f"}}}' -e "(require '[sci.nrepl.browser-server :as server]) (server/start\\! {:nrepl-port ${nreplPort} :websocket-port ${wsPort}}) @(promise)"`;
   document.getElementById('server-cmd').textContent = cmd;
   document.getElementById('connect-target').textContent = 'localhost:' + wsPort;
-  // Save to storage
-  chrome.storage.local.set({ nreplPort, wsPort });
+  // Save to storage keyed by hostname
+  const key = await getStorageKey();
+  chrome.storage.local.set({ [key]: { nreplPort, wsPort } });
 }
 
 // Load saved ports and initialize
-chrome.storage.local.get(['nreplPort', 'wsPort'], (result) => {
-  if (result.nreplPort) {
-    document.getElementById('nrepl-port').value = result.nreplPort;
-  }
-  if (result.wsPort) {
-    document.getElementById('ws-port').value = result.wsPort;
-  }
-  updateServerCommand();
-});
+(async () => {
+  const key = await getStorageKey();
+  chrome.storage.local.get([key], (result) => {
+    const saved = result[key];
+    if (saved?.nreplPort) {
+      document.getElementById('nrepl-port').value = saved.nreplPort;
+    }
+    if (saved?.wsPort) {
+      document.getElementById('ws-port').value = saved.wsPort;
+    }
+    updateServerCommand();
+  });
+})();
 
 // Listen for port changes
 document.getElementById('nrepl-port').addEventListener('input', updateServerCommand);
