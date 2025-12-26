@@ -7,10 +7,13 @@
   (atom {:ports/nrepl "1339"
          :ports/ws "1340"
          :ui/status nil
-         :ui/copy-feedback nil}))
+         :ui/copy-feedback nil
+         :browser/brave? false}))
 
-(defn brave-browser? []
-  (some? (.-brave js/navigator)))
+(defn ws-fail-message []
+  (str "Failed: WebSocket connection failed. Is the server running?"
+       (when (:browser/brave? @!state)
+         " Brave Shields may block WebSocket connections.")))
 
 (defn status-class [status]
   (when status
@@ -175,7 +178,7 @@
                                      (fn [result] (= "connected" (.-status result)))
                                      (fn [result]
                                        (when (= "failed" (.-status result))
-                                         (js/Error. "WebSocket connection failed. Is the server running?")))
+                                         (js/Error. (ws-fail-message))))
                                      5000)))
                            (.then (fn [_] (swap! !state assoc :ui/status (str "Connected to ws://localhost:" port))))
                            (.catch (fn [err] (swap! !state assoc :ui/status (str "Failed: " (.-message err))))))))))))
@@ -192,9 +195,7 @@
                             (case ws-state
                               1 (str "Connected to ws://localhost:" ws-port)
                               0 "Connecting..."
-                              3 (str "Failed: WebSocket connection failed. Is the server running?"
-                                     (when (brave-browser?)
-                                       " Brave Shields may block WebSocket connections."))
+                              3 (ws-fail-message)
                               (when (.-hasScittle result)
                                 "Scittle loaded, not connected"))))))))
 
@@ -278,6 +279,9 @@
 (defn init! []
   (js/console.log "DOM REPL popup init!")
   (add-watch !state ::render (fn [_ _ _ _] (render!)))
+
+  ;; Detect browser features
+  (swap! !state assoc :browser/brave? (some? (.-brave js/navigator)))
 
   (js/console.log "About to render, app element:" (js/document.getElementById "app"))
   (render!)
