@@ -221,17 +221,23 @@
 
 (defn popup-ui [{:keys [ports/nrepl ports/ws ui/status ui/copy-feedback] :as state}]
   [:div
-   [:h1 "DOM REPL"]
+   ;; Header with logos
+   [:div.header
+    [:h1 "DOM REPL"]
+    [:span.header-tagline "Scittle nREPL"
+     [:span.header-logos
+      [:img {:src "images/sci.png" :alt "SCI"}]
+      [:img {:src "images/clojure.png" :alt "Clojure"}]]]]
 
    [:div.step
     [:div.step-header "1. Start the browser-nrepl server"]
     [:div.port-row
      [port-input {:id "nrepl-port"
-                  :label "nREPL port:"
+                  :label "nREPL:"
                   :value nrepl
                   :on-change #(dispatch! [:set-nrepl-port %])}]
      [port-input {:id "ws-port"
-                  :label "WebSocket port:"
+                  :label "WebSocket:"
                   :value ws
                   :on-change #(dispatch! [:set-ws-port %])}]]
     [command-box {:command (generate-server-cmd state)
@@ -240,7 +246,7 @@
    [:div.step
     [:div.step-header "2. Connect browser to server"]
     [:div.connect-row
-     [:span.connect-target (str "localhost:" ws)]
+     [:span.connect-target (str "ws://localhost:" ws)]
      [:button#connect {:on-click #(dispatch! [:connect])} "Connect"]]]
 
    (when status
