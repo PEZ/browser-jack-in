@@ -83,4 +83,3 @@ jobs:
             artifacts/chrome-extension/browser-jack-in-chrome.zip
             artifacts/firefox-extension/browser-jack-in-firefox.zip
             artifacts/safari-extension/browser-jack-in-safari.zip
-          draft: true
