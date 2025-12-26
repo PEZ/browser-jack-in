@@ -2,13 +2,13 @@ name: Build Extension
 
 on:
   push:
-    branches: [main]
+    branches: [master]
     tags: ['v*']
   pull_request:
-    branches: [main]
+    branches: [master]
 
 jobs:
-  build-chrome-firefox:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,11 +22,29 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Setup Babashka
+        uses: DeLaGuardo/setup-clojure@13.4
+        with:
+          bb: latest
+
+      - name: Cache Babashka dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gitlibs
+            ~/.m2
+          key: bb-deps-${{ runner.os }}-${{ hashFiles('bb.edn') }}
+          restore-keys: |
+            bb-deps-${{ runner.os }}-
+
       - name: Build Chrome extension
-        run: npm run build:chrome
+        run: bb build:chrome
 
       - name: Build Firefox extension
-        run: npm run build:firefox
+        run: bb build:firefox
+
+      - name: Build Safari extension
+        run: bb build:safari
 
       - name: Upload Chrome artifact
         uses: actions/upload-artifact@v4
@@ -40,52 +58,15 @@ jobs:
           name: firefox-extension
           path: dist/browser-jack-in-firefox.zip
 
-  build-safari:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build Safari extension base
-        run: npm run build:safari
-
-      - name: Convert to Safari extension
-        run: |
-          # Create Xcode project from extension
-          xcrun safari-web-extension-converter dist/safari \
-            --project-location dist/safari-xcode \
-            --app-name "Browser Jack-in" \
-            --bundle-identifier com.example.browser-jack-in \
-            --no-prompt \
-            --no-open
-
-      - name: Build Safari extension
-        run: |
-          cd dist/safari-xcode/"Browser Jack-in"
-          xcodebuild -scheme "Browser Jack-in (macOS)" \
-            -configuration Release \
-            -destination 'platform=macOS' \
-            CODE_SIGN_IDENTITY="-" \
-            CODE_SIGNING_REQUIRED=NO \
-            build
-
       - name: Upload Safari artifact
         uses: actions/upload-artifact@v4
         with:
           name: safari-extension
-          path: dist/safari-xcode
+          path: dist/browser-jack-in-safari.zip
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build-chrome-firefox, build-safari]
+    needs: [build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -101,4 +82,5 @@ jobs:
           files: |
             artifacts/chrome-extension/browser-jack-in-chrome.zip
             artifacts/firefox-extension/browser-jack-in-firefox.zip
+            artifacts/safari-extension/browser-jack-in-safari.zip
           draft: true
