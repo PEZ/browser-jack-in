@@ -3,7 +3,7 @@
   "name": "DOM REPL",
   "version": "0.1.0",
   "description": "A browser extension for DOM REPL",
-  "permissions": ["scripting", "activeTab"],
+  "permissions": ["scripting", "activeTab", "storage"],
   "host_permissions": ["<all_urls>"],
   "action": {
     "default_popup": "popup.html",

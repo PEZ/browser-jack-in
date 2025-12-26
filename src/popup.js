@@ -140,12 +140,12 @@ async function checkStatus(tabId) {
 async function updateStatusOnLoad() {
   const statusEl = document.getElementById('status');
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  const nreplPort = document.getElementById('nrepl-port').value;
+  const wsPortInput = document.getElementById('ws-port').value;
 
   const { hasScittle, wsState, wsPort } = await checkStatus(tab.id);
 
   if (wsState === 1) {
-    statusEl.textContent = 'Connected! Editor: localhost:' + nreplPort;
+    statusEl.textContent = 'Connected to ws://localhost:' + (wsPort || wsPortInput);
   } else if (wsState === 0) {
     statusEl.textContent = 'Connecting...';
   } else if (wsState === 3) {
@@ -158,17 +158,49 @@ async function updateStatusOnLoad() {
 // Check status when popup opens
 updateStatusOnLoad();
 
-document.getElementById('start').addEventListener('click', async () => {
-  const nreplPort = parseInt(document.getElementById('nrepl-port').value, 10);
+// Generate server command with both ports
+function updateServerCommand() {
+  const nreplPort = document.getElementById('nrepl-port').value;
+  const wsPort = document.getElementById('ws-port').value;
+  const cmd = `bb -Sdeps '{:deps {io.github.babashka/sci.nrepl {:git/sha "1042578d5784db07b4d1b6d974f1db7cabf89e3f"}}}' -e "(require '[sci.nrepl.browser-server :as server]) (server/start\\! {:nrepl-port ${nreplPort} :websocket-port ${wsPort}}) @(promise)"`;
+  document.getElementById('server-cmd').textContent = cmd;
+  document.getElementById('connect-target').textContent = 'localhost:' + wsPort;
+  // Save to storage
+  chrome.storage.local.set({ nreplPort, wsPort });
+}
+
+// Load saved ports and initialize
+chrome.storage.local.get(['nreplPort', 'wsPort'], (result) => {
+  if (result.nreplPort) {
+    document.getElementById('nrepl-port').value = result.nreplPort;
+  }
+  if (result.wsPort) {
+    document.getElementById('ws-port').value = result.wsPort;
+  }
+  updateServerCommand();
+});
+
+// Listen for port changes
+document.getElementById('nrepl-port').addEventListener('input', updateServerCommand);
+document.getElementById('ws-port').addEventListener('input', updateServerCommand);
+
+// Copy command button
+document.getElementById('copy-cmd').addEventListener('click', () => {
+  const cmd = document.getElementById('server-cmd').textContent;
+  navigator.clipboard.writeText(cmd).then(() => {
+    const btn = document.getElementById('copy-cmd');
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy', 1500);
+  });
+});
+
+// Connect button
+document.getElementById('connect').addEventListener('click', async () => {
   const wsPort = parseInt(document.getElementById('ws-port').value, 10);
   const statusEl = document.getElementById('status');
 
-  if (isNaN(nreplPort) || nreplPort < 1 || nreplPort > 65535) {
-    statusEl.textContent = 'Invalid nREPL port';
-    return;
-  }
   if (isNaN(wsPort) || wsPort < 1 || wsPort > 65535) {
-    statusEl.textContent = 'Invalid WebSocket port';
+    statusEl.textContent = 'Invalid port';
     return;
   }
 
@@ -192,7 +224,7 @@ document.getElementById('start').addEventListener('click', async () => {
     // Wait for WebSocket to actually connect
     await waitForWebSocket(tab.id);
 
-    statusEl.textContent = 'Connected! Editor: localhost:' + nreplPort;
+    statusEl.textContent = 'Connected to ws://localhost:' + wsPort;
   } catch (err) {
     statusEl.textContent = 'Failed: ' + err.message;
     console.error(err);
