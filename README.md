@@ -1,76 +1,47 @@
 # Browser Jack-in
 
-A web browser extension that let's you inject a [Scittle](https://github.com/babashka/scittle) REPL server into the browser page. Then you can connect your fvorite Clojure editor and inspect and manipulate the DOM to your heart's content. Or let your AI agent loose on the page.
+A web browser extension that lets you inject a [Scittle](https://github.com/babashka/scittle) REPL server into the browser page. Then you can connect your favorite Clojure editor and inspect and manipulate the DOM to your heart's content. Or let your AI agent loose on the page.
 
-## Development
+![Browser Jack-in Popup UI](browser-jack-in-screenshot.png)
 
-### Prerequisites
+## Prerequisite
 
-- [Babashka](https://babashka.org/) (bb)
-- Node.js (for npm dependencies)
+1. [Babashka](https://babashka.org)
+2. A REPL client (such as a Clojure editor, like [Calva](https://calva.io))
 
-### Setup
+## Usage
 
-```bash
-npm install
-```
+Assuming you have [installed the extension](#installing).
 
-### Build
+On the web page where you want to jack-in your REPL client: open the **Browser Jack-in** extension
+and follow the 1-2-3 step instructions.
 
-Build for all browsers:
-```bash
-bb build:all
-```
+## Installing
 
-Build for specific browser:
-```bash
-bb build:chrome
-bb build:firefox
-bb build:safari
-```
-
-### Load Extension Locally
+In waiting for this extension to be available on the extension web stores, you'll need to install the packages manually in the browser's developer mode. Grab the extension zip file(s) from the latest [release](https://github.com/PEZ/browser-jack-in/releases).
 
 **Chrome:**
+0. Unpack `browser-jack-in-chrome.zip` (will unpack a `chrome` folder)
 1. Go to `chrome://extensions`
 2. Enable "Developer mode"
 3. Click "Load unpacked"
-4. Select `dist/chrome` folder
+4. Select the `chrome` folder
 
 **Firefox:**
 1. Go to `about:debugging#/runtime/this-firefox`
 2. Click "Load Temporary Add-on"
-3. Select any file in `dist/firefox` folder
+3. Select any file in `browser-jack-in-firefox.zip` file
 
 **Safari:**
-1. Safari → Settings → Advanced → Enable "Show Develop menu in menu bar"
-2. Develop menu → "Allow Unsigned Extensions" (requires admin password)
-3. Unzip `browser-jack-in-safari.zip` (or use `dist/safari` folder)
-4. Develop menu → "Show Extension Builder"
-5. Click "+" → "Add Extension..." → Select the unzipped folder
-6. Enable in Safari → Settings → Extensions
+(Actually the extension fails to establish the websocket connection in Safari. It tries to open it as a secure socket. If you know how to fix it, please file a PR.)
+1. Safari → Settings → Developer → Click "Add Temporary Extension"
+2. Select the `browser-jack-in-safari.zip` file
+3. Ensure the extension is enabled in Safari → Settings → Extensions
 
-## Distribution
+## Enjoy! ♥️
 
-Push a tag to create a release:
+Please consider [sponsoring my open source work](https://github.com/sponsors/PEZ).
 
-```bash
-git tag v0.1.0
-git push origin v0.1.0
-```
+## Licence
 
-GitHub Actions will build all three browser versions and create a draft release.
-
-### Store Submission
-
-- **Chrome:** Upload `browser-jack-in-chrome.zip` to [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole)
-- **Firefox:** Upload `browser-jack-in-firefox.zip` to [Firefox Add-on Developer Hub](https://addons.mozilla.org/developers/)
-- **Safari:** Submit via Xcode to App Store Connect
-
-## Icons
-
-Add your icons to `src/icons/`:
-- `icon-16.png` (16x16)
-- `icon-32.png` (32x32)
-- `icon-48.png` (48x48)
-- `icon-128.png` (128x128)
+MIT
