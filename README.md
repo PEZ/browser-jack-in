@@ -2,10 +2,6 @@
 
 A web browser extension that lets you inject a [Scittle](https://github.com/babashka/scittle) REPL server into the browser page. Then you can connect your favorite Clojure editor and inspect and manipulate the DOM to your heart's content. Or let your AI agent loose on the page.
 
-## Limitations
-
-**Content Security Policy (CSP)**: Some websites block the extension from working. Sites like GitHub, YouTube, and many banking/corporate sites use strict security policies that prevent code evaluation. When you try to connect on these sites, you'll see an error message mentioning "CSP" or "eval".
-
 ## Prerequisite
 
 1. [Babashka](https://babashka.org)
