@@ -37,32 +37,14 @@ jobs:
           restore-keys: |
             bb-deps-${{ runner.os }}-
 
-      - name: Build Chrome extension
-        run: bb build:chrome
+      - name: Build extensions
+        run: bb build
 
-      - name: Build Firefox extension
-        run: bb build:firefox
-
-      - name: Build Safari extension
-        run: bb build:safari
-
-      - name: Upload Chrome artifact
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: chrome-extension
-          path: dist/browser-jack-in-chrome.zip
-
-      - name: Upload Firefox artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: firefox-extension
-          path: dist/browser-jack-in-firefox.zip
-
-      - name: Upload Safari artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: safari-extension
-          path: dist/browser-jack-in-safari.zip
+          name: browser-extensions
+          path: dist/*.zip
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -84,16 +66,14 @@ jobs:
           echo "$NOTES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Download all artifacts
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          name: browser-extensions
+          path: dist
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           body: ${{ steps.changelog.outputs.notes }}
-          files: |
-            artifacts/chrome-extension/browser-jack-in-chrome.zip
-            artifacts/firefox-extension/browser-jack-in-firefox.zip
-            artifacts/safari-extension/browser-jack-in-safari.zip
+          files: dist/*.zip
