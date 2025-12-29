@@ -27,7 +27,15 @@ Step **1** let's you copy a Babashka command line that starts the browser-nrepl 
 
 ## Installing
 
-In waiting for this extension to be available on the extension web stores, you'll need to install the packages manually in the browser's developer mode. Grab the extension zip file(s) from the latest [release](https://github.com/PEZ/browser-jack-in/releases).
+Available on the Chrome Web Store: https://chromewebstore.google.com/detail/bfcbpnmgefiblppimmoncoflmcejdbei
+
+Firefox pending review, but you can install the package manually in the browser's developer mode. Grab the extension zip file(s) from the latest [release](https://github.com/PEZ/browser-jack-in/releases).
+
+**Firefox:**
+
+1. Go to `about:debugging#/runtime/this-firefox`
+2. Click "Load Temporary Add-on"
+3. Select any file in `browser-jack-in-firefox.zip` file
 
 **Chrome:**
 
@@ -37,15 +45,9 @@ In waiting for this extension to be available on the extension web stores, you'l
 3. Click "Load unpacked"
 4. Select the `chrome` folder
 
-**Firefox:**
-
-1. Go to `about:debugging#/runtime/this-firefox`
-2. Click "Load Temporary Add-on"
-3. Select any file in `browser-jack-in-firefox.zip` file
-
 **Safari:**
 
-(Actually the extension fails to establish the websocket connection in Safari. It tries to open it as a secure socket. If you know how to fix it, please file a PR.)
+I think I may skip publishing to the Safari App Store, because I value my sanity. (And actually the extension yet fails to establish the websocket connection in Safari. It tries to open it as a secure socket. If you know how to fix it, please file a PR.)
 
 1. Safari → Settings → Developer → Click "Add Temporary Extension"
 2. Select the `browser-jack-in-safari.zip` file
