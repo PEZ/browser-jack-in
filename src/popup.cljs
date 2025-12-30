@@ -58,6 +58,19 @@
           (reject (js/Error. (.-message js/chrome.runtime.lastError)))
           (resolve (when (seq results) (.-result (first results))))))))))
 
+(defn inject-content-script
+  "Inject a script file into ISOLATED world (content script context)."
+  [tab-id file]
+  (js/Promise.
+   (fn [resolve reject]
+     (js/chrome.scripting.executeScript
+      #js {:target #js {:tabId tab-id}
+           :files #js [file]}
+      (fn [_results]
+        (if js/chrome.runtime.lastError
+          (reject (js/Error. (.-message js/chrome.runtime.lastError)))
+          (resolve true)))))))
+
 ;; ============================================================
 ;; Page injection functions (for execute-in-page)
 ;; These must be JS proper - no Squint runtime dependencies
@@ -182,8 +195,11 @@
                            bridge-url (js/chrome.runtime.getURL "ws-bridge.js")
                            scittle-url (js/chrome.runtime.getURL "vendor/scittle.js")
                            nrepl-url (js/chrome.runtime.getURL "vendor/scittle.nrepl.js")]
-                       ;; First inject WebSocket bridge
-                       (-> (execute-in-page tab-id inject-script-fn bridge-url false)
+                       ;; First inject content bridge (ISOLATED world) for CSP bypass
+                       (-> (inject-content-script tab-id "content-bridge.js")
+                           (.then (fn [_]
+                                    ;; Then inject WebSocket bridge (MAIN world)
+                                    (execute-in-page tab-id inject-script-fn bridge-url false)))
                            (.then (fn [_]
                                     ;; Then inject Scittle
                                     (execute-in-page tab-id inject-script-fn scittle-url false)))
