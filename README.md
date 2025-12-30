@@ -25,6 +25,37 @@ Step **1** let's you copy a Babashka command line that starts the browser-nrepl 
 
 * https://www.youtube.com/watch?v=aJ06tdIjdy0
 
+## How it Works
+
+```mermaid
+flowchart
+    Human["You"] --> Editor
+
+    subgraph Editor["Your Favorite Editor"]
+         editor-nREPL["nREPL Client"]
+    end
+
+    AI["Your AI Agent"] --> nREPL["nREPL Client"]
+
+    Editor -->|"nrepl://12345"| nPort
+    nREPL -->|"nrepl://12345"| nPort
+
+    nPort["Babashka browser-nrepl"]
+
+    nPort <-->|ws://localhost:12346| Ext
+
+    subgraph Browser["Browser"]
+        Ext["Browser Extension"] <-->|"WS Bridge"| Scittle["Scittle"]
+        subgraph DOM["DOM/Page Execution Environment"]
+          Scittle
+        end
+    end
+```
+
+The Babashka server bridges nREPL (port 12345) to WebSocket (port 12346). The extension's content script runs in the browser's ISOLATED world, exempt from page CSP restrictions, and connects to localhost. It relays messages via `postMessage` to the MAIN world where Scittle evaluates code with full access to the page's DOM and JavaScript environment.
+
+This architecture lets you REPL into sites with strict Content Security Policies (like GitHub) that would otherwise block WebSocket connections.
+
 ## Installing
 
 Available on the Chrome Web Store: https://chromewebstore.google.com/detail/bfcbpnmgefiblppimmoncoflmcejdbei
