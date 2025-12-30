@@ -104,7 +104,6 @@
 
 (def check-scittle-fn
   (js* "function() {
-    if (window.__scittle_csp_error) return {error: 'csp'};
     if (window.scittle && window.scittle.core) return {ready: true};
     return {ready: false};
   }"))
@@ -194,9 +193,7 @@
                                     (poll-until
                                      (fn [] (execute-in-page tab-id check-scittle-fn))
                                      (fn [result] (.-ready result))
-                                     (fn [result]
-                                       (when (= "csp" (.-error result))
-                                         (js/Error. "Page blocks eval (CSP). Try a different page.")))
+                                     (constantly nil)
                                      5000)))
                            (.then (fn [_]
                                     (swap! !state assoc :ui/status "Connecting...")
