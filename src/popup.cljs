@@ -43,7 +43,9 @@
 (defn storage-key [tab]
   (str "ports_" (get-hostname tab)))
 
-(defn execute-in-page [tab-id func & args]
+(defn execute-in-page
+  "Execute function in page context (MAIN world)."
+  [tab-id func & args]
   (js/Promise.
    (fn [resolve reject]
      (js/chrome.scripting.executeScript
@@ -107,7 +109,11 @@
 (def check-websocket-fn
   (js* "function() {
     var ws = window.ws_nrepl;
-    if (!ws) return {status: 'no-ws'};
+    if (!ws) {
+      console.log('[Check WS] No ws_nrepl found');
+      return {status: 'no-ws'};
+    }
+    console.log('[Check WS] readyState:', ws.readyState);
     switch(ws.readyState) {
       case 1: return {status: 'connected'};
       case 3: return {status: 'failed'};
@@ -173,9 +179,14 @@
         (-> (get-active-tab)
             (.then (fn [tab]
                      (let [tab-id (.-id tab)
+                           bridge-url (js/chrome.runtime.getURL "ws-bridge.js")
                            scittle-url (js/chrome.runtime.getURL "vendor/scittle.js")
                            nrepl-url (js/chrome.runtime.getURL "vendor/scittle.nrepl.js")]
-                       (-> (execute-in-page tab-id inject-script-fn scittle-url)
+                       ;; First inject WebSocket bridge
+                       (-> (execute-in-page tab-id inject-script-fn bridge-url)
+                           (.then (fn [_]
+                                    ;; Then inject Scittle
+                                    (execute-in-page tab-id inject-script-fn scittle-url)))
                            (.then (fn [_]
                                     (poll-until
                                      (fn [] (execute-in-page tab-id check-scittle-fn))

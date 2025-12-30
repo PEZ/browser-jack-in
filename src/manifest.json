@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Browser Jack-in",
-  "version": "0.0.2",
+  "version": "0.0.3-dev",
   "description": "Jack your Clojure editor into any web page",
   "permissions": [
     "scripting",
@@ -23,15 +23,27 @@
     "48": "icons\/icon-48.png",
     "128": "icons\/icon-128.png"
   },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content-bridge.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ],
   "web_accessible_resources": [
     {
       "resources": [
         "vendor\/scittle.js",
-        "vendor\/scittle.nrepl.js"
+        "vendor\/scittle.nrepl.js",
+        "ws-bridge.js"
       ],
       "matches": [
         "<all_urls>"
       ]
     }
-  ]
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' ws://localhost:* wss://localhost:*; object-src 'self'"
+  }
 }
