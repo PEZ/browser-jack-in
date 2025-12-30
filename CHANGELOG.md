@@ -7,10 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.3] - 2025-12-30
+
 ### Fixed
 
 - [Can't Jack-in to github.com things (CSP `connect-src 'self'`)](https://github.com/PEZ/browser-jack-in/issues/1)
   - WebSocket bridge connects the page's MAIN world with the extension's ISOLATED world, bringing localhost in reach
+
 
 ## [0.0.2] - 2025-12-28
 
