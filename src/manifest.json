@@ -42,8 +42,5 @@
         "<all_urls>"
       ]
     }
-  ],
-  "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' ws://localhost:* wss://localhost:*; object-src 'self'"
-  }
+  ]
 }
