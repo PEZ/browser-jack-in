@@ -160,9 +160,29 @@
   "Increment patch version: 0.0.1 -> 0.0.2"
   [version]
   (let [parts (str/split version #"\.")
-        patch (Integer/parseInt (last parts))
+        patch (Integer/parseInt (nth parts 2))
         new-patch (inc patch)]
-    (str/join "." (concat (butlast parts) [new-patch]))))
+    (str/join "." [(first parts) (second parts) new-patch])))
+
+(defn- release-version
+  "Convert dev version to release version: 0.0.3.0 -> 0.0.3"
+  [version]
+  (let [parts (str/split version #"\.")]
+    (str/join "." (take 3 parts))))
+
+(defn- next-dev-version
+  "Get next dev version: 0.0.3 -> 0.0.4.0"
+  [version]
+  (str (increment-version version) ".0"))
+
+(defn- extract-issue-numbers
+  "Extract GitHub issue numbers from changelog content"
+  [content]
+  (when content
+    (->> (re-seq #"issues/(\d+)" content)
+         (map second)
+         distinct
+         sort)))
 
 (defn- update-manifest-version!
   "Update version in manifest.json"
@@ -203,7 +223,9 @@
         {:keys [has-unreleased? unreleased-content]} (parse-changelog)
         has-content? (and has-unreleased? (not (str/blank? unreleased-content)))
         current-version (read-manifest-version)
-        new-version (increment-version current-version)
+        new-version (release-version current-version)
+        dev-version (next-dev-version new-version)
+        issue-numbers (extract-issue-numbers unreleased-content)
         all-ok? (and clean? on-master? has-content?)]
 
     ;; Display check results
@@ -220,7 +242,10 @@
     (println)
     (println "📋 Release details:")
     (println (str "   Current version: " current-version))
-    (println (str "   New version:     " new-version))
+    (println (str "   Release version: " new-version))
+    (println (str "   Next dev version: " dev-version))
+    (when (seq issue-numbers)
+      (println (str "   Fixes issues: " (str/join ", " (map #(str "#" %) issue-numbers)))))
 
     (when has-content?
       (println)
@@ -237,18 +262,27 @@
 
       (when (confirm "Proceed with release?")
         (println)
-        (println "📦 Updating manifest.json...")
+        (println "📦 Updating manifest.json to release version...")
         (update-manifest-version! new-version)
 
         (println "📝 Updating CHANGELOG.md...")
         (update-changelog! new-version unreleased-content)
 
-        (println "💾 Committing changes...")
+        (println "💾 Committing release...")
         (p/shell "git add src/manifest.json CHANGELOG.md")
-        (p/shell {:continue true} "git" "commit" "-m" (str "Release v" new-version))
+        (let [commit-msg (str "Release v" new-version
+                              (when (seq issue-numbers)
+                                (str "\n\n"
+                                     (str/join "\n" (map #(str "* Fixes #" %) issue-numbers)))))]
+          (p/shell {:continue true} "git" "commit" "-m" commit-msg))
 
         (println (str "🏷️  Creating tag v" new-version "..."))
         (p/shell "git" "tag" (str "v" new-version))
+
+        (println "📦 Bumping to next dev version...")
+        (update-manifest-version! dev-version)
+        (p/shell "git add src/manifest.json")
+        (p/shell {:continue true} "git" "commit" "-m" (str "Bump to dev version " dev-version))
 
         (println "🚀 Pushing to origin...")
         (p/shell "git push origin master")
@@ -256,4 +290,5 @@
 
         (println)
         (println (str "✅ Released v" new-version "!"))
+        (println (str "   Now on dev version " dev-version))
         (println "   GitHub Actions will now build and create the release.")))))
