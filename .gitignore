@@ -6,3 +6,6 @@ dist-vite/
 
 # Squint compiled output
 src/*.mjs
+src/content-bridge.js
+src/ws-bridge.js
+src/popup.js
