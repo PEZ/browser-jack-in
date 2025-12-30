@@ -40,13 +40,22 @@
     (println "✓ Scittle" version "bundled to" vendor-dir)))
 
 (defn compile-squint
-  "Compile ClojureScript files with Squint and bundle with Vite"
+  "Compile ClojureScript files with Squint and bundle with esbuild"
   []
   (println "Compiling Squint...")
   (p/shell "npx squint compile")
-  (println "Bundling with Vite...")
-  (p/shell "npx vite build")
-  (println "✓ Squint + Vite compilation complete"))
+  (println "Bundling with esbuild...")
+  (fs/create-dirs "dist-vite")
+  ;; Bundle all JS files as IIFE
+  (doseq [[name entry] [["popup" "src/popup.mjs"]
+                        ["content-bridge" "src/content-bridge.mjs"]
+                        ["ws-bridge" "src/ws-bridge.mjs"]]]
+    (println (str "  Bundling " name ".js..."))
+    (p/shell "npx" "esbuild" entry "--bundle" "--format=iife" (str "--outfile=dist-vite/" name ".js")))
+  ;; Copy static files
+  (fs/copy "src/popup.html" "dist-vite/popup.html" {:replace-existing true})
+  (fs/copy "src/popup.css" "dist-vite/popup.css" {:replace-existing true})
+  (println "✓ Squint + esbuild compilation complete"))
 
 (defn- adjust-manifest
   "Adjust manifest.json for specific browser"
@@ -83,15 +92,24 @@
                 ds-store (fs/glob browser-dir pattern)]
           (fs/delete ds-store))
 
-        ;; Copy Vite-bundled popup files over the source ones
+        ;; Copy Vite-bundled files over the source ones
         (fs/copy (str vite-dir "/popup.html") (str browser-dir "/popup.html")
                  {:replace-existing true})
         (fs/copy (str vite-dir "/popup.js") (str browser-dir "/popup.js")
                  {:replace-existing true})
         (fs/copy (str vite-dir "/popup.css") (str browser-dir "/popup.css")
                  {:replace-existing true})
-        ;; Remove the unbundled mjs file
+        (fs/copy (str vite-dir "/content-bridge.js") (str browser-dir "/content-bridge.js")
+                 {:replace-existing true})
+        (fs/copy (str vite-dir "/ws-bridge.js") (str browser-dir "/ws-bridge.js")
+                 {:replace-existing true})
+        ;; Remove source files (keep only bundled .js)
         (fs/delete-if-exists (str browser-dir "/popup.mjs"))
+        (fs/delete-if-exists (str browser-dir "/popup.cljs"))
+        (fs/delete-if-exists (str browser-dir "/content-bridge.mjs"))
+        (fs/delete-if-exists (str browser-dir "/content-bridge.cljs"))
+        (fs/delete-if-exists (str browser-dir "/ws-bridge.mjs"))
+        (fs/delete-if-exists (str browser-dir "/ws-bridge.cljs"))
 
         ;; Adjust manifest
         (let [manifest-path (str browser-dir "/manifest.json")

@@ -67,8 +67,11 @@
 ;; ============================================================
 
 (def inject-script-fn
-  (js* "function(url) {
+  (js* "function(url, isModule) {
     var script = document.createElement('script');
+    if (isModule) {
+      script.type = 'module';
+    }
     // Handle Trusted Types if required by the page
     if (window.trustedTypes && window.trustedTypes.createPolicy) {
       try {
@@ -88,7 +91,7 @@
       script.src = url;
     }
     document.head.appendChild(script);
-    console.log('[Browser Jack-in] Injected:', url);
+    console.log('[Browser Jack-in] Injected:', url, isModule ? '(module)' : '');
     return 'ok';
   }"))
 
@@ -183,10 +186,10 @@
                            scittle-url (js/chrome.runtime.getURL "vendor/scittle.js")
                            nrepl-url (js/chrome.runtime.getURL "vendor/scittle.nrepl.js")]
                        ;; First inject WebSocket bridge
-                       (-> (execute-in-page tab-id inject-script-fn bridge-url)
+                       (-> (execute-in-page tab-id inject-script-fn bridge-url false)
                            (.then (fn [_]
                                     ;; Then inject Scittle
-                                    (execute-in-page tab-id inject-script-fn scittle-url)))
+                                    (execute-in-page tab-id inject-script-fn scittle-url false)))
                            (.then (fn [_]
                                     (poll-until
                                      (fn [] (execute-in-page tab-id check-scittle-fn))
@@ -198,7 +201,7 @@
                            (.then (fn [_]
                                     (swap! !state assoc :ui/status "Connecting...")
                                     (execute-in-page tab-id set-nrepl-config-fn port)))
-                           (.then (fn [_] (execute-in-page tab-id inject-script-fn nrepl-url)))
+                           (.then (fn [_] (execute-in-page tab-id inject-script-fn nrepl-url false)))
                            (.then (fn [_]
                                     (poll-until
                                      (fn [] (execute-in-page tab-id check-websocket-fn))
