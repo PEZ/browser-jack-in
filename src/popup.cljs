@@ -138,6 +138,7 @@
   (js* "function() {
     return {
       hasScittle: !!(window.scittle && window.scittle.core),
+      hasWsBridge: !!window.__browserJackInWSBridge,
       wsState: window.ws_nrepl ? window.ws_nrepl.readyState : -1,
       wsPort: window.SCITTLE_NREPL_WEBSOCKET_PORT
     };
@@ -158,6 +159,76 @@
                                 :else (js/setTimeout poll 100))))
                      (.catch reject)))]
          (poll))))))
+
+;; ============================================================
+;; Connection step functions
+;; Each returns a Promise, composable in sequence
+;; ============================================================
+
+(defn ensure-bridge!
+  "Inject content bridge and WS bridge if not already present."
+  [tab-id has-bridge]
+  (if has-bridge
+    (js/Promise.resolve nil)
+    (let [bridge-url (js/chrome.runtime.getURL "ws-bridge.js")]
+      (swap! !state assoc :ui/status "Loading bridge...")
+      (-> (inject-content-script tab-id "content-bridge.js")
+          (.then (fn [_] (execute-in-page tab-id inject-script-fn bridge-url false)))))))
+
+(defn ensure-scittle!
+  "Inject Scittle if not already present, wait for it to load."
+  [tab-id has-scittle]
+  (if has-scittle
+    (js/Promise.resolve nil)
+    (let [scittle-url (js/chrome.runtime.getURL "vendor/scittle.js")]
+      (swap! !state assoc :ui/status "Loading Scittle...")
+      (-> (execute-in-page tab-id inject-script-fn scittle-url false)
+          (.then (fn [_]
+                   (poll-until
+                    (fn [] (execute-in-page tab-id check-scittle-fn))
+                    (fn [result] (.-ready result))
+                    (constantly nil)
+                    5000)))))))
+
+(defn configure-and-connect!
+  "Set nREPL config and inject nREPL client, wait for connection."
+  [tab-id port]
+  (let [nrepl-url (js/chrome.runtime.getURL "vendor/scittle.nrepl.js")]
+    (swap! !state assoc :ui/status "Connecting...")
+    (-> (execute-in-page tab-id set-nrepl-config-fn port)
+        (.then (fn [_] (execute-in-page tab-id inject-script-fn nrepl-url false)))
+        (.then (fn [_]
+                 (poll-until
+                  (fn [] (execute-in-page tab-id check-websocket-fn))
+                  (fn [result] (= "connected" (.-status result)))
+                  (fn [result]
+                    (when (= "failed" (.-status result))
+                      (js/Error. (ws-fail-message))))
+                  5000))))))
+
+(defn connect-to-tab!
+  "Main connection flow for a tab. Checks status, injects what's needed, connects."
+  [tab-id port]
+  (-> (execute-in-page tab-id check-status-fn)
+      (.then (fn [status]
+               (let [has-bridge (and status (.-hasWsBridge status))
+                     has-scittle (and status (.-hasScittle status))
+                     ws-connected (and status (= 1 (.-wsState status)))]
+                 (js/console.log "[Connect] Status:" (js/JSON.stringify status))
+                 (if (and ws-connected (= port (.-wsPort status)))
+                   (do
+                     (swap! !state assoc :ui/status (str "Connected to ws://localhost:" port))
+                     (js/Promise.resolve nil))
+                   (-> (ensure-bridge! tab-id has-bridge)
+                       (.then (fn [_] (ensure-scittle! tab-id has-scittle)))
+                       (.then (fn [_] (configure-and-connect! tab-id port)))
+                       (.then (fn [_] (swap! !state assoc :ui/status (str "Connected to ws://localhost:" port)))))))))
+      (.catch (fn [err]
+                (swap! !state assoc :ui/status (str "Failed: " (.-message err)))))))
+
+;; ============================================================
+;; Dispatch
+;; ============================================================
 
 (defn dispatch! [[action & args]]
   (case action
@@ -188,41 +259,9 @@
     (let [{:keys [ports/ws]} @!state
           port (js/parseInt ws 10)]
       (when (and (not (js/isNaN port)) (<= 1 port 65535))
-        (swap! !state assoc :ui/status "Loading Scittle...")
+        (swap! !state assoc :ui/status "Checking...")
         (-> (get-active-tab)
-            (.then (fn [tab]
-                     (let [tab-id (.-id tab)
-                           bridge-url (js/chrome.runtime.getURL "ws-bridge.js")
-                           scittle-url (js/chrome.runtime.getURL "vendor/scittle.js")
-                           nrepl-url (js/chrome.runtime.getURL "vendor/scittle.nrepl.js")]
-                       ;; First inject content bridge (ISOLATED world) for CSP bypass
-                       (-> (inject-content-script tab-id "content-bridge.js")
-                           (.then (fn [_]
-                                    ;; Then inject WebSocket bridge (MAIN world)
-                                    (execute-in-page tab-id inject-script-fn bridge-url false)))
-                           (.then (fn [_]
-                                    ;; Then inject Scittle
-                                    (execute-in-page tab-id inject-script-fn scittle-url false)))
-                           (.then (fn [_]
-                                    (poll-until
-                                     (fn [] (execute-in-page tab-id check-scittle-fn))
-                                     (fn [result] (.-ready result))
-                                     (constantly nil)
-                                     5000)))
-                           (.then (fn [_]
-                                    (swap! !state assoc :ui/status "Connecting...")
-                                    (execute-in-page tab-id set-nrepl-config-fn port)))
-                           (.then (fn [_] (execute-in-page tab-id inject-script-fn nrepl-url false)))
-                           (.then (fn [_]
-                                    (poll-until
-                                     (fn [] (execute-in-page tab-id check-websocket-fn))
-                                     (fn [result] (= "connected" (.-status result)))
-                                     (fn [result]
-                                       (when (= "failed" (.-status result))
-                                         (js/Error. (ws-fail-message))))
-                                     5000)))
-                           (.then (fn [_] (swap! !state assoc :ui/status (str "Connected to ws://localhost:" port))))
-                           (.catch (fn [err] (swap! !state assoc :ui/status (str "Failed: " (.-message err))))))))))))
+            (.then (fn [tab] (connect-to-tab! (.-id tab) port))))))
 
     :check-status
     (-> (get-active-tab)

@@ -2,26 +2,28 @@
   "WebSocket bridge wrapper for page context.
    Runs in MAIN world and communicates with content script bridge via postMessage.")
 
-(js/console.log "[Browser Jack-in] Installing WebSocket bridge")
-
 (def !bridge-ready (atom false))
+(def !current-message-handler (atom nil))
 
-;; Wait for bridge ready signal
-(.addEventListener js/window "message"
-  (fn [event]
-    (when (= (.-source event) js/window)
-      (let [msg (.-data event)]
-        (when (and msg
-                   (= "browser-jack-in-bridge" (.-source msg))
-                   (= "bridge-ready" (.-type msg)))
-          (js/console.log "[WS Bridge] Bridge is ready")
-          (reset! !bridge-ready true))))))
+(defn- handle-bridge-ready [event]
+  (when (= (.-source event) js/window)
+    (let [msg (.-data event)]
+      (when (and msg
+                 (= "browser-jack-in-bridge" (.-source msg))
+                 (= "bridge-ready" (.-type msg)))
+        (js/console.log "[WS Bridge] Bridge is ready")
+        (reset! !bridge-ready true)))))
 
 (defn bridged-websocket [url]
   (js/console.log "[WS Bridge] Creating bridged WebSocket for:" url)
 
-  (let [ws-obj (js-obj)
-        message-handler (atom nil)]
+  ;; Clean up any existing message handler from previous connection
+  (when-let [old-handler @!current-message-handler]
+    (js/console.log "[WS Bridge] Removing old message handler")
+    (.removeEventListener js/window "message" old-handler)
+    (reset! !current-message-handler nil))
+
+  (let [ws-obj (js-obj)]
 
     ;; Set up basic properties
     (set! (.-url ws-obj) url)
@@ -40,43 +42,43 @@
     ;; Parse port from URL
     (let [port (if-let [match (.match url #":(\d+)/")]
                  (aget match 1)
-                 "1340")]
+                 "1340")
+          message-handler
+          (fn [event]
+            (when (= (.-source event) js/window)
+              (let [msg (.-data event)]
+                (when (and msg (= "browser-jack-in-bridge" (.-source msg)))
+                  (case (.-type msg)
+                    "ws-open"
+                    (do
+                      (js/console.log "[WS Bridge] WebSocket OPEN")
+                      (set! (.-readyState ws-obj) 1) ; OPEN
+                      (when-let [onopen (.-onopen ws-obj)]
+                        (onopen)))
 
-      ;; Set up message listener
-      (reset! message-handler
-        (fn [event]
-          (when (= (.-source event) js/window)
-            (let [msg (.-data event)]
-              (when (and msg (= "browser-jack-in-bridge" (.-source msg)))
-                (case (.-type msg)
-                  "ws-open"
-                  (do
-                    (js/console.log "[WS Bridge] WebSocket OPEN")
-                    (set! (.-readyState ws-obj) 1) ; OPEN
-                    (when-let [onopen (.-onopen ws-obj)]
-                      (onopen)))
+                    "ws-message"
+                    (when-let [onmessage (.-onmessage ws-obj)]
+                      (onmessage #js {:data (.-data msg)}))
 
-                  "ws-message"
-                  (when-let [onmessage (.-onmessage ws-obj)]
-                    (onmessage #js {:data (.-data msg)}))
+                    "ws-error"
+                    (do
+                      (js/console.log "[WS Bridge] WebSocket ERROR")
+                      (set! (.-readyState ws-obj) 3) ; CLOSED
+                      (when-let [onerror (.-onerror ws-obj)]
+                        (onerror (js/Error. (or (.-error msg) "WebSocket error")))))
 
-                  "ws-error"
-                  (do
-                    (js/console.log "[WS Bridge] WebSocket ERROR")
-                    (set! (.-readyState ws-obj) 3) ; CLOSED
-                    (when-let [onerror (.-onerror ws-obj)]
-                      (onerror (js/Error. (or (.-error msg) "WebSocket error")))))
+                    "ws-close"
+                    (do
+                      (js/console.log "[WS Bridge] WebSocket CLOSED")
+                      (set! (.-readyState ws-obj) 3) ; CLOSED
+                      (when-let [onclose (.-onclose ws-obj)]
+                        (onclose)))
 
-                  "ws-close"
-                  (do
-                    (js/console.log "[WS Bridge] WebSocket CLOSED")
-                    (set! (.-readyState ws-obj) 3) ; CLOSED
-                    (when-let [onclose (.-onclose ws-obj)]
-                      (onclose)))
+                    nil)))))]
 
-                  nil))))))
-
-      (.addEventListener js/window "message" @message-handler)
+      ;; Store and add the new message handler
+      (reset! !current-message-handler message-handler)
+      (.addEventListener js/window "message" message-handler)
 
       ;; Add send method
       (set! (.-send ws-obj)
@@ -92,7 +94,9 @@
       (set! (.-close ws-obj)
         (fn []
           (set! (.-readyState ws-obj) 3) ; CLOSED
-          (.removeEventListener js/window "message" @message-handler)
+          (when-let [handler @!current-message-handler]
+            (.removeEventListener js/window "message" handler)
+            (reset! !current-message-handler nil))
           (when-let [onclose (.-onclose ws-obj)]
             (onclose))))
 
@@ -105,25 +109,33 @@
 
     ws-obj))
 
-;; Store original WebSocket
-(set! (.-_OriginalWebSocket js/window) js/WebSocket)
+;; Initialize - guard against multiple injections
+(when-not js/window.__browserJackInWSBridge
+  (set! js/window.__browserJackInWSBridge true)
+  (js/console.log "[Browser Jack-in] Installing WebSocket bridge")
 
-;; Override WebSocket for nREPL URLs only
-(set! js/WebSocket
-  (fn [url protocols]
-    (if (and (string? url) (.includes url "/_nrepl"))
-      (do
-        (js/console.log "[WS Bridge] Intercepting nREPL WebSocket:" url)
-        (let [ws (bridged-websocket url)]
-          ;; Store reference for Scittle's usage
-          (set! (.-ws_nrepl js/window) ws)
-          ws))
-      (new (.-_OriginalWebSocket js/window) url protocols))))
+  ;; Wait for bridge ready signal
+  (.addEventListener js/window "message" handle-bridge-ready)
 
-;; Copy static properties
-(set! (.-CONNECTING js/WebSocket) 0)
-(set! (.-OPEN js/WebSocket) 1)
-(set! (.-CLOSING js/WebSocket) 2)
-(set! (.-CLOSED js/WebSocket) 3)
+  ;; Store original WebSocket
+  (set! (.-_OriginalWebSocket js/window) js/WebSocket)
 
-(js/console.log "[WS Bridge] WebSocket bridge installed")
+  ;; Override WebSocket for nREPL URLs only
+  (set! js/WebSocket
+    (fn [url protocols]
+      (if (and (string? url) (.includes url "/_nrepl"))
+        (do
+          (js/console.log "[WS Bridge] Intercepting nREPL WebSocket:" url)
+          (let [ws (bridged-websocket url)]
+            ;; Store reference for Scittle's usage
+            (set! (.-ws_nrepl js/window) ws)
+            ws))
+        (new (.-_OriginalWebSocket js/window) url protocols))))
+
+  ;; Copy static properties
+  (set! (.-CONNECTING js/WebSocket) 0)
+  (set! (.-OPEN js/WebSocket) 1)
+  (set! (.-CLOSING js/WebSocket) 2)
+  (set! (.-CLOSED js/WebSocket) 3)
+
+  (js/console.log "[WS Bridge] WebSocket bridge installed"))
