@@ -5,10 +5,10 @@
     "activeTab",
     "storage"
   ],
+  "name": "Browser Jack-in",
   "background": {
     "service_worker": "background.js"
   },
-  "name": "Browser Jack-in",
   "icons": {
     "16": "icons\/icon-16.png",
     "32": "icons\/icon-32.png",
@@ -25,7 +25,7 @@
     }
   },
   "manifest_version": 3,
-  "version": "0.0.4.0",
+  "version": "0.0.4",
   "web_accessible_resources": [
     {
       "resources": [
