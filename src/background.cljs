@@ -89,7 +89,7 @@
 
 ;; Listen for messages from content scripts
 (.addListener js/chrome.runtime.onMessage
-  (fn [message sender send-response]
+  (fn [message sender _send-response]
     (let [tab-id (.. sender -tab -id)
           msg-type (.-type message)]
       (case msg-type
@@ -101,6 +101,9 @@
 
         "ws-close"
         (handle-ws-close tab-id)
+
+        "ping"
+        nil ; Keepalive ping - just receiving it keeps service worker alive
 
         (js/console.log "[Background] Unknown message type:" msg-type)))
 

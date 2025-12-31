@@ -4,7 +4,15 @@
 
 (js/console.log "[Browser Jack-in Bridge] Content script loaded")
 
-(def !connected (atom false))
+(def !state (atom {:bridge/connected? false
+                   :bridge/keepalive-interval nil}))
+
+(defn- connected? []
+  (:bridge/connected? @!state))
+
+(defn- set-connected! [v]
+  (swap! !state assoc :bridge/connected? v))
+
 
 (defn same-window?
   "Check if event came from same window, safely handling cross-origin frames."
@@ -15,6 +23,24 @@
       false)))
 
 ;; Listen for messages from page
+(defn- stop-keepalive!
+  "Stop the keepalive interval"
+  []
+  (when-let [interval (:bridge/keepalive-interval @!state)]
+    (js/clearInterval interval)
+    (swap! !state assoc :bridge/keepalive-interval nil)))
+
+(defn- start-keepalive!
+  "Start sending keepalive pings to background to prevent service worker termination"
+  []
+  (stop-keepalive!)
+  (swap! !state assoc :bridge/keepalive-interval
+         (js/setInterval
+          (fn []
+            (when (connected?)
+              (js/chrome.runtime.sendMessage #js {:type "ping"})))
+          20000))) ; Every 20 seconds
+
 (.addEventListener js/window "message"
                    (fn [event]
                      (when (same-window? event)
@@ -24,13 +50,13 @@
                              "ws-connect"
                              (do
                                (js/console.log "[Bridge] Requesting connection to port:" (.-port msg))
-                               (reset! !connected true)
+                               (set-connected! true)
                                (js/chrome.runtime.sendMessage
                                 #js {:type "ws-connect"
                                      :port (.-port msg)}))
 
                              "ws-send"
-                             (when @!connected
+                             (when (connected?)
                                (js/chrome.runtime.sendMessage
                                 #js {:type "ws-send"
                                      :data (.-data msg)}))
@@ -45,6 +71,7 @@
                     "ws-open"
                     (do
                       (js/console.log "[Bridge] WebSocket connected")
+                      (start-keepalive!)
                       (.postMessage js/window
                                     #js {:source "browser-jack-in-bridge"
                                          :type "ws-open"}
@@ -60,7 +87,8 @@
                     "ws-error"
                     (do
                       (js/console.error "[Bridge] WebSocket error:" (.-error message))
-                      (reset! !connected false)
+                      (stop-keepalive!)
+                      (set-connected! false)
                       (.postMessage js/window
                                     #js {:source "browser-jack-in-bridge"
                                          :type "ws-error"
@@ -70,7 +98,8 @@
                     "ws-close"
                     (do
                       (js/console.log "[Bridge] WebSocket closed")
-                      (reset! !connected false)
+                      (stop-keepalive!)
+                      (set-connected! false)
                       (.postMessage js/window
                                     #js {:source "browser-jack-in-bridge"
                                          :type "ws-close"}
