@@ -4,6 +4,10 @@
 
 **Browser Jack-in** is a browser extension that injects a [Scittle](https://github.com/babashka/scittle) REPL server into web pages, enabling ClojureScript evaluation directly in the browser DOM via nREPL. This bridges your Clojure editor (or AI agent) with the browser's execution environment through a **Babashka relay server**.
 
+Mandatory reads:
+* [README.md](../README.md) - Usage and high-level architecture
+* [Developer docs](../docs/dev.md)
+
 **Architecture in brief:**
 `Editor/AI nREPL client` ↔ `Babashka browser-nrepl (ports 12345/12346)` ↔ `Extension background worker` ↔ `Content bridge script` ↔ `Page WebSocket bridge` ↔ `Scittle REPL` ↔ `DOM`
 
@@ -78,7 +82,6 @@ bb build:firefox
 bb browser-nrepl         # Start relay server (options: --nrepl-port, --websocket-port)
 bb bundle-scittle        # Download + patch Scittle vendor files
 bb build [browsers...]   # Build for chrome/firefox (default: all)
-bb publish              # Release workflow: bump version, update changelog, tag, push
 ```
 
 See [bb.edn](bb.edn) for complete task definitions.
