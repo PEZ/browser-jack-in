@@ -68,18 +68,11 @@
                                   :strict_min_version "142.0"
                                   :data_collection_permissions
                                   {:required ["none"]}}})
-                  ;; Firefox MV3 uses background.scripts instead of service_worker
                   (assoc :background {:scripts ["background.js"]})
-                  ;; Allow ws:// connections to localhost (prevent upgrade to wss)
                   (assoc :content_security_policy
                          {:extension_pages "script-src 'self'; connect-src 'self' ws://localhost:* ws://127.0.0.1:*;"}))
-    ;; Safari supports both scripts and service_worker - provide both for compatibility
-    ;; Safari prefers scripts over service_worker when both are present
     "safari" (-> manifest
-                 (assoc :background {:scripts ["background.js"]
-                                     ;:service_worker "background.js"
-                                     })
-                 ;; Allow ws:// connections to localhost
+                 (assoc :background {:scripts ["background.js"]})
                  (assoc :content_security_policy
                         {:extension_pages "script-src 'self'; connect-src 'self' ws://localhost:* ws://127.0.0.1:*;"}))
     manifest))

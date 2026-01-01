@@ -68,9 +68,8 @@ bb build  # creates zips in dist/
 # Build for specific browser
 bb build:chrome
 bb build:firefox
+bb build:safari
 ```
-
-**Note:** Safari doesn't work yet. We'll return to it later.
 
 ### Testing the Extension Locally
 
@@ -92,7 +91,7 @@ Use `bb build:chrome` or `bb build:firefox` only when debugging browser-specific
 ```bash
 bb browser-nrepl         # Start relay server (options: --nrepl-port, --websocket-port)
 bb bundle-scittle        # Download + patch Scittle vendor files
-bb build [browsers...]   # Build for chrome/firefox (default: all)
+bb build [browsers...]   # Build for chrome/firefox/safari (default: all)
 ```
 
 See [bb.edn](bb.edn) for complete task definitions.
@@ -122,8 +121,9 @@ See [bb.edn](bb.edn) for complete task definitions.
 
 See [tasks.clj:adjust-manifest](scripts/tasks.clj). Key differences:
 
+- **Chrome:** Standard Manifest V3 with `service_worker`
 - **Firefox:** Uses `background.scripts` (not `service_worker`), adds `content_security_policy` for `ws://localhost:*`
-- **Chrome/Safari:** Standard Manifest V3 service worker
+- **Safari:** Uses `background.scripts` (Safari prefers this over `service_worker`), adds `content_security_policy` for `ws://localhost:*`
 - **All:** Icons, permissions (`activeTab`, `scripting`)
 
 ## Project-Specific Conventions
