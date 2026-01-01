@@ -5,5 +5,5 @@ dist-vite/
 .DS_Store
 
 # Squint compiled output (intermediate .mjs files)
-src/*.mjs
+extension/*.mjs
 docs/working-backwards/

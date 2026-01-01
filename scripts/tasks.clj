@@ -24,11 +24,11 @@
       (println "  ✓ Patched scittle.js for CSP compatibility"))))
 
 (defn bundle-scittle
-  "Download Scittle and nREPL plugin to src/vendor"
+  "Download Scittle and nREPL plugin to extension/vendor"
   []
   (let [version "0.7.30"
         base-url "https://cdn.jsdelivr.net/npm/scittle@"
-        vendor-dir "src/vendor"
+        vendor-dir "extension/vendor"
         files [["scittle.js" (str base-url version "/dist/scittle.js")]
                ["scittle.nrepl.js" (str base-url version "/dist/scittle.nrepl.js")]]]
     (fs/create-dirs vendor-dir)
@@ -47,15 +47,15 @@
   (println "Bundling with esbuild...")
   (fs/create-dirs "dist-vite")
   ;; Bundle all JS files as IIFE
-  (doseq [[name entry] [["popup" "src/popup.mjs"]
-                        ["content-bridge" "src/content_bridge.mjs"]
-                        ["ws-bridge" "src/ws_bridge.mjs"]
-                        ["background" "src/background.mjs"]]]
+  (doseq [[name entry] [["popup" "extension/popup.mjs"]
+                        ["content-bridge" "extension/content_bridge.mjs"]
+                        ["ws-bridge" "extension/ws_bridge.mjs"]
+                        ["background" "extension/background.mjs"]]]
     (println (str "  Bundling " name ".js..."))
     (p/shell "npx" "esbuild" entry "--bundle" "--format=iife" (str "--outfile=dist-vite/" name ".js")))
   ;; Copy static files
-  (fs/copy "src/popup.html" "dist-vite/popup.html" {:replace-existing true})
-  (fs/copy "src/popup.css" "dist-vite/popup.css" {:replace-existing true})
+  (fs/copy "extension/popup.html" "dist-vite/popup.html" {:replace-existing true})
+  (fs/copy "extension/popup.css" "dist-vite/popup.css" {:replace-existing true})
   (println "✓ Squint + esbuild compilation complete"))
 
 (defn- adjust-manifest
@@ -79,19 +79,19 @@
   "Build extension for specified browser(s)"
   [& browsers]
   (let [browsers (if (seq browsers) browsers ["chrome" "firefox" "safari"])
-        src-dir "src"
+        extension-dir "extension"
         vite-dir "dist-vite"
         dist-dir "dist"]
-    ;; Compile Squint + bundle with Vite
+    ;; Compile Squint + bundle with esbuild
     (compile-squint)
     (fs/create-dirs dist-dir)
     (doseq [browser browsers]
       (println (str "Building for " browser "..."))
       (let [browser-dir (str dist-dir "/" browser)]
-        ;; Clean and copy source
+        ;; Clean and copy extension directory
         (when (fs/exists? browser-dir)
           (fs/delete-tree browser-dir))
-        (fs/copy-tree src-dir browser-dir)
+        (fs/copy-tree extension-dir browser-dir)
 
         ;; Remove macOS metadata files
         (doseq [pattern [".DS_Store" "**/.DS_Store"]
@@ -111,15 +111,11 @@
                  {:replace-existing true})
         (fs/copy (str vite-dir "/background.js") (str browser-dir "/background.js")
                  {:replace-existing true})
-        ;; Remove source files (keep only bundled .js)
+        ;; Remove intermediate .mjs files (keep only bundled .js)
         (fs/delete-if-exists (str browser-dir "/popup.mjs"))
-        (fs/delete-if-exists (str browser-dir "/popup.cljs"))
-        (fs/delete-if-exists (str browser-dir "/content-bridge.mjs"))
-        (fs/delete-if-exists (str browser-dir "/content-bridge.cljs"))
-        (fs/delete-if-exists (str browser-dir "/ws-bridge.mjs"))
-        (fs/delete-if-exists (str browser-dir "/ws-bridge.cljs"))
+        (fs/delete-if-exists (str browser-dir "/content_bridge.mjs"))
+        (fs/delete-if-exists (str browser-dir "/ws_bridge.mjs"))
         (fs/delete-if-exists (str browser-dir "/background.mjs"))
-        (fs/delete-if-exists (str browser-dir "/background.cljs"))
 
         ;; Adjust manifest
         (let [manifest-path (str browser-dir "/manifest.json")
@@ -163,7 +159,7 @@
 (defn- read-manifest-version
   "Read current version from manifest.json"
   []
-  (let [manifest (json/read-str (slurp "src/manifest.json") :key-fn keyword)]
+  (let [manifest (json/read-str (slurp "extension/manifest.json") :key-fn keyword)]
     (:version manifest)))
 
 (defn- increment-version
@@ -197,7 +193,7 @@
 (defn- update-manifest-version!
   "Update version in manifest.json"
   [new-version]
-  (let [manifest-path "src/manifest.json"
+  (let [manifest-path "extension/manifest.json"
         manifest (json/read-str (slurp manifest-path) :key-fn keyword)
         updated (assoc manifest :version new-version)]
     (spit manifest-path (json/write-str updated :indent true))))
@@ -279,7 +275,7 @@
         (update-changelog! new-version unreleased-content)
 
         (println "💾 Committing release...")
-        (p/shell "git add src/manifest.json CHANGELOG.md")
+        (p/shell "git add extension/manifest.json CHANGELOG.md")
         (let [commit-msg (str "Release v" new-version
                               (when (seq issue-numbers)
                                 (str "\n\n"
@@ -291,7 +287,7 @@
 
         (println "📦 Bumping to next dev version...")
         (update-manifest-version! dev-version)
-        (p/shell "git add src/manifest.json")
+        (p/shell "git add extension/manifest.json")
         (p/shell {:continue true} "git" "commit" "-m" (str "Bump to dev version " dev-version))
 
         (println "🚀 Pushing to origin...")

@@ -13,25 +13,34 @@ Mandatory reads:
 
 ## Critical Build System Understanding
 
+### Project Structure
+
+```
+src/           # ClojureScript source files only
+extension/     # Static assets + compiled .mjs (Squint output)
+dist-vite/     # Bundled .js files (esbuild output)
+dist/          # Final browser extension zips
+```
+
 ### Squint Compilation Model
 
 This project uses **[Squint](https://github.com/squint-cljs/squint)** to compile ClojureScript to modern ESM JavaScript. Key points:
 
-- **Source:** `src/*.cljs` files are compiled to `src/*.mjs` (ES modules)
-- **Bundling:** esbuild bundles `*.mjs` → `dist-vite/*.js` (IIFE format)
+- **Source:** `src/*.cljs` files are compiled to `extension/*.mjs` (ES modules)
+- **Bundling:** esbuild bundles `extension/*.mjs` → `dist-vite/*.js` (IIFE format)
 - **Config:** [squint.edn](squint.edn) specifies paths and `.mjs` extension
 
 **Build flow:**
 ```bash
-npx squint compile  # .cljs → .mjs in src/
-npx esbuild ...     # .mjs → .js in dist-vite/ (IIFE bundles)
+npx squint compile  # src/*.cljs → extension/*.mjs
+npx esbuild ...     # extension/*.mjs → dist-vite/*.js (IIFE bundles)
 ```
 
-**Never edit `.mjs` files directly** — they're generated. Edit `.cljs` source only.
+**Never edit `.mjs` files directly** — they're generated. Edit `.cljs` source in `src/` only.
 
 ### Scittle CSP Patching
 
-The vendored [src/vendor/scittle.js](src/vendor/scittle.js) is **patched** during `bb bundle-scittle` to remove `eval()` usage that violates strict Content Security Policies on sites like GitHub/YouTube.
+The vendored [extension/vendor/scittle.js](extension/vendor/scittle.js) is **patched** during `bb bundle-scittle` to remove `eval()` usage that violates strict Content Security Policies on sites like GitHub/YouTube.
 
 **Original code:**
 ```javascript
