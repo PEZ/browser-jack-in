@@ -88,11 +88,7 @@ Firefox pending review, but you can install the package manually in the browser'
 
 **Safari:**
 
-I think I may skip publishing to the Safari App Store, because I value my sanity. (And actually the extension yet fails to establish the websocket connection in Safari. It tries to open it as a secure socket. If you know how to fix it, please file a PR.)
-
-1. Safari → Settings → Developer → Click "Add Temporary Extension"
-2. Select the `browser-jack-in-safari.zip` file
-3. Ensure the extension is enabled in Safari → Settings → Extensions
+Safari doesn't work yet. We'll return to it later. (PRs welcome!)
 
 ## Privacy
 
