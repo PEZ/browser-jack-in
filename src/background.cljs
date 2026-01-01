@@ -5,13 +5,13 @@
 
 (js/console.log "[Browser Jack-in Background] Service worker started")
 
-;; Store WebSocket connections per tab
-(def !connections (atom {}))
+;; Centralized state with namespaced keys
+(def !state (atom {:ws/connections {}}))
 
 (defn get-ws
   "Get WebSocket for a tab"
   [tab-id]
-  (get @!connections tab-id))
+  (get-in @!state [:ws/connections tab-id]))
 
 (defn close-ws!
   "Close and remove WebSocket for a tab. Does not send ws-close event."
@@ -23,7 +23,7 @@
       (.close ws)
       (catch :default e
         (js/console.error "[Background] Error closing WebSocket:" e))))
-  (swap! !connections dissoc tab-id))
+  (swap! !state update :ws/connections dissoc tab-id))
 
 (defn send-to-tab
   "Send message to content script in a tab"
@@ -42,7 +42,7 @@
     (js/console.log "[Background] Connecting to:" ws-url "for tab:" tab-id)
     (try
       (let [ws (js/WebSocket. ws-url)]
-        (swap! !connections assoc tab-id ws)
+        (swap! !state assoc-in [:ws/connections tab-id] ws)
 
         (set! (.-onopen ws)
               (fn []
@@ -66,7 +66,7 @@
                 (send-to-tab tab-id {:type "ws-close"
                                      :code (.-code event)
                                      :reason (.-reason event)})
-                (swap! !connections dissoc tab-id))))
+                (swap! !state update :ws/connections dissoc tab-id))))
       (catch :default e
         (js/console.error "[Background] Failed to create WebSocket:" e)
         (send-to-tab tab-id {:type "ws-error"

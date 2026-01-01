@@ -2,8 +2,9 @@
   "WebSocket bridge wrapper for page context.
    Runs in MAIN world and communicates with content script bridge via postMessage.")
 
-(def !bridge-ready (atom false))
-(def !current-message-handler (atom nil))
+;; Centralized state with namespaced keys
+(def !state (atom {:bridge/ready? false
+                   :ws/message-handler nil}))
 
 (defn- handle-bridge-ready [event]
   (when (= (.-source event) js/window)
@@ -12,16 +13,16 @@
                  (= "browser-jack-in-bridge" (.-source msg))
                  (= "bridge-ready" (.-type msg)))
         (js/console.log "[WS Bridge] Bridge is ready")
-        (reset! !bridge-ready true)))))
+        (swap! !state assoc :bridge/ready? true)))))
 
 (defn bridged-websocket [url]
   (js/console.log "[WS Bridge] Creating bridged WebSocket for:" url)
 
   ;; Clean up any existing message handler from previous connection
-  (when-let [old-handler @!current-message-handler]
+  (when-let [old-handler (:ws/message-handler @!state)]
     (js/console.log "[WS Bridge] Removing old message handler")
     (.removeEventListener js/window "message" old-handler)
-    (reset! !current-message-handler nil))
+    (swap! !state assoc :ws/message-handler nil))
 
   (let [ws-obj (js-obj)]
 
@@ -79,7 +80,7 @@
                     nil)))))]
 
       ;; Store and add the new message handler
-      (reset! !current-message-handler message-handler)
+      (swap! !state assoc :ws/message-handler message-handler)
       (.addEventListener js/window "message" message-handler)
 
       ;; Add send method
@@ -96,9 +97,9 @@
       (set! (.-close ws-obj)
         (fn []
           (set! (.-readyState ws-obj) 3) ; CLOSED
-          (when-let [handler @!current-message-handler]
+          (when-let [handler (:ws/message-handler @!state)]
             (.removeEventListener js/window "message" handler)
-            (reset! !current-message-handler nil))
+            (swap! !state assoc :ws/message-handler nil))
           (when-let [onclose (.-onclose ws-obj)]
             (onclose))))
 

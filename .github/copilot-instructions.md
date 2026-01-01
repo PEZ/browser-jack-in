@@ -119,11 +119,20 @@ See [tasks.clj:adjust-manifest](scripts/tasks.clj). Key differences:
 
 ### State Management
 
-Use `!atom` naming convention for mutable state atoms:
+Prefer a single `!state` atom with namespaced keys over multiple separate atoms. This provides a consistent pattern and makes it clear where to add new state:
+
 ```clojure
-(def !connections (atom {}))  ; background.cljs - per-tab WebSocket map
-(def !state (atom {...}))     ; content_bridge.cljs - connection state
+;; Preferred: single !state atom with namespaced keys
+(def !state (atom {:ws/connections {}      ; per-tab WebSocket map
+                   :bridge/connected? false
+                   :bridge/keepalive-interval nil}))
+
+;; Access with namespaced keys
+(get-in @!state [:ws/connections tab-id])
+(swap! !state assoc :bridge/connected? true)
 ```
+
+Even when tracking just one thing, use `!state` with a namespaced key — it signals where future state belongs.
 
 ### Namespace Naming
 
