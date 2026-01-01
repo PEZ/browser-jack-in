@@ -72,11 +72,18 @@ Available on the Chrome Web Store: https://chromewebstore.google.com/detail/bfcb
 
 Firefox pending review, but you can install the package manually in the browser's developer mode. Grab the extension zip file(s) from the latest [release](https://github.com/PEZ/browser-jack-in/releases).
 
+I'm still pondering if I should submit to Safari App Store or not. Apple doesn't exactly love developers...
+
 **Firefox:**
 
 1. Go to `about:debugging#/runtime/this-firefox`
 2. Click "Load Temporary Add-on"
 3. Select any file in `browser-jack-in-firefox.zip` file
+
+**Safari:**
+
+1. Go to **Settings** -> **Developer**
+2. **Add Temporary Extension...**
 
 **Chrome:**
 
@@ -85,10 +92,6 @@ Firefox pending review, but you can install the package manually in the browser'
 2. Enable "Developer mode"
 3. Click "Load unpacked"
 4. Select the `chrome` folder
-
-**Safari:**
-
-Safari doesn't work yet. We'll return to it later. (PRs welcome!)
 
 ## Privacy
 
@@ -105,4 +108,3 @@ To build and hack on the extension, see the [development docs](docs/dev.md).
 ## Enjoy! ♥️
 
 Please consider [sponsoring my open source work](https://github.com/sponsors/PEZ).
-
