@@ -9,7 +9,10 @@
          :ui/status nil
          :ui/copy-feedback nil
          :ui/has-connected false  ; Track if we've connected at least once
-         :browser/brave? false}))
+         :browser/brave? false
+         :scripts/list []         ; All userscripts
+         :scripts/current-url nil ; Current tab URL for matching
+         }))
 
 (defn ws-fail-message []
   (str "Failed: WebSocket connection failed. Is the server running?"
@@ -28,6 +31,30 @@
        "-e '(require (quote [sci.nrepl.browser-server :as server])) "
        "(server/start! {:nrepl-port " nrepl " :websocket-port " ws "}) "
        "@(promise)'"))
+
+;; ============================================================
+;; URL pattern matching (inline for popup bundle)
+;; ============================================================
+
+(defn- escape-regex [s]
+  (.replace s (js/RegExp. "[.+?^${}()|[\\]\\\\]" "g") "\\$&"))
+
+(defn- pattern->regex [pattern]
+  (if (= pattern "<all_urls>")
+    (js/RegExp. "^https?://.*$")
+    (let [escaped (escape-regex pattern)
+          with-wildcards (.replace escaped (js/RegExp. "\\*" "g") ".*")]
+      (js/RegExp. (str "^" with-wildcards "$")))))
+
+(defn- url-matches-pattern? [url pattern]
+  (.test (pattern->regex pattern) url))
+
+(defn- script-matches-url? [script url]
+  (some #(url-matches-pattern? url %) (:script/match script)))
+
+;; ============================================================
+;; Tab and storage helpers
+;; ============================================================
 
 (defn get-active-tab []
   (js/Promise.
@@ -251,6 +278,62 @@
                 (swap! !state assoc :ui/status (str "Failed: " (.-message err)))))))
 
 ;; ============================================================
+;; Script storage helpers
+;; ============================================================
+
+(defn- parse-scripts
+  "Convert JS scripts array to Clojure with namespaced keys"
+  [js-scripts]
+  (if js-scripts
+    (->> (vec js-scripts)
+         (mapv (fn [s]
+                 {:script/id (.-id s)
+                  :script/name (.-name s)
+                  :script/match (vec (or (.-match s) #js []))
+                  :script/code (.-code s)
+                  :script/enabled (.-enabled s)
+                  :script/created (.-created s)
+                  :script/modified (.-modified s)})))
+    []))
+
+(defn- load-scripts! []
+  (js/chrome.storage.local.get
+   #js ["scripts"]
+   (fn [result]
+     (let [scripts (parse-scripts (.-scripts result))]
+       (swap! !state assoc :scripts/list scripts)))))
+
+(defn- script->js [script]
+  #js {:id (:script/id script)
+       :name (:script/name script)
+       :match (clj->js (:script/match script))
+       :code (:script/code script)
+       :enabled (:script/enabled script)
+       :created (:script/created script)
+       :modified (:script/modified script)})
+
+(defn- save-scripts! [scripts]
+  (js/chrome.storage.local.set
+   #js {:scripts (clj->js (mapv script->js scripts))}))
+
+(defn- toggle-script! [script-id]
+  (swap! !state update :scripts/list
+         (fn [scripts]
+           (let [updated (mapv #(if (= (:script/id %) script-id)
+                                  (update % :script/enabled not)
+                                  %)
+                               scripts)]
+             (save-scripts! updated)
+             updated))))
+
+(defn- delete-script! [script-id]
+  (swap! !state update :scripts/list
+         (fn [scripts]
+           (let [updated (filterv #(not= (:script/id %) script-id) scripts)]
+             (save-scripts! updated)
+             updated))))
+
+;; ============================================================
 ;; Dispatch
 ;; ============================================================
 
@@ -315,6 +398,23 @@
                         (when-let [ws (.-wsPort saved)]
                           (swap! !state assoc :ports/ws (str ws))))))))))
 
+    :load-scripts
+    (load-scripts!)
+
+    :toggle-script
+    (let [[script-id] args]
+      (toggle-script! script-id))
+
+    :delete-script
+    (let [[script-id] args]
+      (when (js/confirm "Delete this script?")
+        (delete-script! script-id)))
+
+    :load-current-url
+    (-> (get-active-tab)
+        (.then (fn [tab]
+                 (swap! !state assoc :scripts/current-url (.-url tab)))))
+
     (js/console.warn "Unknown action:" action)))
 
 (defn jack-in-icon []
@@ -351,6 +451,31 @@
    [:code command]
    [:button.copy-btn {:on-click #(dispatch! [:copy-command])}
     (or copy-feedback "Copy")]])
+
+(defn script-item [{:keys [script/id script/name script/match script/enabled]} current-url]
+  (let [matches-current (and current-url (some #(url-matches-pattern? current-url %) match))]
+    [:div.script-item {:class (when matches-current "script-item-active")}
+     [:div.script-info
+      [:span.script-name name]
+      [:span.script-match (first match)]]
+     [:div.script-actions
+      [:input {:type "checkbox"
+               :checked enabled
+               :title (if enabled "Enabled" "Disabled")
+               :on-change #(dispatch! [:toggle-script id])}]
+      [:button.script-delete {:on-click #(dispatch! [:delete-script id])
+                              :title "Delete script"}
+       "×"]]]))
+
+(defn scripts-section [{:keys [scripts/list scripts/current-url]}]
+  [:div.step.scripts-section
+   [:div.step-header "Userscripts"]
+   (if (seq list)
+     [:div.script-list
+      (for [script list]
+        ^{:key (:script/id script)}
+        [script-item script current-url])]
+     [:div.no-scripts "No scripts yet. Create scripts via DevTools console."])])
 
 (defn popup-ui [{:keys [ports/nrepl ports/ws ui/status ui/copy-feedback ui/has-connected] :as state}]
   [:div
@@ -393,7 +518,10 @@
    [:div.step
     [:div.step-header "3. Connect editor to browser (via server)"]
     [:div.connect-row
-     [:span.connect-target (str "nrepl://localhost:" nrepl)]]]])
+     [:span.connect-target (str "nrepl://localhost:" nrepl)]]]
+
+   ;; Userscripts section
+   [scripts-section state]])
 
 (defn render! []
   (r/render (js/document.getElementById "app")
@@ -408,7 +536,9 @@
 
   (render!)
   (dispatch! [:load-saved-ports])
-  (dispatch! [:check-status]))
+  (dispatch! [:check-status])
+  (dispatch! [:load-scripts])
+  (dispatch! [:load-current-url]))
 
 ;; Start the app when DOM is ready
 (js/console.log "Popup script loaded, readyState:" js/document.readyState)
