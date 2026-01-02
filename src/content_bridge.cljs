@@ -58,9 +58,41 @@
 
           nil)))))
 
-(defn- handle-runtime-message [message _sender _send-response]
+;; Script injection helpers
+(defn- inject-script-tag!
+  "Inject a script tag with src URL into the page."
+  [url]
+  (let [script (js/document.createElement "script")]
+    (set! (.-src script) url)
+    (.appendChild js/document.head script)
+    (js/console.log "[Bridge] Injected script:" url)))
+
+(defn- inject-userscript!
+  "Inject a Scittle userscript tag (application/x-scittle)."
+  [id code]
+  (let [script (js/document.createElement "script")]
+    (set! (.-type script) "application/x-scittle")
+    (set! (.-id script) id)
+    (set! (.-textContent script) code)
+    (.appendChild js/document.head script)
+    (js/console.log "[Bridge] Injected userscript:" id)))
+
+(defn- handle-runtime-message [message _sender send-response]
   (let [msg-type (.-type message)]
     (case msg-type
+      ;; Script injection messages
+      "inject-script"
+      (do
+        (inject-script-tag! (.-url message))
+        (send-response #js {:success true})
+        false)
+
+      "inject-userscript"
+      (do
+        (inject-userscript! (.-id message) (.-code message))
+        (send-response #js {:success true})
+        false)
+
       "ws-open"
       (do
         (js/console.log "[Bridge] WebSocket connected")

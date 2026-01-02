@@ -36,7 +36,8 @@
       "resources": [
         "vendor/scittle.js",
         "vendor/scittle.nrepl.js",
-        "ws-bridge.js"
+        "ws-bridge.js",
+        "trigger-scittle.js"
       ],
       "matches": [
         "<all_urls>"

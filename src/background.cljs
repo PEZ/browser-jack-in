@@ -111,20 +111,19 @@
           (recalculate-pending-approvals!)
           false)
         "pattern-approved"
-        (do
-          ;; Clear this script from pending and execute it
-          (let [script-id (.-scriptId message)
-                pattern (.-pattern message)]
-            (clear-pending-approval! script-id pattern)
-            ;; Execute the script now
-            (when-let [script (storage/get-script script-id)]
-              (-> (get-active-tab-id)
-                  (.then (fn [active-tab-id]
-                           (when active-tab-id
-                             (-> (ensure-scittle! active-tab-id)
-                                 (.then (fn [_]
-                                          (execute-scripts! active-tab-id [script])))))))))
-            false))
+        ;; Clear this script from pending and execute it
+        (let [script-id (.-scriptId message)
+              pattern (.-pattern message)]
+          (clear-pending-approval! script-id pattern)
+          ;; Execute the script now
+          (when-let [script (storage/get-script script-id)]
+            (-> (get-active-tab-id)
+                (.then (fn [active-tab-id]
+                         (when active-tab-id
+                           (-> (ensure-scittle! active-tab-id)
+                               (.then (fn [_]
+                                        (execute-scripts! active-tab-id [script])))))))))
+          false)
         ;; Legacy - keep for now
         "get-pending-approvals"
         (do (send-response (clj->js (get-pending-approvals)))
@@ -207,6 +206,8 @@
     };
   }"))
 
+#_{:clojure-lsp/ignore [:clojure-lsp/unused-public-var]}
+;; Unused for now, until we know if we want to keep injecting user scripts
 (def eval-cljs-fn
   "Evaluate ClojureScript code via Scittle"
   (js* "function(code) {
@@ -253,21 +254,51 @@
                                  5000))))))))))
 
 (defn execute-scripts!
-  "Execute a list of scripts in the page via Scittle"
+  "Execute a list of scripts in the page via Scittle using script tag injection.
+   Injects content bridge, then userscript tags, then triggers Scittle to evaluate them."
   [tab-id scripts]
   (when (seq scripts)
-    (js/Promise.all
-     (clj->js
-      (map (fn [script]
-             (-> (execute-in-page tab-id eval-cljs-fn (:script/code script))
-                 (.then (fn [result]
-                          (js/console.log "[Userscript]" (:script/name script)
-                                          (if (.-success result) "✓" "✗"))
-                          result))
-                 (.catch (fn [err]
-                           (js/console.error "[Userscript]" (:script/name script) "error:" err)
-                           {:success false :error (.-message err)}))))
-           scripts)))))
+    (let [trigger-url (js/chrome.runtime.getURL "trigger-scittle.js")]
+      ;; First ensure content bridge is loaded
+      (-> (inject-content-script tab-id "content-bridge.js")
+          (.then (fn [_]
+                   ;; Small delay for content script to initialize
+                   (js/Promise. (fn [resolve] (js/setTimeout resolve 100)))))
+          ;; Then inject all userscript tags
+          (.then (fn [_]
+                   (js/Promise.all
+                    (clj->js
+                     (map (fn [script]
+                            (js/Promise.
+                             (fn [resolve reject]
+                               (js/chrome.tabs.sendMessage
+                                tab-id
+                                #js {:type "inject-userscript"
+                                     :id (str "userscript-" (:script/id script))
+                                     :code (:script/code script)}
+                                (fn [response]
+                                  (if js/chrome.runtime.lastError
+                                    (reject (js/Error. (.-message js/chrome.runtime.lastError)))
+                                    (do
+                                      (js/console.log "[Userscript]" (:script/name script) "tag injected")
+                                      (resolve response))))))))
+                          scripts)))))
+          ;; Then trigger Scittle to evaluate them
+          (.then (fn [_]
+                   (js/Promise.
+                    (fn [resolve reject]
+                      (js/chrome.tabs.sendMessage
+                       tab-id
+                       #js {:type "inject-script"
+                            :url trigger-url}
+                       (fn [response]
+                         (if js/chrome.runtime.lastError
+                           (reject (js/Error. (.-message js/chrome.runtime.lastError)))
+                           (do
+                             (js/console.log "[Userscript] Triggered Scittle evaluation")
+                             (resolve response)))))))))
+          (.catch (fn [err]
+                    (js/console.error "[Userscript] Injection error:" err)))))))
 
 (defonce !pending-approvals (atom {}))
 
