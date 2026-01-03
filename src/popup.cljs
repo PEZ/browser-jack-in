@@ -1,7 +1,8 @@
 (ns popup
   "Browser Jack-in extension popup - built with Squint + Reagami
    Inspired by Replicant tic-tac-toe state management pattern"
-  (:require [reagami :as r]))
+  (:require [reagami :as r]
+            [event-handler :as event-handler]))
 
 (defonce !state
   (atom {:ports/nrepl "1339"
@@ -209,21 +210,21 @@
 
 (defn ensure-bridge!
   "Inject content bridge and WS bridge if not already present."
-  [tab-id has-bridge]
+  [dispatch tab-id has-bridge]
   (if has-bridge
     (js/Promise.resolve nil)
     (let [bridge-url (js/chrome.runtime.getURL "ws-bridge.js")]
-      (swap! !state assoc :ui/status "Loading bridge...")
+      (dispatch [[:db/ax.assoc :ui/status "Loading bridge..."]])
       (-> (inject-content-script tab-id "content-bridge.js")
           (.then (fn [_] (execute-in-page tab-id inject-script-fn bridge-url false)))))))
 
 (defn ensure-scittle!
   "Inject Scittle if not already present, wait for it to load."
-  [tab-id has-scittle]
+  [dispatch tab-id has-scittle]
   (if has-scittle
     (js/Promise.resolve nil)
     (let [scittle-url (js/chrome.runtime.getURL "vendor/scittle.js")]
-      (swap! !state assoc :ui/status "Loading Scittle...")
+      (dispatch [[:db/ax.assoc :ui/status "Loading Scittle..."]])
       (-> (execute-in-page tab-id inject-script-fn scittle-url false)
           (.then (fn [_]
                    (poll-until
@@ -235,9 +236,9 @@
 (defn configure-and-connect!
   "Close any existing connection, set nREPL config and connect.
    If scittle.nrepl is already loaded, just reconnect without re-injecting."
-  [tab-id port has-scittle-nrepl]
+  [dispatch tab-id port has-scittle-nrepl]
   (let [nrepl-url (js/chrome.runtime.getURL "vendor/scittle.nrepl.js")]
-    (swap! !state assoc :ui/status "Connecting...")
+    (dispatch [[:db/ax.assoc :ui/status "Connecting..."]])
     (-> (execute-in-page tab-id close-websocket-fn)
         (.then (fn [_] (execute-in-page tab-id set-nrepl-config-fn port)))
         (.then (fn [_]
@@ -256,26 +257,26 @@
                       (js/Error. (ws-fail-message))))
                   3000)))
         (.then (fn [_]
-                 (swap! !state assoc
-                        :ui/status (str "Connected to ws://localhost:" port)
-                        :ui/has-connected true)))
+                 (dispatch [[:db/ax.assoc
+                             :ui/status (str "Connected to ws://localhost:" port)
+                             :ui/has-connected true]])))
         (.catch (fn [err]
-                  (swap! !state assoc :ui/status (str "Failed: " (.-message err))))))))
+                  (dispatch [[:db/ax.assoc :ui/status (str "Failed: " (.-message err))]]))))))
 
 (defn connect-to-tab!
   "Main connection flow for a tab. Injects what's needed (idempotent), then connects."
-  [tab-id port]
+  [dispatch tab-id port]
   (-> (execute-in-page tab-id check-status-fn)
       (.then (fn [status]
                (let [has-bridge (and status (.-hasWsBridge status))
                      has-scittle (and status (.-hasScittle status))
                      has-scittle-nrepl (and status (.-hasScittleNrepl status))]
                  (js/console.log "[Connect] Status:" (js/JSON.stringify status))
-                 (-> (ensure-bridge! tab-id has-bridge)
-                     (.then (fn [_] (ensure-scittle! tab-id has-scittle)))
-                     (.then (fn [_] (configure-and-connect! tab-id port has-scittle-nrepl)))))))
+                 (-> (ensure-bridge! dispatch tab-id has-bridge)
+                     (.then (fn [_] (ensure-scittle! dispatch tab-id has-scittle)))
+                     (.then (fn [_] (configure-and-connect! dispatch tab-id port has-scittle-nrepl)))))))
       (.catch (fn [err]
-                (swap! !state assoc :ui/status (str "Failed: " (.-message err)))))))
+                (dispatch [[:db/ax.assoc :ui/status (str "Failed: " (.-message err))]])))))
 
 ;; ============================================================
 ;; Script storage helpers
@@ -399,20 +400,12 @@
              updated))))
 
 ;; ============================================================
-;; Dispatch
+;; Uniflow Dispatch
 ;; ============================================================
 
-(defn dispatch! [[action & args]]
-  (case action
-    :set-nrepl-port
-    (let [[port] args]
-      (swap! !state assoc :ports/nrepl port))
-
-    :set-ws-port
-    (let [[port] args]
-      (swap! !state assoc :ports/ws port))
-
-    :save-ports
+(defn perform-effect! [dispatch [effect & args]]
+  (case effect
+    :popup/fx.save-ports
     (-> (get-active-tab)
         (.then (fn [tab]
                  (let [key (storage-key tab)
@@ -420,22 +413,19 @@
                    (js/chrome.storage.local.set
                     (clj->js {key {:nreplPort nrepl :wsPort ws}}))))))
 
-    :copy-command
-    (let [cmd (generate-server-cmd @!state)]
+    :popup/fx.copy-command
+    (let [[cmd] args]
       (-> (js/navigator.clipboard.writeText cmd)
           (.then (fn []
-                   (swap! !state assoc :ui/copy-feedback "Copied!")
-                   (js/setTimeout (fn [] (swap! !state assoc :ui/copy-feedback nil)) 1500)))))
+                   (dispatch [[:db/ax.assoc :ui/copy-feedback "Copied!"]])
+                   (js/setTimeout (fn [] (dispatch [[:db/ax.assoc :ui/copy-feedback nil]])) 1500)))))
 
-    :connect
-    (let [{:keys [ports/ws]} @!state
-          port (js/parseInt ws 10)]
-      (when (and (not (js/isNaN port)) (<= 1 port 65535))
-        (swap! !state assoc :ui/status "Checking...")
-        (-> (get-active-tab)
-            (.then (fn [tab] (connect-to-tab! (.-id tab) port))))))
+    :popup/fx.connect
+    (let [[port] args]
+      (-> (get-active-tab)
+          (.then (fn [tab] (connect-to-tab! dispatch (.-id tab) port)))))
 
-    :check-status
+    :popup/fx.check-status
     (-> (get-active-tab)
         (.then (fn [tab]
                  (execute-in-page (.-id tab) check-status-fn)))
@@ -446,11 +436,11 @@
                          ws-port (:ports/ws @!state)]
                      (js/console.log "[Check Status] hasScittle:" has-scittle "hasWsBridge:" has-bridge)
                      (when (and has-scittle has-bridge)
-                       (swap! !state assoc
-                              :ui/has-connected true
-                              :ui/status (str "Connected to ws://localhost:" ws-port))))))))
+                       (dispatch [[:db/ax.assoc
+                                   :ui/has-connected true
+                                   :ui/status (str "Connected to ws://localhost:" ws-port)]])))))))
 
-    :load-saved-ports
+    :popup/fx.load-saved-ports
     (-> (get-active-tab)
         (.then (fn [tab]
                  (let [key (storage-key tab)]
@@ -458,37 +448,139 @@
                     #js [key]
                     (fn [result]
                       (when-let [saved (aget result key)]
-                        (when-let [nrepl (.-nreplPort saved)]
-                          (swap! !state assoc :ports/nrepl (str nrepl)))
-                        (when-let [ws (.-wsPort saved)]
-                          (swap! !state assoc :ports/ws (str ws))))))))))
+                        (let [actions (cond-> []
+                                        (.-nreplPort saved)
+                                        (conj [:db/ax.assoc :ports/nrepl (str (.-nreplPort saved))])
+                                        (.-wsPort saved)
+                                        (conj [:db/ax.assoc :ports/ws (str (.-wsPort saved))]))]
+                          (when (seq actions)
+                            (dispatch actions))))))))))
 
-    :load-scripts
-    (load-scripts!)
+    :popup/fx.load-scripts
+    (js/chrome.storage.local.get
+     #js ["scripts"]
+     (fn [result]
+       (let [scripts (parse-scripts (.-scripts result))]
+         (dispatch [[:db/ax.assoc :scripts/list scripts]]))))
 
-    :toggle-script
-    (let [[script-id matching-pattern] args]
-      (toggle-script! script-id matching-pattern))
+    :popup/fx.toggle-script
+    (let [[script-id matching-pattern] args
+          scripts (:scripts/list @!state)
+          updated (mapv (fn [s]
+                          (if (= (:script/id s) script-id)
+                            (let [new-enabled (not (:script/enabled s))]
+                              (if new-enabled
+                                (assoc s :script/enabled true)
+                                (-> s
+                                    (assoc :script/enabled false)
+                                    (update :script/approved-patterns
+                                            (fn [patterns]
+                                              (filterv #(not= % matching-pattern) (or patterns [])))))))
+                            s))
+                        scripts)]
+      (save-scripts! updated)
+      (js/chrome.runtime.sendMessage #js {:type "refresh-approvals"})
+      (dispatch [[:db/ax.assoc :scripts/list updated]]))
 
-    :delete-script
-    (let [[script-id] args]
-      (when (js/confirm "Delete this script?")
-        (delete-script! script-id)))
+    :popup/fx.approve-script
+    (let [[script-id pattern] args
+          scripts (:scripts/list @!state)
+          updated (mapv (fn [s]
+                          (if (= (:script/id s) script-id)
+                            (update s :script/approved-patterns
+                                    (fn [patterns]
+                                      (let [patterns (or patterns [])]
+                                        (if (some #(= % pattern) patterns)
+                                          patterns
+                                          (conj patterns pattern)))))
+                            s))
+                        scripts)]
+      (save-scripts! updated)
+      (js/chrome.runtime.sendMessage
+       #js {:type "pattern-approved"
+            :scriptId script-id
+            :pattern pattern})
+      (dispatch [[:db/ax.assoc :scripts/list updated]]))
 
-    :load-current-url
+    :popup/fx.deny-script
+    (let [[script-id] args
+          scripts (:scripts/list @!state)
+          updated (mapv (fn [s]
+                          (if (= (:script/id s) script-id)
+                            (assoc s :script/enabled false)
+                            s))
+                        scripts)]
+      (save-scripts! updated)
+      (js/chrome.runtime.sendMessage #js {:type "refresh-approvals"})
+      (dispatch [[:db/ax.assoc :scripts/list updated]]))
+
+    :popup/fx.delete-script
+    (let [[script-id] args
+          scripts (:scripts/list @!state)
+          updated (filterv #(not= (:script/id %) script-id) scripts)]
+      (save-scripts! updated)
+      (dispatch [[:db/ax.assoc :scripts/list updated]]))
+
+    :popup/fx.load-current-url
     (-> (get-active-tab)
         (.then (fn [tab]
-                 (swap! !state assoc :scripts/current-url (.-url tab)))))
+                 (dispatch [[:db/ax.assoc :scripts/current-url (.-url tab)]]))))
 
-    :approve-script
-    (let [[script-id pattern] args]
-      (approve-script! script-id pattern))
+    :uf/unhandled-fx))
 
-    :deny-script
+(defn handle-action [state _uf-data [action & args]]
+  (case action
+    :popup/ax.set-nrepl-port
+    (let [[port] args]
+      {:uf/db (assoc state :ports/nrepl port)
+       :uf/fxs [[:popup/fx.save-ports]]})
+
+    :popup/ax.set-ws-port
+    (let [[port] args]
+      {:uf/db (assoc state :ports/ws port)
+       :uf/fxs [[:popup/fx.save-ports]]})
+
+    :popup/ax.copy-command
+    {:uf/fxs [[:popup/fx.copy-command (generate-server-cmd state)]]}
+
+    :popup/ax.connect
+    (let [port (js/parseInt (:ports/ws state) 10)]
+      (when (and (not (js/isNaN port)) (<= 1 port 65535))
+        {:uf/db (assoc state :ui/status "Checking...")
+         :uf/fxs [[:popup/fx.connect port]]}))
+
+    :popup/ax.check-status
+    {:uf/fxs [[:popup/fx.check-status]]}
+
+    :popup/ax.load-saved-ports
+    {:uf/fxs [[:popup/fx.load-saved-ports]]}
+
+    :popup/ax.load-scripts
+    {:uf/fxs [[:popup/fx.load-scripts]]}
+
+    :popup/ax.toggle-script
+    (let [[script-id matching-pattern] args]
+      {:uf/fxs [[:popup/fx.toggle-script script-id matching-pattern]]})
+
+    :popup/ax.delete-script
     (let [[script-id] args]
-      (deny-script! script-id))
+      {:uf/fxs [[:popup/fx.delete-script script-id]]})
 
-    (js/console.warn "Unknown action:" action)))
+    :popup/ax.load-current-url
+    {:uf/fxs [[:popup/fx.load-current-url]]}
+
+    :popup/ax.approve-script
+    (let [[script-id pattern] args]
+      {:uf/fxs [[:popup/fx.approve-script script-id pattern]]})
+
+    :popup/ax.deny-script
+    (let [[script-id] args]
+      {:uf/fxs [[:popup/fx.deny-script script-id]]})
+
+    :uf/unhandled-ax))
+
+(defn dispatch! [actions]
+  (event-handler/dispatch! !state handle-action perform-effect! actions))
 
 (defn jack-in-icon []
   [:svg {:xmlns "http://www.w3.org/2000/svg"
@@ -505,7 +597,7 @@
     {:fill "#ffdc73"
      :transform "translate(50, 50) scale(0.5) translate(-211, -280)"
      :d
-       "M224.12 259.93h21.11a5.537 5.537 0 0 1 4.6 8.62l-50.26 85.75a5.536 5.536 0 0 1-7.58 1.88 5.537 5.537 0 0 1-2.56-5.85l7.41-52.61-24.99.43a5.538 5.538 0 0 1-5.61-5.43c0-1.06.28-2.04.78-2.89l49.43-85.71a5.518 5.518 0 0 1 7.56-1.95 5.518 5.518 0 0 1 2.65 5.53l-2.54 52.23z"}]])
+     "M224.12 259.93h21.11a5.537 5.537 0 0 1 4.6 8.62l-50.26 85.75a5.536 5.536 0 0 1-7.58 1.88 5.537 5.537 0 0 1-2.56-5.85l7.41-52.61-24.99.43a5.538 5.538 0 0 1-5.61-5.43c0-1.06.28-2.04.78-2.89l49.43-85.71a5.518 5.518 0 0 1 7.56-1.95 5.518 5.518 0 0 1 2.65 5.53l-2.54 52.23z"}]])
 
 (defn port-input [{:keys [id label value on-change]}]
   [:span
@@ -516,13 +608,12 @@
             :min "1"
             :max "65535"
             :on-input (fn [e]
-                        (on-change (.. e -target -value))
-                        (dispatch! [:save-ports]))}]])
+                        (on-change (.. e -target -value)))}]])
 
 (defn command-box [{:keys [command copy-feedback]}]
   [:div.command-box
    [:code command]
-   [:button.copy-btn {:on-click #(dispatch! [:copy-command])}
+   [:button.copy-btn {:on-click #(dispatch! [[:popup/ax.copy-command]])}
     (or copy-feedback "Copy")]])
 
 (defn script-item [{:keys [script/name script/match script/enabled] :as script}
@@ -542,17 +633,17 @@
      [:div.script-actions
       ;; Show approval buttons when script matches current URL but pattern not approved
       (when needs-approval
-        [:button.approval-allow {:on-click #(dispatch! [:approve-script script-id matching-pattern])}
+        [:button.approval-allow {:on-click #(dispatch! [[:popup/ax.approve-script script-id matching-pattern]])}
          "Allow"])
       (when needs-approval
-        [:button.approval-deny {:on-click #(dispatch! [:deny-script script-id])}
+        [:button.approval-deny {:on-click #(dispatch! [[:popup/ax.deny-script script-id]])}
          "Deny"])
       ;; Always show checkbox and delete
       [:input {:type "checkbox"
                :checked enabled
                :title (if enabled "Enabled" "Disabled")
-               :on-change #(dispatch! [:toggle-script script-id matching-pattern])}]
-      [:button.script-delete {:on-click #(dispatch! [:delete-script script-id])
+               :on-change #(dispatch! [[:popup/ax.toggle-script script-id matching-pattern]])}]
+      [:button.script-delete {:on-click #(dispatch! [[:popup/ax.delete-script script-id]])
                               :title "Delete script"}
        "×"]]]))
 
@@ -587,11 +678,11 @@
      [port-input {:id "nrepl-port"
                   :label "nREPL:"
                   :value nrepl
-                  :on-change #(dispatch! [:set-nrepl-port %])}]
+                  :on-change #(dispatch! [[:popup/ax.set-nrepl-port %]])}]
      [port-input {:id "ws-port"
                   :label "WebSocket:"
                   :value ws
-                  :on-change #(dispatch! [:set-ws-port %])}]]
+                  :on-change #(dispatch! [[:popup/ax.set-ws-port %]])}]]
     [command-box {:command (generate-server-cmd state)
                   :copy-feedback copy-feedback}]]
 
@@ -599,7 +690,7 @@
     [:div.step-header "2. Connect browser to server"]
     [:div.connect-row
      [:span.connect-target (str "ws://localhost:" ws)]
-     [:button#connect {:on-click #(dispatch! [:connect])}
+     [:button#connect {:on-click #(dispatch! [[:popup/ax.connect]])}
       (if has-connected "Reconnect" "Connect")]]
     (when status
       [:div#status {:class (status-class status)} status])]
@@ -618,16 +709,16 @@
 
 (defn init! []
   (js/console.log "Browser Jack-in popup init!")
-  (add-watch !state ::render (fn [_ _ _ _] (render!)))
+  (add-watch !state :popup/render (fn [_ _ _ _] (render!)))
 
   ;; Detect browser features
   (swap! !state assoc :browser/brave? (some? (.-brave js/navigator)))
 
   (render!)
-  (dispatch! [:load-saved-ports])
-  (dispatch! [:check-status])
-  (dispatch! [:load-scripts])
-  (dispatch! [:load-current-url]))
+  (dispatch! [[:popup/ax.load-saved-ports]
+              [:popup/ax.check-status]
+              [:popup/ax.load-scripts]
+              [:popup/ax.load-current-url]]))
 
 ;; Start the app when DOM is ready
 (js/console.log "Popup script loaded, readyState:" js/document.readyState)
