@@ -1,8 +1,10 @@
 (ns event-handler)
 
+;; Uni-flow event handling
+
 (defn perform-effect! [dispatch [effect & args]]
   (case effect
-    :ex/fx.defer-dispatch
+    :uf/fx.defer-dispatch
     (let [[actions timeout] args]
       (js/setTimeout #(dispatch actions) timeout))
 
@@ -22,32 +24,32 @@
 (defn handle-action [state data [action & args]]
   (case action
     :db/ax.assoc
-    {:ex/db (apply (partial assoc state) args)}
+    {:uf/db (apply (partial assoc state) args)}
 
     (js/console.warn "Unknown action:" action args)))
 
 (defn handle-actions [state data handler actions]
-  (reduce (fn [{state :ex/db :as acc} action]
-            (let [{:ex/keys [fxs dxs db]} (let [result (handler state data action)]
-                                            (if-not (= :ex/unhandled-ax result)
+  (reduce (fn [{state :uf/db :as acc} action]
+            (let [{:uf/keys [fxs dxs db]} (let [result (handler state data action)]
+                                            (if-not (= :uf/unhandled-ax result)
                                               result
                                               (handle-action state data action)))]
               (js/console.debug "Triggered action" (first action) action)
               (cond-> acc
-                db (assoc :ex/db db)
-                dxs (assoc :ex/dxs dxs)
-                fxs (update :ex/fxs into fxs))))
-          {:ex/db state
-           :ex/fxs []}
+                db (assoc :uf/db db)
+                dxs (assoc :uf/dxs dxs)
+                fxs (update :uf/fxs into fxs))))
+          {:uf/db state
+           :uf/fxs []}
           (remove nil? actions)))
 
 (defn dispatch! [!state ax-handler ex-handler actions]
   (let [data {:system/now (.now js/Date)}
-        {:ex/keys [fxs dxs db]}
+        {:uf/keys [fxs dxs db]}
         (try
           (handle-actions @!state data ax-handler actions)
           (catch :default e
-            {:ex/fxs [[:log/fx.log :error (ex-info "handle-action error"
+            {:uf/fxs [[:log/fx.log :error (ex-info "handle-action error"
                                                    {:error e}
                                                    :event-handler/handle-actions)]]}))]
     (when db
@@ -63,7 +65,7 @@
             (try
               (let [dispatch (partial dispatch! !state ax-handler ex-handler)
                     result (ex-handler dispatch fx)]
-                (if-not (= :ex/unhandled-fx result)
+                (if-not (= :uf/unhandled-fx result)
                   result
                   (perform-effect! dispatch fx)))
               (catch :default e

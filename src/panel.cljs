@@ -68,33 +68,33 @@
                  pattern (str (.-protocol parsed) "//" (.-hostname parsed) "/*")]
              (dispatch [(conj action pattern)]))))))
 
-    :ex/unhandled-fx))
+    :uf/unhandled-fx))
 
 (defn handle-action [state data [action & args]]
   (case action
     :editor/ax.set-code
     (let [[code] args]
-      {:ex/db (assoc state :panel/code code)})
+      {:uf/db (assoc state :panel/code code)})
 
     :editor/ax.set-script-name
     (let [[new-name] args]
-      {:ex/db (assoc state :panel/script-name new-name)})
+      {:uf/db (assoc state :panel/script-name new-name)})
 
     :editor/ax.set-script-match
     (let [[match] args]
-      {:ex/db (assoc state :panel/script-match match)})
+      {:uf/db (assoc state :panel/script-match match)})
 
     :editor/ax.eval
     (let [code (:panel/code state)]
       (when (and (seq code) (not (:panel/evaluating? state)))
-        {:ex/db (-> state
+        {:uf/db (-> state
                     (assoc :panel/evaluating? true)
                     (update :panel/results conj {:type :input :text code}))
-         :ex/fxs [[:editor/fx.eval-in-page code]]}))
+         :uf/fxs [[:editor/fx.eval-in-page code]]}))
 
     :editor/ax.handle-eval-result
     (let [[result] args]
-      {:ex/db (cond-> state
+      {:uf/db (cond-> state
                 :always (assoc :panel/evaluating? false)
                 (:error result) (update :panel/results conj {:type :error :text (:error result)})
                 (not (:error result)) (update :panel/results conj {:type :output :text (:result result)}))})
@@ -102,30 +102,30 @@
     :editor/ax.save-script
     (let [{:panel/keys [code script-name script-match]} state]
       (if (or (empty? code) (empty? script-name) (empty? script-match))
-        {:ex/db (assoc state :panel/save-status {:type :error :text "Name, match pattern, and code are required"})}
+        {:uf/db (assoc state :panel/save-status {:type :error :text "Name, match pattern, and code are required"})}
         (let [script-id (str "script-" (:system/now data))
               script {:script/id script-id
                       :script/name script-name
                       :script/match [script-match]
                       :script/code code
                       :script/enabled true}]
-          {:ex/fxs [[:editor/fx.save-script script]
-                    [:ex/fx.defer-dispatch [[:db/ax.assoc :panel/save-status nil]] 3000]]
-           :ex/db (assoc state
+          {:uf/fxs [[:editor/fx.save-script script]
+                    [:uf/fx.defer-dispatch [[:db/ax.assoc :panel/save-status nil]] 3000]]
+           :uf/db (assoc state
                          :panel/save-status {:type :success :text (str "Saved \"" script-name "\"")}
                          :panel/script-name ""
                          :panel/script-match "")})))
 
     :editor/ax.clear-results
-    {:ex/db (assoc state :panel/results [])}
+    {:uf/db (assoc state :panel/results [])}
 
     :editor/ax.clear-code
-    {:ex/db (assoc state :panel/code "")}
+    {:uf/db (assoc state :panel/code "")}
 
     :editor/ax.use-current-url
-    {:ex/fxs [[:editor/fx.use-current-url [:db/ax.assoc :panel/script-match]]]}
+    {:uf/fxs [[:editor/fx.use-current-url [:db/ax.assoc :panel/script-match]]]}
 
-    :ex/unhandled-ax))
+    :uf/unhandled-ax))
 
 (defn dispatch! [actions]
   (event-handler/dispatch! !state handle-action perform-effect! actions))

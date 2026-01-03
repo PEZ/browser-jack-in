@@ -1,3 +1,8 @@
+---
+description: 'Effective Squint usages'
+applyTo: '**'
+---
+
 # Squint ClojureScript Dialect - AI Agent Instructions
 
 This project uses [Squint](https://github.com/squint-cljs/squint), a light-weight ClojureScript dialect that compiles to modern JavaScript ES modules.
