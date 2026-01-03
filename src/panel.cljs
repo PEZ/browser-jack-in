@@ -45,14 +45,14 @@
 
 (defn perform-effect! [dispatch [effect & args]]
   (case effect
-    :ex/fx.eval-in-page
+    :editor/fx.eval-in-page
     (let [[code] args]
       (eval-in-page!
        code
        (fn [result]
-         (dispatch [[:ex/ax.handle-eval-result result]]))))
+         (dispatch [[:editor/ax.handle-eval-result result]]))))
 
-    :ex/fx.save-script
+    :editor/fx.save-script
     (let [[script] args]
       (storage/save-script! script))
 
@@ -60,7 +60,7 @@
     (let [[actions timeout] args]
       (js/setTimeout #(dispatch actions) timeout))
 
-    :ex/fx.use-current-url
+    :editor/fx.use-current-url
     (let [[action] args]
       (js/chrome.devtools.inspectedWindow.eval
        "window.location.href"
@@ -71,7 +71,7 @@
                  pattern (str (.-protocol parsed) "//" (.-hostname parsed) "/*")]
              (dispatch [(conj action pattern)]))))))
 
-    :ex/fx.log
+    :log/fx.log
     (let [[level & ms] args]
       (apply (case level
               :debug js/console.debug
@@ -86,34 +86,34 @@
 
 (defn handle-action [state [action & args]]
   (case action
-    :ex/ax.set-code
+    :editor/ax.set-code
     (let [[code] args]
       {:ex/db (assoc state :panel/code code)})
 
-    :ex/ax.set-script-name
+    :editor/ax.set-script-name
     (let [[new-name] args]
       {:ex/db (assoc state :panel/script-name new-name)})
 
-    :ex/ax.set-script-match
+    :editor/ax.set-script-match
     (let [[match] args]
       {:ex/db (assoc state :panel/script-match match)})
 
-    :ex/ax.eval
+    :editor/ax.eval
     (let [code (:panel/code state)]
       (when (and (seq code) (not (:panel/evaluating? state)))
         {:ex/db (-> state
                     (assoc :panel/evaluating? true)
                     (update :panel/results conj {:type :input :text code}))
-         :ex/fxs [[:ex/fx.eval-in-page code]]}))
+         :ex/fxs [[:editor/fx.eval-in-page code]]}))
 
-    :ex/ax.handle-eval-result
+    :editor/ax.handle-eval-result
     (let [[result] args]
       {:ex/db (cond-> state
                 :always (assoc :panel/evaluating? false)
                 (:error result) (update :panel/results conj {:type :error :text (:error result)})
                 (not (:error result)) (update :panel/results conj {:type :output :text (:result result)}))})
 
-    :ex/ax.save-script
+    :editor/ax.save-script
     (let [{:panel/keys [code script-name script-match]} state]
       (if (or (empty? code) (empty? script-name) (empty? script-match))
         {:ex/db (assoc state :panel/save-status {:type :error :text "Name, match pattern, and code are required"})}
@@ -123,27 +123,24 @@
                       :script/match [script-match]
                       :script/code code
                       :script/enabled true}]
-          {:ex/fxs [[:ex/fx.save-script script]
-                    [:ex/fx.defer-dispatch [[:ex/ax.assoc :panel/save-status nil]] 3000]]
+          {:ex/fxs [[:editor/fx.save-script script]
+                    [:ex/fx.defer-dispatch [[:db/ax.assoc :panel/save-status nil]] 3000]]
            :ex/db (assoc state
                          :panel/save-status {:type :success :text (str "Saved \"" script-name "\"")}
                          :panel/script-name ""
                          :panel/script-match "")})))
 
-    :ex/ax.assoc
+    :db/ax.assoc
     {:ex/db (apply (partial assoc state) args)}
 
-    :ex/ax.clear-results
+    :editor/ax.clear-results
     {:ex/db (assoc state :panel/results [])}
 
-    :ex/ax.clear-code
+    :editor/ax.clear-code
     {:ex/db (assoc state :panel/code "")}
 
-    :ex/ax.use-current-url
-    {:ex/fxs [[:ex/fx.use-current-url [:ex/ax.assoc :panel/script-match]]]}
-
-    :ex/ax.log-error
-    {:ex/fxs [(into [:ex/fx.log :error] args)]}
+    :edior/ax.use-current-url
+    {:ex/fxs [[:editor/fx.use-current-url [:db/ax.assoc :panel/script-match]]]}
 
     (js/console.warn "Unknown action:" action args)))
 
@@ -164,7 +161,7 @@
         (try
           (handle-actions @!state actions)
           (catch :default e
-            {:ex/fxs [[:ex/fx.log :error (ex-info "handle-action error"
+            {:ex/fxs [[:log/fx.log :error (ex-info "handle-action error"
                                                  e
                                                  ::handle-actions)]]}))]
     (when db
@@ -175,7 +172,7 @@
       (try
         (doseq [fx fxs]
           (when fx
-            (when-not (= :ex/fx.log (first fx))
+            (when-not (= :log/fx.log (first fx))
               (js/console.debug "Triggered effect" fx))
             (try
               (perform-effect! dispatch! fx)
@@ -290,17 +287,17 @@
    [:textarea {:value code
                :placeholder "(+ 1 2 3)\n\n; Ctrl+Enter to evaluate"
                :disabled evaluating?
-               :on-input (fn [e] (dispatch! [[:ex/ax.set-code (.. e -target -value)]]))
+               :on-input (fn [e] (dispatch! [[:editor/ax.set-code (.. e -target -value)]]))
                :on-keydown (fn [e]
                              (when (and (or (.-ctrlKey e) (.-metaKey e))
                                         (= "Enter" (.-key e)))
                                (.preventDefault e)
-                               (dispatch! [[:ex/ax.eval]])))}]
+                               (dispatch! [[:editor/ax.eval]])))}]
    [:div.code-actions
-    [:button.btn-eval {:on-click #(dispatch! [[:ex/ax.eval]])
+    [:button.btn-eval {:on-click #(dispatch! [[:editor/ax.eval]])
                        :disabled (or evaluating? (empty? code))}
      (if evaluating? "Evaluating..." "Eval")]
-    [:button.btn-clear {:on-click #(dispatch! [[:ex/ax.clear-results]])}
+    [:button.btn-clear {:on-click #(dispatch! [[:editor/ax.clear-results]])}
      "Clear"]
     [:span.shortcut-hint "Ctrl+Enter to eval"]]])
 
@@ -314,7 +311,7 @@
               :id "script-name"
               :value script-name
               :placeholder "My Script"
-              :on-input (fn [e] (dispatch! [[:ex/ax.set-script-name (.. e -target -value)]]))}]]
+              :on-input (fn [e] (dispatch! [[:editor/ax.set-script-name (.. e -target -value)]]))}]]
     [:div.save-field
      [:label {:for "script-match"} "URL Pattern"]
      [:div.match-input-group
@@ -322,12 +319,12 @@
                :id "script-match"
                :value script-match
                :placeholder "https://example.com/*"
-               :on-input (fn [e] (dispatch! [[:ex/ax.set-script-match (.. e -target -value)]]))}]
+               :on-input (fn [e] (dispatch! [[:editor/ax.set-script-match (.. e -target -value)]]))}]
       [:button.btn-use-url {:on-click #(dispatch! [:use-current-url])
                             :title "Use current page URL"}
        "↵"]]]
     [:div.save-actions
-     [:button.btn-save {:on-click #(dispatch! [[:ex/ax.save-script]])
+     [:button.btn-save {:on-click #(dispatch! [[:editor/ax.save-script]])
                         :disabled (or (empty? code) (empty? script-name) (empty? script-match))}
       "Save Script"]
      ;; In Squint, keywords are already strings, so no need for `name`
