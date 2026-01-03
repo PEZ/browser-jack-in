@@ -19,19 +19,19 @@
 
     (js/console.warn "Unkown effect:" effect args)))
 
-(defn handle-action [state [action & args]]
+(defn handle-action [state data [action & args]]
   (case action
     :db/ax.assoc
     {:ex/db (apply (partial assoc state) args)}
 
     (js/console.warn "Unknown action:" action args)))
 
-(defn handle-actions [state handler actions]
+(defn handle-actions [state data handler actions]
   (reduce (fn [{state :ex/db :as acc} action]
-            (let [{:ex/keys [fxs dxs db]} (let [result (handler state action)]
+            (let [{:ex/keys [fxs dxs db]} (let [result (handler state data action)]
                                             (if-not (= :ex/unhandled-ax result)
                                               result
-                                              (handle-action state action)))]
+                                              (handle-action state data action)))]
               (js/console.debug "Triggered action" (first action) action)
               (cond-> acc
                 db (assoc :ex/db db)
@@ -42,9 +42,10 @@
           (remove nil? actions)))
 
 (defn dispatch! [!state ax-handler ex-handler actions]
-  (let [{:ex/keys [fxs dxs db]}
+  (let [data {:system/now (.now js/Date)}
+        {:ex/keys [fxs dxs db]}
         (try
-          (handle-actions @!state ax-handler actions)
+          (handle-actions @!state data ax-handler actions)
           (catch :default e
             {:ex/fxs [[:log/fx.log :error (ex-info "handle-action error"
                                                    {:error e}

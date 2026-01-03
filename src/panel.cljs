@@ -70,7 +70,7 @@
 
     :ex/unhandled-fx))
 
-(defn handle-action [state [action & args]]
+(defn handle-action [state data [action & args]]
   (case action
     :editor/ax.set-code
     (let [[code] args]
@@ -103,7 +103,7 @@
     (let [{:panel/keys [code script-name script-match]} state]
       (if (or (empty? code) (empty? script-name) (empty? script-match))
         {:ex/db (assoc state :panel/save-status {:type :error :text "Name, match pattern, and code are required"})}
-        (let [script-id (str "script-" (.now js/Date))
+        (let [script-id (str "script-" (:system/now data))
               script {:script/id script-id
                       :script/name script-name
                       :script/match [script-match]
