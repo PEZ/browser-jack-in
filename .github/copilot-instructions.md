@@ -9,6 +9,7 @@ Mandatory reads:
 * [Developer docs](../docs/dev.md)
 * [Userscript architecture](../dev/docs/userscripts-architecture.md)
 * [Squint gotchas](squint.instructions.md) - Critical Squint-specific issues
+* [State and event management](uniflow.instructions.md) - Uniflow patterns
 
 **Architecture in brief:**
 `Editor/AI nREPL client` ↔ `Babashka browser-nrepl (ports 12345/12346)` ↔ `Extension background worker` ↔ `Content bridge script` ↔ `Page WebSocket bridge` ↔ `Scittle REPL` ↔ `DOM`
