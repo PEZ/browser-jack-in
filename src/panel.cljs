@@ -211,8 +211,12 @@
 
 (defn init! []
   (js/console.log "[Panel] Initializing...")
-  (add-watch !state ::render (fn [_ _ _ _] (render!)))
-  (render!))
+  ;; Load existing scripts from storage before rendering
+  (-> (storage/load!)
+      (.then (fn [_]
+               (js/console.log "[Panel] Storage loaded")
+               (add-watch !state ::render (fn [_ _ _ _] (render!)))
+               (render!)))))
 
 (if (= "loading" js/document.readyState)
   (js/document.addEventListener "DOMContentLoaded" init!)
