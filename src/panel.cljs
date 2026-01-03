@@ -50,8 +50,8 @@
       (swap! !state assoc :panel/code code))
 
     :set-script-name
-    (let [[name] args]
-      (swap! !state assoc :panel/script-name name))
+    (let [[new-name] args]
+      (swap! !state assoc :panel/script-name new-name))
 
     :set-script-match
     (let [[match] args]
@@ -182,8 +182,9 @@
      [:button.btn-save {:on-click #(dispatch! [:save-script])
                         :disabled (or (empty? code) (empty? script-name) (empty? script-match))}
       "Save Script"]
+     ;; In Squint, keywords are already strings, so no need for `name`
      (when save-status
-       [:span {:class (str "save-status save-status-" (name (:type save-status)))}
+       [:span {:class (str "save-status save-status-" (:type save-status))}
         (:text save-status)])]]])
 
 (defn panel-header []
