@@ -139,7 +139,7 @@
     :editor/ax.clear-code
     {:ex/db (assoc state :panel/code "")}
 
-    :edior/ax.use-current-url
+    :editor/ax.use-current-url
     {:ex/fxs [[:editor/fx.use-current-url [:db/ax.assoc :panel/script-match]]]}
 
     (js/console.warn "Unknown action:" action args)))
@@ -320,7 +320,7 @@
                :value script-match
                :placeholder "https://example.com/*"
                :on-input (fn [e] (dispatch! [[:editor/ax.set-script-match (.. e -target -value)]]))}]
-      [:button.btn-use-url {:on-click #(dispatch! [:use-current-url])
+      [:button.btn-use-url {:on-click #(dispatch! [[:editor/ax.use-current-url]])
                             :title "Use current page URL"}
        "↵"]]]
     [:div.save-actions
