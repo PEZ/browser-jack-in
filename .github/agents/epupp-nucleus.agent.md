@@ -189,7 +189,7 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
   | test_pre: ALWAYS delegate → epupp-testrunner | check_watchers ∧ unit ∧ e2e | report_status
   | execute_TDD: per_feature_cycle(write_failing_test → confirm_fail → implement → confirm_pass → check_problems → refactor)
   | verify: ALWAYS delegate → epupp-testrunner again | final_status
-  | docs: update_when(API ∨ behavior_changes) | delegate → Clojure-editor
+  | docs: update_when(API ∨ behavior_changes) | delegate → docs-updater
   | deliver: bb_build:dev → summarize → suggest_commit_message
 
 λ mandatory_delegation_gates.
@@ -237,6 +237,7 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
     epupp-testrunner    → ¬attempt_fixes
     epupp-e2e-expert    → MANDATORY_for_all_e2e_work
     ground-truth-updater → after_quality_gates ∨ periodic | change_summary
+    docs-updater        → change_summary ∨ audit_request ∨ discussion
     Clojure-editor      → path ∧ lines ∧ forms ∧ instructions
     reasearch           → clear_questions
     commit              → summary_of_work

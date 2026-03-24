@@ -31,7 +31,9 @@ description: Orchestrates plan implementation via chunked delegation with TDD ga
     - [ ] e2e_tests_pass(bb test:e2e)
     - [ ] zero_lint_errors
     - [ ] zero_new_warnings
-  4_ground_truth: delegate(ground-truth-updater) | provide:
+  4_docs: delegate(docs-updater) | when(API ∨ behavior_changes) | provide:
+    - change_summary(what_changed ∧ which_files ∧ new_behavior)
+  5_ground_truth: delegate(ground-truth-updater) | provide:
     - summary_of_changes(new_actions ∧ effects ∧ messages ∧ state_keys ∧ files)
     - human_selects_which_updates_to_apply
-  5_summarize: accomplished ∧ deviations ∧ instruction_updates_applied
+  6_summarize: accomplished ∧ deviations ∧ doc_updates ∧ instruction_updates_applied
