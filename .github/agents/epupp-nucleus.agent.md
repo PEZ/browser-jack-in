@@ -213,8 +213,9 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
   1_read_plan → understand_thoroughly
   2_slice → work_items(reasonable_size)
   3_todo_list → track_all_items
-  4_per_item: delegate → epupp-expert_subagent | instruct(summary ∧ problems ∧ learnings)
-  5_summarize → accomplished ∧ troubles ∧ next_steps
+  4_per_item: delegate → epupp-nucleus_subagent | instruct(summary ∧ problems ∧ learnings)
+  5_ground_truth: delegate → ground-truth-updater | after_quality_gates
+  6_summarize → accomplished ∧ troubles ∧ next_steps
 
 λ when_stuck.
   1_check_existing_tests → document_expected_behavior
@@ -235,6 +236,7 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
     epupp-elaborator    → user_prompt ∧ file_context ∧ task_context
     epupp-testrunner    → ¬attempt_fixes
     epupp-e2e-expert    → MANDATORY_for_all_e2e_work
+    ground-truth-updater → after_quality_gates ∨ periodic | change_summary
     Clojure-editor      → path ∧ lines ∧ forms ∧ instructions
     reasearch           → clear_questions
     commit              → summary_of_work

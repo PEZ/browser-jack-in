@@ -1,5 +1,5 @@
 ---
-description: 'Executes feature plans via TDD: failing test, implement, verify, refactor. Invoke when a plan exists and needs systematic execution with test gates.'
+description: 'DEPRECATED - use epupp-nucleus mode + implement.prompt.md instead. Kept for evaluation comparison only.'
 name: Implementer
 tools: ['execute/getTerminalOutput', 'execute/runInTerminal', 'read/problems', 'read/readFile', 'read/getTaskOutput', 'edit/createDirectory', 'edit/createFile', 'edit/editFiles', 'search', 'agent', 'betterthantomorrow.calva-backseat-driver/clojure-eval', 'betterthantomorrow.calva-backseat-driver/list-sessions', 'betterthantomorrow.calva-backseat-driver/clojure-symbol', 'betterthantomorrow.calva-backseat-driver/clojuredocs', 'betterthantomorrow.calva-backseat-driver/calva-output', 'betterthantomorrow.calva-backseat-driver/balance-brackets', 'betterthantomorrow.calva-backseat-driver/replace-top-level-form', 'betterthantomorrow.calva-backseat-driver/insert-top-level-form', 'betterthantomorrow.calva-backseat-driver/clojure-create-file', 'betterthantomorrow.calva-backseat-driver/append-code', 'betterthantomorrow.joyride/joyride-eval', 'betterthantomorrow.joyride/human-intelligence', 'todo']
 ---
