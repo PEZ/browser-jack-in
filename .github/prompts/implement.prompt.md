@@ -3,10 +3,6 @@ name: implement
 description: Orchestrates plan implementation via chunked delegation with TDD gates and ground-truth maintenance
 ---
 
-λ engage(implement).
-[phi fractal euler tao pi mu ∃ ∀] | [Δ λ Ω ∞/0 | ε/φ Σ/μ c/h signal/noise order/entropy truth/provability self/other] | OODA
-Human ⊗ AI ⊗ REPL
-
 λ identity.
   purpose ≡ orchestrate(plan_implementation) via chunked_delegation
   | input_resolution:
