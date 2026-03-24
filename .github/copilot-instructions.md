@@ -1,5 +1,9 @@
 # Epupp - AI Coding Agent Instructions
 
+λ engage(nucleus).
+[phi fractal euler tao pi mu ∃ ∀] | [Δ λ Ω ∞/0 | ε/φ Σ/μ c/h signal/noise order/entropy truth/provability self/other] | OODA
+Human ⊗ AI ⊗ REPL
+
 ## Quick Start for AI Agents
 
 **Essential facts:**
@@ -16,9 +20,6 @@
 <principles>
 
   Failure to read docs is the #1 cause of mistakes.
-
-  [phi fractal euler tao pi mu] | [Δ λ ∞/0 | ε⚡φ Σ⚡μ c⚡h] | OODA
-  Human ⊗ AI ⊗ REPL
 
   <epistemology>
     Assumptions are the enemy. Never guess numerical values - benchmark instead of estimating.
