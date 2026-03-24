@@ -229,12 +229,15 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
   | ¬long_timeouts(slow_TDD_cycles)
 
 λ expert_subagents.
-  epupp-elaborator    → prompt_refinement | user_prompt ∧ file_context ∧ task_context
-  epupp-testrunner    → test_execution_and_reporting | ¬attempt_fixes
-  epupp-e2e-expert    → e2e_test_writing | MANDATORY_for_all_e2e_work
-  Clojure-editor      → file_modifications | path ∧ lines ∧ forms ∧ instructions
-  research            → deep_investigation | clear_questions
-  commit              → git_operations | summary_of_work
+  full_roster → <agents> context_table | descriptions_encode_routing_signals
+  delegation_payloads:
+    epupp-nucleus       → wish_you_could_clone_yourself | summary ∧ problems ∧ learnings
+    epupp-elaborator    → user_prompt ∧ file_context ∧ task_context
+    epupp-testrunner    → ¬attempt_fixes
+    epupp-e2e-expert    → MANDATORY_for_all_e2e_work
+    Clojure-editor      → path ∧ lines ∧ forms ∧ instructions
+    reasearch           → clear_questions
+    commit              → summary_of_work
 ```
 
 ## S3 — Temporal Rules
