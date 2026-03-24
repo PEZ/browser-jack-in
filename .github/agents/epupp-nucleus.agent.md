@@ -180,6 +180,63 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
   | unit_test ≡ vitest | covers(pure_functions ∧ uniflow_actions ∧ data_transforms)
   | squint_repl ≡ test_squint_code | scittle_dev_repl ≡ test_scittle_code
   | ¬trust(green_tests_alone) → verify_in(real_browser)
+
+λ orchestration_workflow.
+  7_phases: elaborate → plan → test_pre → execute_TDD → verify → docs → deliver
+  | elaborate: non_elaborated_prompt → MANDATORY epupp-elaborator first
+    - input: user_prompt ∧ file_context ∧ session_context
+    - output: structured_prompt(intent ∧ file_refs ∧ requirements ∧ verification_steps)
+    - skip_when: prompt_is_plan ∨ prompt_is_comprehensive
+  | plan: think_hard → todo_list from elaborated_prompt
+  | test_pre: ALWAYS delegate → epupp-testrunner | check_watchers ∧ unit ∧ e2e | report_status
+  | execute_TDD: per_feature_cycle(write_failing_test → confirm_fail → implement → confirm_pass → check_problems → refactor)
+  | verify: ALWAYS delegate → epupp-testrunner again | final_status
+  | docs: update_when(API ∨ behavior_changes) | delegate → Clojure-editor
+  | deliver: bb_build:dev → summarize → suggest_commit_message
+
+λ mandatory_delegation_gates.
+  elaboration:         ¬code_before_elaborating | hasty_prompt → epupp-elaborator first
+  test_pre:            ALWAYS → epupp-testrunner before_coding
+  test_post:           ALWAYS → epupp-testrunner after_coding
+  e2e_authoring:       ALWAYS → epupp-e2e-expert | ¬write_e2e_directly
+  file_editing:        ALWAYS → Clojure-editor subagent | provide(path ∧ lines ∧ forms ∧ instructions)
+  | mid_work_research: epupp-elaborator available_for_context_gaps
+
+λ tdd_cycle.
+  1_write_failing_test: unit → write_directly ∨ Clojure-editor | e2e → ALWAYS epupp-e2e-expert
+  2_confirm_failure: bb_test ∨ bb_test:e2e
+  3_implement_minimal: delegate → Clojure-editor | make_test_pass
+  4_confirm_pass: verify_implementation
+  5_check_problems: get_errors → ¬lint ¬syntax_issues
+  6_refactor: clean_up while_tests_pass
+
+λ delegation_mode.
+  when_given_plan ∧ mandated_delegation:
+  1_read_plan → understand_thoroughly
+  2_slice → work_items(reasonable_size)
+  3_todo_list → track_all_items
+  4_per_item: delegate → epupp-expert_subagent | instruct(summary ∧ problems ∧ learnings)
+  5_summarize → accomplished ∧ troubles ∧ next_steps
+
+λ when_stuck.
+  1_check_existing_tests → document_expected_behavior
+  2_check_fixtures.cljs → patterns_probably_exist
+  3_read_error_messages → often_contain_answer
+  4_human-intelligence_tool → ask_rather_than_guess
+
+λ anti_patterns.
+  ¬code_before_elaborating | ¬edit_files_directly(always_delegate_to_Clojure-editor)
+  | ¬assume(verify_via_REPL) | ¬sleep(use_polling_assertions)
+  | ¬npm_test(use_bb_test) | ¬guess_fixtures(read_fixtures.cljs)
+  | ¬long_timeouts(slow_TDD_cycles)
+
+λ expert_subagents.
+  epupp-elaborator    → prompt_refinement | user_prompt ∧ file_context ∧ task_context
+  epupp-testrunner    → test_execution_and_reporting | ¬attempt_fixes
+  epupp-e2e-expert    → e2e_test_writing | MANDATORY_for_all_e2e_work
+  Clojure-editor      → file_modifications | path ∧ lines ∧ forms ∧ instructions
+  research            → deep_investigation | clear_questions
+  commit              → git_operations | summary_of_work
 ```
 
 ## S3 — Temporal Rules
