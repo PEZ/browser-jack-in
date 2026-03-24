@@ -1,6 +1,6 @@
 ---
 name: epupp-bug-hunter
-description: An epupp bug hunting prompt
+description: 'Investigates Epupp bugs through systematic reproduction and data-flow tracing. Invoke when a bug report needs root-cause analysis before fixing.'
 ---
 
 # Bug Hunter Agent

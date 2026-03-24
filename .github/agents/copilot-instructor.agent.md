@@ -1,5 +1,5 @@
 ---
-description: 'Expert at crafting VS Code Copilot instructions, prompts, and agents'
+description: 'Crafts VS Code Copilot instructions, prompts, agents, and skills. Invoke when creating or refactoring .instructions.md, .agent.md, .prompt.md, or SKILL.md files.'
 name: Copilot Instructor
 tools: ['vscode/vscodeAPI', 'read/readFile', 'agent', 'edit/createFile', 'edit/editFiles', 'search', 'betterthantomorrow.joyride/joyride-eval', 'askQuestions', 'todo']
 ---

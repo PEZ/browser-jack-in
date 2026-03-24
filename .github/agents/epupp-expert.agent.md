@@ -1,5 +1,5 @@
 ---
-description: 'Epupp expert: transforms hasty prompts into masterful implementations'
+description: 'Autonomous Epupp implementer with full context. Invoke as subagent for self-contained work items when nucleus is orchestrating a plan.'
 # name: Epupp Expert
 tools: [vscode/memory, vscode/askQuestions, execute/getTerminalOutput, execute/awaitTerminal, execute/killTerminal, execute/runInTerminal, read/terminalLastCommand, read/getTaskOutput, read/problems, read/readFile, agent, edit/createDirectory, edit/createFile, edit/editFiles, edit/rename, search, web, vscode.mermaid-chat-features/renderMermaidDiagram, betterthantomorrow.calva-backseat-driver/clojure-eval, betterthantomorrow.calva-backseat-driver/list-sessions, betterthantomorrow.calva-backseat-driver/clojure-symbol, betterthantomorrow.calva-backseat-driver/clojuredocs, betterthantomorrow.calva-backseat-driver/calva-output, betterthantomorrow.calva-backseat-driver/balance-brackets, betterthantomorrow.calva-backseat-driver/replace-top-level-form, betterthantomorrow.calva-backseat-driver/insert-top-level-form, betterthantomorrow.calva-backseat-driver/clojure-create-file, betterthantomorrow.calva-backseat-driver/append-code, betterthantomorrow.joyride/joyride-eval, betterthantomorrow.joyride/human-intelligence, todo]
 ---

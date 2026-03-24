@@ -1,5 +1,5 @@
 ---
-description: 'Commits changed files in logical groupings with good commit messages'
+description: 'Commits staged changes in logical groupings with descriptive messages. Invoke after work is verified and ready to commit.'
 model: GPT-5.2-Codex (copilot)
 # tools: ['run_in_terminal', 'get_changed_files', 'read_file', 'grep_search']
 ---

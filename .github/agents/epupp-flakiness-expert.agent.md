@@ -1,5 +1,5 @@
 ---
-description: 'Orchestrates systematic flaky test investigation and resolution'
+description: 'Investigates flaky E2E tests through multi-run analysis, timing patterns, and isolation. Invoke when tests pass inconsistently or fail without code changes.'
 tools: ['read/problems', 'read/readFile', 'read/getTaskOutput', 'agent', 'search', 'web', 'betterthantomorrow.calva-backseat-driver/clojure-eval', 'betterthantomorrow.calva-backseat-driver/list-sessions', 'betterthantomorrow.calva-backseat-driver/clojure-symbol', 'betterthantomorrow.calva-backseat-driver/clojuredocs', 'betterthantomorrow.calva-backseat-driver/calva-output', 'betterthantomorrow.joyride/joyride-eval', 'vscode/askQuestions', 'github.vscode-pull-request-github/issue_fetch', 'github.vscode-pull-request-github/doSearch', 'todo']
 name: epupp-flakiness-expert
 ---

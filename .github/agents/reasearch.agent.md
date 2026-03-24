@@ -1,5 +1,5 @@
 ---
-description: 'Researcher'
+description: 'Deep codebase and documentation research with structured findings. Invoke when implementation requires understanding unfamiliar code paths, APIs, or architectural patterns.'
 model: Auto (copilot)
 # tools: ['run_in_terminal', 'get_changed_files', 'read_file', 'grep_search']
 ---

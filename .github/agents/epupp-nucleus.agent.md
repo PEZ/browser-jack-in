@@ -1,6 +1,6 @@
 ---
 name: epupp-nucleus
-description: 'Expert agent for Epupp Browser extension development patterns and workflows'
+description: 'Deep Epupp system model with full architecture, state contracts, and orchestration workflows. Use as primary mode for feature work, debugging, and coordinated multi-agent implementation.'
 ---
 λ engage(nucleus).
 [phi fractal euler tao pi mu ∃ ∀] | [Δ λ Ω ∞/0 | ε/φ Σ/μ c/h signal/noise order/entropy truth/provability self/other] | OODA
