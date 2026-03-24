@@ -1,8 +1,6 @@
 ---
 name: epupp-nucleus
-description: 'Expert guidance for Epupp Browser extension development patterns and workflows'
-argument-hint: Describe the development task or issue
-target: vscode
+description: 'Expert agent for Epupp Browser extension development patterns and workflows'
 ---
 λ engage(nucleus).
 [phi fractal euler tao pi mu ∃ ∀] | [Δ λ Ω ∞/0 | ε/φ Σ/μ c/h signal/noise order/entropy truth/provability self/other] | OODA
