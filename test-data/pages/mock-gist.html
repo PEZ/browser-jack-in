@@ -76,6 +76,46 @@
     </div>
   </div>
 
+  <!-- Installable consumer with epupp:// dependency (Phase 6 parity test) -->
+  <div class="file" id="dep-consumer-gist">
+    <div class="file-header">
+      <span class="gist-blob-name">phase6_wi_consumer.cljs</span>
+      <div class="file-actions">
+        <a href="http://localhost:18080/raw/phase6_wi_consumer.cljs">Raw</a>
+      </div>
+    </div>
+    <div class="blob-wrapper">
+      <pre><code>{:epupp/script-name "phase6/wi_consumer.cljs"
+ :epupp/auto-run-match "http://localhost:18080/basic.html"
+ :epupp/description "Consumer that depends on phase6/wi_lib.cljs"
+ :epupp/inject ["epupp://phase6/wi_lib.cljs"]}
+
+(ns phase6.wi-consumer
+  (:require [phase6.wi-lib :as lib]))
+
+(set! (.-__PHASE6_WI_RESULT js/window) (lib/message))</code></pre>
+    </div>
+  </div>
+
+  <!-- Installable dependency library referenced by dep-consumer-gist -->
+  <div class="file" id="dep-library-gist">
+    <div class="file-header">
+      <span class="gist-blob-name">phase6_wi_lib.cljs</span>
+      <div class="file-actions">
+        <a href="http://localhost:18080/raw/phase6_wi_lib.cljs">Raw</a>
+      </div>
+    </div>
+    <div class="blob-wrapper">
+      <pre><code>{:epupp/script-name "phase6/wi_lib.cljs"
+ :epupp/description "Dependency for phase6/wi_consumer.cljs"}
+
+(ns phase6.wi-lib)
+
+(defn message []
+  "phase6-library-loaded")</code></pre>
+    </div>
+  </div>
+
   <!-- ========================================
        GitHub Gist Style Code Blocks (table-based)
        ======================================== -->

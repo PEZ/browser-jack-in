@@ -382,3 +382,75 @@
   [dispatch! tab-id installer-script]
   (js-await (ensure-scittle! dispatch! tab-id :disconnected))
   (js-await (execute-scripts! tab-id [installer-script])))
+
+;; ============================================================
+;; Plan-Based Execution (Phase 3)
+;; ============================================================
+
+(defn ^:async execute-plan!
+  "Execute a resolved dependency plan on a tab.
+   Processes steps in order: vendor files -> library scripts -> root scripts -> trigger.
+   The plan comes from dep-resolver/resolve-execution-plan.
+
+   Parameters:
+   - tab-id: Chrome tab to inject into
+   - plan: resolved execution plan with :plan/steps and :plan/vendor-namespaces"
+  [tab-id plan]
+  (let [steps (:plan/steps plan)
+        vendor-namespaces (:plan/vendor-namespaces plan)
+        vendor-steps (filterv #(= :vendor-file (:step/type %)) steps)
+        script-steps (filterv #(contains? #{:library-script :root-script} (:step/type %))
+                              steps)]
+    (js-await (test-logger/log-event! "EXECUTE_PLAN_START"
+                                      {:tab-id tab-id
+                                       :vendor-count (count vendor-steps)
+                                       :script-count (count script-steps)}))
+    (when (or (seq vendor-steps) (seq script-steps))
+      (try
+        ;; Inject content bridge and wait for readiness
+        (js-await (inject-content-script tab-id "content-bridge.js"))
+        (js-await (wait-for-bridge-ready tab-id))
+        ;; Clear any old userscript tags (prevents re-execution on bfcache navigation)
+        (js-await (send-tab-message tab-id {:type "clear-userscripts"}))
+        ;; Inject vendor files sequentially via bridge
+        (when (seq vendor-steps)
+          (let [vendor-files (mapv (fn [step]
+                                     ;; step/path is "vendor/file.js", strip prefix for inject fn
+                                     (let [path (:step/path step)]
+                                       (subs path 7)))
+                                   vendor-steps)]
+            (js-await (test-logger/log-event! "INJECTING_LIBS" {:files vendor-files}))
+            (js-await (inject-libs-sequentially! tab-id vendor-files))
+            (js-await (test-logger/log-event! "LIBS_INJECTED" {:count (count vendor-files)}))
+            ;; Verify vendor namespace availability
+            (when (seq vendor-namespaces)
+              (js-await (poll-until
+                         (fn [] (execute-in-page tab-id check-namespaces-fn vendor-namespaces))
+                         (fn [r] (and r (.-available r)))
+                         5000
+                         (str "Timeout waiting for library namespaces: "
+                              (.join (clj->js vendor-namespaces) ", "))))
+              (js-await (test-logger/log-event! "NAMESPACES_VERIFIED"
+                                                {:namespaces vendor-namespaces})))))
+        ;; Inject script tags sequentially to preserve dependency order in the DOM.
+        ;; Library scripts must appear before root scripts so that eval_script_tags
+        ;; evaluates them in the correct namespace-definition order.
+        (loop [remaining script-steps]
+          (when (seq remaining)
+            (let [step (first remaining)]
+              (js-await (send-tab-message tab-id {:type "inject-userscript"
+                                                  :id (str "userscript-" (:step/id step))
+                                                  :code (:step/code step)}))
+              (js-await (test-logger/log-event! "SCRIPT_INJECTED"
+                                                {:script-id (:step/id step)
+                                                 :script-name (:step/name step)
+                                                 :step-type (:step/type step)
+                                                 :tab-id tab-id}))
+              (recur (rest remaining)))))
+        ;; Trigger Scittle to evaluate all script tags
+        (js-await (execute-in-page tab-id trigger-scittle-fn))
+        (js-await (test-logger/log-event! "EXECUTE_PLAN_COMPLETE" {:tab-id tab-id}))
+        (catch :default err
+          (log/error "Background:Inject" "Plan execution error:" err)
+          (js-await (test-logger/log-event! "EXECUTE_PLAN_ERROR"
+                                            {:error (.-message err)})))))))

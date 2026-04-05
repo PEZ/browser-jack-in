@@ -2,7 +2,7 @@
   "E2E tests for basic web userscript installation flows."
   (:require ["@playwright/test" :refer [test expect]]
             ["./../fixtures.mjs" :refer [launch-browser get-extension-id create-popup-page
-                                          wait-for-popup-ready assert-no-errors!]]
+                                          wait-for-popup-ready wait-for-event assert-no-errors!]]
             ["./helpers.mjs" :as h]))
 
 (defn- ^:async test_shows_button_and_installs []
@@ -75,10 +75,87 @@
       (finally
         (js-await (.close context))))))
 
+(defn- ^:async test_epupp_dependency_preview_and_runtime_resolution []
+  (let [context (js-await (launch-browser))
+        ext-id (js-await (get-extension-id context))]
+    (try
+      ;; Setup installer
+      (let [popup (js-await (h/setup-installer!+ context ext-id))]
+        (js-await (.close popup)))
+
+      ;; Install consumer first and verify dependency preview in modal
+      (let [page (js-await (h/navigate-to-mock-gist context))
+            consumer-container "#dep-consumer-gist"]
+        (js-await (h/wait-for-install-button page consumer-container "install" 2000))
+        (js-await (.click (h/get-install-button page consumer-container "install")))
+
+        (js-await (-> (expect (.locator page ".epupp-modal__table"))
+                      (.toContainText "Dependencies" #js {:timeout 1000})))
+        (js-await (-> (expect (.locator page ".epupp-modal__table"))
+                      (.toContainText "epupp://phase6/wi_lib.cljs" #js {:timeout 1000})))
+        ;; Verify epupp:// dep display enhancements
+        (js-await (-> (expect (.locator page ".epupp-modal__table"))
+                      (.toContainText "(user library)" #js {:timeout 1000})))
+        (js-await (-> (expect (.locator page "[data-e2e-epupp-deps-note]"))
+                      (.toContainText "installed separately" #js {:timeout 1000})))
+
+        (js-await (.click (.locator page "#epupp-confirm")))
+        (js-await (h/wait-for-install-button page consumer-container "installed" 2000))
+
+        ;; Navigate to consumer target page: missing library should surface resolution error
+        (js-await (.goto page "http://localhost:18080/basic.html" #js {:timeout 5000}))
+        (js-await (-> (expect (.locator page "#test-marker"))
+                      (.toContainText "ready")))
+
+        (let [popup (js-await (create-popup-page context ext-id))
+              error-event (js-await (wait-for-event popup "RESOLUTION_ERROR" 10000))]
+          (js-await (-> (expect (.-event error-event)) (.toBe "RESOLUTION_ERROR")))
+          (js-await (-> (expect (.. error-event -data -message))
+                        (.toContain "phase6/wi_lib.cljs")))
+          (js-await (.close popup)))
+
+        ;; Install the missing library from web installer
+        (js-await (.goto page "http://localhost:18080/mock-gist.html" #js {:timeout 5000}))
+        (js-await (-> (expect (.locator page "#test-marker"))
+                      (.toContainText "ready")))
+        (js-await (h/wait-for-install-button page "#dep-library-gist" "install" 2000))
+        (js-await (h/click-install-and-confirm!+ page "#dep-library-gist" "installed"))
+
+        ;; Next navigation should succeed for the already-installed consumer
+        (js-await (.goto page "http://localhost:18080/basic.html" #js {:timeout 5000}))
+        (js-await (-> (expect (.locator page "#test-marker"))
+                      (.toContainText "ready")))
+
+        (let [popup (js-await (create-popup-page context ext-id))]
+          (js-await (wait-for-event popup "EXECUTE_PLAN_COMPLETE" 10000))
+
+          ;; Poll for consumer side effect to verify runtime resolution now succeeds
+          (let [start (.now js/Date)]
+            (loop []
+              (let [result (js-await (.evaluate page (fn [] js/window.__PHASE6_WI_RESULT)))]
+                (if (= result "phase6-library-loaded")
+                  (js-await (-> (expect result) (.toBe "phase6-library-loaded")))
+                  (do
+                    (when (> (- (.now js/Date) start) 5000)
+                      (throw (js/Error. "Timeout waiting for __PHASE6_WI_RESULT")))
+                    (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 50))))
+                    (recur))))))
+
+          (js-await (assert-no-errors! popup))
+          (js-await (.close popup)))
+
+        (js-await (.close page)))
+
+      (finally
+        (js-await (.close context))))))
+
 (.describe test "Web Installer: installation"
            (fn []
              (test "Web Installer: shows Install button and installs script"
                    test_shows_button_and_installs)
 
              (test "Web Installer: installs manual-only script"
-                   test_manual_only_script)))
+                   test_manual_only_script)
+
+             (test "Web Installer: previews epupp:// dependencies and resolves after installing library"
+                   test_epupp_dependency_preview_and_runtime_resolution)))

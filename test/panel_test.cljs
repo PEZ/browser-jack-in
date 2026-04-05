@@ -1006,3 +1006,105 @@
             (test "bulk final tracks then clears names" test-handle-system-banner-bulk-tracks-and-clears)
             (test "bulk final dispatches log effect with names" test-handle-system-banner-bulk-final-log-effect)
             (test "does not reload for different script" test-handle-system-banner-no-affects-different-script)))
+
+;; ============================================================
+;; Panel eval inject threading baseline tests (Phase 0)
+;; ============================================================
+
+(defn- test-panel-eval-loaded-passes-inject-to-eval-effect []
+  (let [state (assoc initial-state
+                     :panel/code "(+ 1 2)"
+                     :panel/scittle-status :loaded
+                     :panel/manifest-hints {:inject ["scittle://reagent.js" "epupp://utils.cljs"]})
+        result (panel-actions/handle-action state uf-data [:editor/ax.eval])
+        fxs (:uf/fxs result)
+        eval-effect (first fxs)]
+    ;; Effect should be eval-in-page with code and inject libs
+    (-> (expect (first eval-effect)) (.toBe :editor/fx.eval-in-page))
+    (-> (expect (second eval-effect)) (.toBe "(+ 1 2)"))
+    (-> (expect (nth eval-effect 2))
+        (.toEqual ["scittle://reagent.js" "epupp://utils.cljs"]))))
+
+(defn- test-panel-eval-not-loaded-passes-inject-to-inject-and-eval-effect []
+  (let [state (assoc initial-state
+                     :panel/code "(+ 1 2)"
+                     :panel/scittle-status :unknown
+                     :panel/manifest-hints {:inject ["scittle://pprint.js"]})
+        result (panel-actions/handle-action state uf-data [:editor/ax.eval])
+        fxs (:uf/fxs result)
+        eval-effect (first fxs)]
+    ;; Should inject-and-eval when scittle not loaded
+    (-> (expect (first eval-effect)) (.toBe :editor/fx.inject-and-eval))
+    (-> (expect (second eval-effect)) (.toBe "(+ 1 2)"))
+    (-> (expect (nth eval-effect 2))
+        (.toEqual ["scittle://pprint.js"]))))
+
+(defn- test-panel-eval-nil-inject-passes-nil []
+  (let [state (assoc initial-state
+                     :panel/code "(+ 1 2)"
+                     :panel/scittle-status :loaded
+                     :panel/manifest-hints {})
+        result (panel-actions/handle-action state uf-data [:editor/ax.eval])
+        fxs (:uf/fxs result)
+        eval-effect (first fxs)]
+    (-> (expect (first eval-effect)) (.toBe :editor/fx.eval-in-page))
+    ;; nil inject when no manifest hints
+    (-> (expect (nth eval-effect 2)) (.toBeFalsy))))
+
+(describe "Panel eval inject threading"
+          (fn []
+            (test "scittle loaded passes inject to eval-in-page" test-panel-eval-loaded-passes-inject-to-eval-effect)
+            (test "scittle not loaded passes inject to inject-and-eval" test-panel-eval-not-loaded-passes-inject-to-inject-and-eval-effect)
+            (test "nil inject when no manifest hints" test-panel-eval-nil-inject-passes-nil)))
+
+;; ============================================================
+;; Panel manifest epupp:// URL handling
+;; ============================================================
+
+(defn- test-set-code-with-epupp-inject-extracts-hints []
+  (let [code "{:epupp/script-name \"my_script.cljs\"\n :epupp/inject [\"scittle://replicant.js\" \"epupp://utils.cljs\"]}\n\n(ns my-script)"
+        result (panel-actions/handle-action initial-state uf-data [:editor/ax.set-code code])
+        hints (:panel/manifest-hints (:uf/db result))]
+    ;; Hints should contain inject list including epupp:// URL
+    (-> (expect (:inject hints))
+        (.toEqual ["scittle://replicant.js" "epupp://utils.cljs"]))))
+
+(defn- test-set-code-epupp-only-inject []
+  (let [code "{:epupp/script-name \"consumer.cljs\"\n :epupp/inject [\"epupp://my_lib.cljs\"]}\n\n(ns consumer)"
+        result (panel-actions/handle-action initial-state uf-data [:editor/ax.set-code code])
+        hints (:panel/manifest-hints (:uf/db result))]
+    (-> (expect (:inject hints))
+        (.toEqual ["epupp://my_lib.cljs"]))))
+
+(describe "Panel manifest epupp:// handling"
+          (fn []
+            (test "set-code extracts mixed scittle:// and epupp:// into manifest hints"
+                  test-set-code-with-epupp-inject-extracts-hints)
+            (test "set-code handles epupp://-only inject list"
+                  test-set-code-epupp-only-inject)))
+
+;; ============================================================
+;; Panel Runtime Status Tests
+;; ============================================================
+
+(defn- test-panel-handle-runtime-status-stores-errors []
+  (let [state (assoc initial-state :runtime/errors {})
+        result (panel-actions/handle-action state uf-data
+                 [:panel/ax.handle-runtime-status
+                  {:errors {"my/script.cljs" {:error/message "Library not found"}}}])]
+    (-> (expect (count (:runtime/errors (:uf/db result)))) (.toBe 1))
+    (-> (expect (get-in (:uf/db result) [:runtime/errors "my/script.cljs" :error/message]))
+        (.toBe "Library not found"))))
+
+(defn- test-panel-handle-runtime-status-clears-on-empty []
+  (let [state (assoc initial-state :runtime/errors {"old.cljs" {:error/message "old"}})
+        result (panel-actions/handle-action state uf-data
+                 [:panel/ax.handle-runtime-status {:errors {}}])]
+    (-> (expect (count (:runtime/errors (:uf/db result)))) (.toBe 0))))
+
+(describe "Panel runtime status"
+          (fn []
+            (test "handle-runtime-status stores errors in state"
+                  test-panel-handle-runtime-status-stores-errors)
+            (test "handle-runtime-status clears on empty errors"
+                  test-panel-handle-runtime-status-clears-on-empty)))

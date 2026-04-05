@@ -263,7 +263,7 @@ The manifest is a plain Clojure map at the top of the file. Your code runs in th
 | `:epupp/auto-run-match` | No | - | URL glob pattern(s). String or vector of strings. Omit for manual-only scripts. |
 | `:epupp/description` | No | - | Shown in the popup UI. |
 | `:epupp/run-at` | No | `"document-idle"` | When to run: `"document-start"`, `"document-end"`, or `"document-idle"`. |
-| `:epupp/inject` | No | `[]` | Scittle library URLs to load before the script runs. |
+| `:epupp/inject` | No | `[]` | Scittle library URLs (`scittle://`) and/or user library references (`epupp://`) to load before the script runs. |
 
 Scripts with `:epupp/auto-run-match` start disabled. Enable them in the popup for auto-injection on matching pages. Scripts without this key only run when you click the Play button in the popup.
 
@@ -344,11 +344,43 @@ Userscripts can load bundled Scittle ecosystem libraries via `:epupp/inject`:
 
 Dependencies resolve automatically: `scittle://re-frame.js` loads Reagent and React.
 
-> [!NOTE]
-> **No Script Modularity**
->
-> Epupp userscripts are currently self-contained. You cannot split code across multiple scripts or create shared library modules of your own. This may change in the future.
+### Library Namespaces
 
+Any userscript can serve as a shared library. Reference it from another script's `:epupp/inject` using the `epupp://` protocol:
+
+**Library script** (`utils/dom.cljs`):
+```clojure
+{:epupp/script-name "utils/dom.cljs"
+ :epupp/description "DOM utility functions"}
+
+(ns utils.dom)
+
+(defn hide! [selector]
+  (when-let [el (js/document.querySelector selector)]
+    (set! (.. el -style -display) "none")))
+```
+
+**Consumer script** (`my/tweaks.cljs`):
+```clojure
+{:epupp/script-name "my/tweaks.cljs"
+ :epupp/auto-run-match "https://example.com/*"
+ :epupp/inject ["scittle://replicant.js" "epupp://utils/dom.cljs"]}
+
+(ns my.tweaks
+  (:require [utils.dom :as dom]
+            [replicant.dom :as r]))
+
+(dom/hide! "#annoying-banner")
+```
+
+Epupp resolves dependencies transitively: if your library itself has `epupp://` or `scittle://` dependencies, those are resolved too. Cycles are detected and reported.
+
+Library-ness is emergent - there is no special flag. Any script becomes a library when another script references it. Disabled scripts and built-in scripts are valid library targets.
+
+If a library is missing, Epupp shows errors in the console, a system banner, and a warning indicator (⚠) next to the affected script in the popup and panel.
+
+> [!NOTE]
+> When a script both auto-runs and is used as a library by another auto-run script on the same page, it may execute twice (once as a library injection, once as its own auto-run). This is a known v1 limitation.
 
 From a live REPL session, you can load libraries at runtime with `epupp.repl/manifest!`:
 
@@ -356,6 +388,14 @@ From a live REPL session, you can load libraries at runtime with `epupp.repl/man
 (epupp.repl/manifest! {:epupp/inject ["scittle://pprint.js"]})
 (require '[cljs.pprint :as pprint])
 (pprint/pprint {:some "data"})
+```
+
+Works with `epupp://` libraries too:
+
+```clojure
+(epupp.repl/manifest! {:epupp/inject ["epupp://utils/dom.cljs"]})
+(require '[utils.dom :as dom])
+(dom/hide! "#sidebar")
 ```
 
 Safe to call multiple times - already-loaded libraries are skipped.

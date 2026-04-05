@@ -11,6 +11,20 @@ if (typeof globalThis.window === 'undefined') {
   };
 }
 
+// Stub 'document' if not defined (needed by content scripts like userscript-loader)
+if (typeof globalThis.document === 'undefined') {
+  globalThis.document = {
+    readyState: 'loading',
+    head: null,
+    documentElement: { appendChild: () => {} },
+    createElement: () => ({
+      dataset: {},
+      style: {},
+      appendChild: () => {},
+    }),
+  };
+}
+
 // Stub 'chrome' extension API
 if (typeof globalThis.chrome === 'undefined') {
   globalThis.chrome = {

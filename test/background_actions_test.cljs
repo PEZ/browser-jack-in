@@ -1201,3 +1201,353 @@
                   test-explicit-disconnect-does-not-modify-state)
             (test "forgets history to prevent reconnect-on-nav"
                   test-explicit-disconnect-forgets-history)))
+
+;; ============================================================
+;; load-manifest and inject-libs baseline tests (Phase 0)
+;; ============================================================
+
+(defn- test-load-manifest-with-scittle-libs-produces-inject-effects []
+  (let [manifest #js {"inject" #js ["scittle://reagent.js"]}
+        send-response :mock-send-response
+        result (bg-actions/handle-action initial-state uf-data
+                 [:msg/ax.load-manifest send-response 42 manifest])
+        fxs (:uf/fxs result)
+        lib-effects (filter #(= :msg/fx.inject-lib-file (second %)) fxs)
+        response-effect (last fxs)]
+    ;; Should inject react + react-dom + reagent (3 files)
+    (-> (expect (count lib-effects)) (.toBe 3))
+    ;; Last effect should send success response
+    (-> (expect (first response-effect)) (.toBe :uf/await))
+    (-> (expect (second response-effect)) (.toBe :msg/fx.send-response))))
+
+(defn- test-load-manifest-without-libs-sends-success-immediately []
+  (let [manifest #js {"inject" #js []}
+        send-response :mock-send-response
+        result (bg-actions/handle-action initial-state uf-data
+                 [:msg/ax.load-manifest send-response 42 manifest])
+        fxs (:uf/fxs result)]
+    ;; Single effect: send response
+    (-> (expect (count fxs)) (.toBe 1))
+    (-> (expect (first (first fxs))) (.toBe :msg/fx.send-response))))
+
+(defn- test-load-manifest-nil-manifest-sends-success []
+  (let [send-response :mock-send-response
+        result (bg-actions/handle-action initial-state uf-data
+                 [:msg/ax.load-manifest send-response 42 nil])
+        fxs (:uf/fxs result)]
+    (-> (expect (count fxs)) (.toBe 1))
+    (-> (expect (first (first fxs))) (.toBe :msg/fx.send-response))))
+
+(defn- test-load-manifest-non-scittle-libs-ignored []
+  (let [manifest #js {"inject" #js ["epupp://my_lib.cljs" "https://cdn.example.com/lib.js"]}
+        send-response :mock-send-response
+        result (bg-actions/handle-action initial-state uf-data
+                 [:msg/ax.load-manifest send-response 42 manifest])
+        fxs (:uf/fxs result)]
+    ;; Non-scittle URLs produce no vendor files to inject
+    (-> (expect (count fxs)) (.toBe 1))
+    (-> (expect (first (first fxs))) (.toBe :msg/fx.send-response))))
+
+(defn- test-inject-libs-produces-bridge-and-inject-effects []
+  (let [send-response :mock-send-response
+        result (bg-actions/handle-action initial-state uf-data
+                 [:msg/ax.inject-libs send-response 42 ["scittle://pprint.js"]])
+        fxs (:uf/fxs result)
+        bridge-effect (first fxs)
+        wait-effect (second fxs)
+        lib-effects (filter #(= :msg/fx.inject-lib-file (second %)) fxs)]
+    ;; First two effects: inject bridge, wait for bridge ready
+    (-> (expect (second bridge-effect)) (.toBe :msg/fx.inject-bridge))
+    (-> (expect (second wait-effect)) (.toBe :msg/fx.wait-bridge-ready))
+    ;; One lib file for pprint
+    (-> (expect (count lib-effects)) (.toBe 1))))
+
+(defn- test-inject-libs-empty-libs-sends-success-only []
+  (let [send-response :mock-send-response
+        result (bg-actions/handle-action initial-state uf-data
+                 [:msg/ax.inject-libs send-response 42 []])
+        fxs (:uf/fxs result)]
+    (-> (expect (count fxs)) (.toBe 1))
+    (-> (expect (first (first fxs))) (.toBe :msg/fx.send-response))))
+
+(defn- test-inject-libs-non-scittle-skipped []
+  (let [send-response :mock-send-response
+        result (bg-actions/handle-action initial-state uf-data
+                 [:msg/ax.inject-libs send-response 42 ["epupp://utils.cljs"]])
+        fxs (:uf/fxs result)]
+    ;; epupp:// is not a scittle URL, so no vendor files to inject
+    (-> (expect (count fxs)) (.toBe 1))
+    (-> (expect (first (first fxs))) (.toBe :msg/fx.send-response))))
+
+(describe "load-manifest message action"
+          (fn []
+            (test "with scittle libs produces inject file effects" test-load-manifest-with-scittle-libs-produces-inject-effects)
+            (test "without libs sends success immediately" test-load-manifest-without-libs-sends-success-immediately)
+            (test "nil manifest sends success" test-load-manifest-nil-manifest-sends-success)
+            (test "non-scittle libs are ignored (no vendor files)" test-load-manifest-non-scittle-libs-ignored)))
+
+(describe "inject-libs message action"
+          (fn []
+            (test "produces bridge + inject effects for scittle libs" test-inject-libs-produces-bridge-and-inject-effects)
+            (test "empty libs sends success only" test-inject-libs-empty-libs-sends-success-only)
+            (test "non-scittle URLs produce no vendor files" test-inject-libs-non-scittle-skipped)))
+
+;; ============================================================
+;; Resolver integration fixtures
+;; ============================================================
+
+(def library-script-with-vendor
+  {:script/id "lib-utils"
+   :script/name "utils.cljs"
+   :script/code "(ns utils)\n(def hello 42)"
+   :script/match []
+   :script/enabled true
+   :script/inject ["scittle://pprint.js"]})
+
+(def library-script-plain
+  {:script/id "lib-helpers"
+   :script/name "helpers.cljs"
+   :script/code "(ns helpers)\n(def help true)"
+   :script/match []
+   :script/enabled true
+   :script/inject []})
+
+(def library-script-transitive
+  {:script/id "lib-transitive"
+   :script/name "advanced.cljs"
+   :script/code "(ns advanced (:require [helpers]))\n(def adv true)"
+   :script/match []
+   :script/enabled true
+   :script/inject ["epupp://helpers.cljs"]})
+
+;; ============================================================
+;; inject-libs resolver integration tests
+;; ============================================================
+
+(defn- test-inject-libs-resolves-epupp-library-script []
+  (let [all-scripts [library-script-plain]
+        result (bg-actions/handle-action initial-state uf-data
+                 [:msg/ax.inject-libs :mock-send 42 ["epupp://helpers.cljs"] all-scripts])
+        fxs (:uf/fxs result)
+        script-fxs (filter #(= :msg/fx.inject-script-code (second %)) fxs)]
+    ;; Bridge + wait effects first
+    (-> (expect (second (first fxs))) (.toBe :msg/fx.inject-bridge))
+    (-> (expect (second (second fxs))) (.toBe :msg/fx.wait-bridge-ready))
+    ;; Library script code injected
+    (-> (expect (count script-fxs)) (.toBe 1))
+    ;; No errors
+    (-> (expect (:uf/dxs result)) (.toBeFalsy))))
+
+(defn- test-inject-libs-resolves-epupp-with-vendor-deps []
+  (let [all-scripts [library-script-with-vendor]
+        result (bg-actions/handle-action initial-state uf-data
+                 [:msg/ax.inject-libs :mock-send 42 ["epupp://utils.cljs"] all-scripts])
+        fxs (:uf/fxs result)
+        vendor-fxs (filter #(= :msg/fx.inject-lib-file (second %)) fxs)
+        script-fxs (filter #(= :msg/fx.inject-script-code (second %)) fxs)]
+    ;; Bridge effects
+    (-> (expect (second (first fxs))) (.toBe :msg/fx.inject-bridge))
+    ;; Vendor file from library's scittle:// deps
+    (-> (expect (count vendor-fxs)) (.toBeGreaterThanOrEqual 1))
+    ;; Library script code
+    (-> (expect (count script-fxs)) (.toBe 1))
+    ;; No errors
+    (-> (expect (:uf/dxs result)) (.toBeFalsy))))
+
+(defn- test-inject-libs-epupp-missing-library-produces-errors []
+  (let [result (bg-actions/handle-action initial-state uf-data
+                 [:msg/ax.inject-libs :mock-send 42 ["epupp://nonexistent.cljs"] []])
+        dxs (:uf/dxs result)]
+    ;; Should produce error dispatches for missing library
+    (-> (expect (seq dxs)) (.toBeTruthy))
+    ;; First dxs should be broadcast-resolution-errors
+    (-> (expect (first (first dxs))) (.toBe :banner/ax.broadcast-resolution-errors))))
+
+(defn- test-inject-libs-mixed-scittle-and-epupp []
+  (let [all-scripts [library-script-plain]
+        result (bg-actions/handle-action initial-state uf-data
+                 [:msg/ax.inject-libs :mock-send 42
+                  ["scittle://pprint.js" "epupp://helpers.cljs"] all-scripts])
+        fxs (:uf/fxs result)
+        vendor-fxs (filter #(= :msg/fx.inject-lib-file (second %)) fxs)
+        script-fxs (filter #(= :msg/fx.inject-script-code (second %)) fxs)]
+    ;; Both vendor files AND library script injection
+    (-> (expect (count vendor-fxs)) (.toBeGreaterThanOrEqual 1))
+    (-> (expect (count script-fxs)) (.toBe 1))
+    ;; No errors
+    (-> (expect (:uf/dxs result)) (.toBeFalsy))))
+
+(describe "inject-libs resolver integration"
+          (fn []
+            (test "resolves epupp:// library script"
+                  test-inject-libs-resolves-epupp-library-script)
+            (test "resolves epupp:// library with vendor deps"
+                  test-inject-libs-resolves-epupp-with-vendor-deps)
+            (test "missing epupp:// library produces error dispatches"
+                  test-inject-libs-epupp-missing-library-produces-errors)
+            (test "mixed scittle:// and epupp:// produces both effects"
+                  test-inject-libs-mixed-scittle-and-epupp)))
+
+;; ============================================================
+;; load-manifest resolver integration tests
+;; ============================================================
+
+(defn- test-load-manifest-resolves-epupp-library []
+  (let [manifest #js {"inject" #js ["epupp://helpers.cljs"]}
+        all-scripts [library-script-plain]
+        result (bg-actions/handle-action initial-state uf-data
+                 [:msg/ax.load-manifest :mock-send 42 manifest all-scripts])
+        fxs (:uf/fxs result)
+        script-fxs (filter #(= :msg/fx.inject-script-code (second %)) fxs)]
+    ;; Library script code injected
+    (-> (expect (count script-fxs)) (.toBe 1))
+    ;; Last effect is send-response
+    (-> (expect (second (last fxs))) (.toBe :msg/fx.send-response))
+    ;; No errors
+    (-> (expect (:uf/dxs result)) (.toBeFalsy))))
+
+(defn- test-load-manifest-epupp-missing-library-produces-errors []
+  (let [manifest #js {"inject" #js ["epupp://missing.cljs"]}
+        result (bg-actions/handle-action initial-state uf-data
+                 [:msg/ax.load-manifest :mock-send 42 manifest []])
+        dxs (:uf/dxs result)]
+    ;; Should produce error dispatches
+    (-> (expect (seq dxs)) (.toBeTruthy))
+    (-> (expect (first (first dxs))) (.toBe :banner/ax.broadcast-resolution-errors))))
+
+(defn- test-load-manifest-transitive-epupp-deps []
+  (let [manifest #js {"inject" #js ["epupp://advanced.cljs"]}
+        all-scripts [library-script-plain library-script-transitive]
+        result (bg-actions/handle-action initial-state uf-data
+                 [:msg/ax.load-manifest :mock-send 42 manifest all-scripts])
+        fxs (:uf/fxs result)
+        script-fxs (filter #(= :msg/fx.inject-script-code (second %)) fxs)]
+    ;; Both helpers.cljs AND advanced.cljs injected (transitive resolution)
+    (-> (expect (count script-fxs)) (.toBe 2))
+    ;; No errors
+    (-> (expect (:uf/dxs result)) (.toBeFalsy))))
+
+(describe "load-manifest resolver integration"
+          (fn []
+            (test "resolves epupp:// library from all-scripts"
+                  test-load-manifest-resolves-epupp-library)
+            (test "missing epupp:// library produces error dispatches"
+                  test-load-manifest-epupp-missing-library-produces-errors)
+            (test "resolves transitive epupp:// dependencies"
+                  test-load-manifest-transitive-epupp-deps)))
+
+;; ============================================================
+;; Runtime Error Actions Tests
+;; ============================================================
+
+(def runtime-state
+  (assoc initial-state :runtime/errors {}))
+
+(def sample-errors
+  [{:error/type "library/not-found"
+    :error/phase "resolve"
+    :error/script-name "my/tweaks.cljs"
+    :error/dep-raw "epupp://missing.js"
+    :error/message "Library not found: missing.js"}
+   {:error/type "library/not-found"
+    :error/phase "resolve"
+    :error/script-name "my/other.cljs"
+    :error/dep-raw "epupp://gone.js"
+    :error/message "Library not found: gone.js"}])
+
+(defn- test-set-tab-errors-stores-errors-by-script-name []
+  (let [result (bg-actions/handle-action runtime-state uf-data
+                 [:runtime/ax.set-tab-errors 42 sample-errors])
+        new-state (:uf/db result)
+        tab-errors (get-in new-state [:runtime/errors 42])]
+    (-> (expect (count tab-errors)) (.toBe 2))
+    (-> (expect (get-in tab-errors ["my/tweaks.cljs" :error/dep-raw])) (.toBe "epupp://missing.js"))
+    (-> (expect (get-in tab-errors ["my/other.cljs" :error/dep-raw])) (.toBe "epupp://gone.js"))))
+
+(defn- test-set-tab-errors-broadcasts-status []
+  (let [result (bg-actions/handle-action runtime-state uf-data
+                 [:runtime/ax.set-tab-errors 42 sample-errors])
+        [fx-name fx-tab-id fx-errors] (first (:uf/fxs result))]
+    (-> (expect fx-name) (.toBe :runtime/fx.broadcast-tab-status))
+    (-> (expect fx-tab-id) (.toBe 42))
+    (-> (expect (count fx-errors)) (.toBe 2))))
+
+(defn- test-set-tab-errors-replaces-previous-errors []
+  (let [state-with-errors (assoc-in runtime-state [:runtime/errors 42]
+                                    {"old.cljs" {:error/message "old error"}})
+        result (bg-actions/handle-action state-with-errors uf-data
+                 [:runtime/ax.set-tab-errors 42 [(first sample-errors)]])
+        tab-errors (get-in (:uf/db result) [:runtime/errors 42])]
+    ;; Old error should be gone, only new one present
+    (-> (expect (get tab-errors "old.cljs")) (.toBeUndefined))
+    (-> (expect (get-in tab-errors ["my/tweaks.cljs" :error/message])) (.toBe "Library not found: missing.js"))))
+
+(defn- test-set-tab-errors-empty-clears-tab []
+  (let [state-with-errors (assoc-in runtime-state [:runtime/errors 42]
+                                    {"my/tweaks.cljs" {:error/message "err"}})
+        result (bg-actions/handle-action state-with-errors uf-data
+                 [:runtime/ax.set-tab-errors 42 []])
+        tab-errors (get-in (:uf/db result) [:runtime/errors 42])]
+    (-> (expect (count tab-errors)) (.toBe 0))))
+
+(defn- test-get-tab-errors-returns-errors-for-tab []
+  (let [state (assoc-in runtime-state [:runtime/errors 42]
+                        {"my/tweaks.cljs" {:error/message "err"}})
+        mock-response (fn [])
+        result (bg-actions/handle-action state uf-data
+                 [:runtime/ax.get-tab-errors mock-response 42])
+        [fx-name fx-response response-data] (first (:uf/fxs result))]
+    (-> (expect fx-name) (.toBe :msg/fx.send-response))
+    (-> (expect fx-response) (.toBe mock-response))
+    (-> (expect (:success response-data)) (.toBe true))
+    (-> (expect (count (:errors response-data))) (.toBe 1))))
+
+(defn- test-get-tab-errors-returns-empty-for-unknown-tab []
+  (let [mock-response (fn [])
+        result (bg-actions/handle-action runtime-state uf-data
+                 [:runtime/ax.get-tab-errors mock-response 99])
+        [_fx-name _fx-response response-data] (first (:uf/fxs result))]
+    (-> (expect (:success response-data)) (.toBe true))
+    (-> (expect (count (:errors response-data))) (.toBe 0))))
+
+(defn- test-nav-handle-navigation-clears-tab-errors []
+  (let [state (-> runtime-state
+                  (assoc-in [:runtime/errors 42] {"script.cljs" {:error/message "err"}})
+                  (assoc :connected-tabs/history {}))
+        result (bg-actions/handle-action state uf-data
+                 [:nav/ax.handle-navigation 42 "https://example.com"])
+        new-state (:uf/db result)]
+    ;; Tab 42 errors should be cleared
+    (-> (expect (get (:runtime/errors new-state) 42)) (.toBeUndefined))
+    ;; Should broadcast empty status
+    (let [broadcast-fx (some #(when (= :runtime/fx.broadcast-tab-status (first %)) %) (:uf/fxs result))]
+      (-> (expect broadcast-fx) (.toBeTruthy))
+      (-> (expect (nth broadcast-fx 2)) (.toEqual {})))))
+
+(defn- test-tab-handle-removed-clears-tab-errors []
+  (let [state (-> runtime-state
+                  (assoc-in [:runtime/errors 42] {"script.cljs" {:error/message "err"}})
+                  (assoc :ws/connections {}))
+        result (bg-actions/handle-action state uf-data
+                 [:tab/ax.handle-removed 42])
+        new-state (:uf/db result)]
+    (-> (expect (get (:runtime/errors new-state) 42)) (.toBeUndefined))))
+
+(describe "runtime error actions"
+          (fn []
+            (test "set-tab-errors stores errors keyed by script name"
+                  test-set-tab-errors-stores-errors-by-script-name)
+            (test "set-tab-errors broadcasts runtime status"
+                  test-set-tab-errors-broadcasts-status)
+            (test "set-tab-errors replaces previous errors"
+                  test-set-tab-errors-replaces-previous-errors)
+            (test "set-tab-errors with empty list clears tab"
+                  test-set-tab-errors-empty-clears-tab)
+            (test "get-tab-errors returns errors for known tab"
+                  test-get-tab-errors-returns-errors-for-tab)
+            (test "get-tab-errors returns empty for unknown tab"
+                  test-get-tab-errors-returns-empty-for-unknown-tab)
+            (test "navigation clears tab runtime errors"
+                  test-nav-handle-navigation-clears-tab-errors)
+            (test "tab removed clears tab runtime errors"
+                  test-tab-handle-removed-clears-tab-errors)))

@@ -25,14 +25,14 @@ flowchart TB
             Reg["Registration<br/>- Early script registration"]
             Popup["Popup<br/>- REPL connect<br/>- Script list"]
             Panel["DevTools Panel<br/>- Code eval<br/>- Save script"]
-
-            Popup -->|"chrome.runtime"| BG
-            Panel -->|"chrome.runtime"| BG
+        DepRes["Dep Resolver<br/>- Topological ordering<br/>- Cycle detection"]
         end
 
         CB["Content Bridge (ISOLATED)<br/>- Relay messages<br/>- Inject scripts<br/>- Keepalive pings"]
         Loader["Userscript Loader (ISOLATED)<br/>- Early injection"]
         BG -->|"chrome.tabs.sendMessage"| CB
+        BG -->|"resolve deps"| DepRes
+        Loader -->|"resolve deps"| DepRes
         Reg -->|"registerContentScripts"| Loader
         Panel -.->|"inspectedWindow.eval"| Page
 
@@ -68,6 +68,7 @@ flowchart TB
 | State atoms + action/effect tables | [architecture/state-management.md](architecture/state-management.md) |
 | Uniflow event system | [architecture/uniflow.md](architecture/uniflow.md) |
 | REPL/userscripts/panel injection flows | [architecture/injection-flows.md](architecture/injection-flows.md) |
+| Library namespaces + dependency resolution | [architecture/library-namespaces.md](architecture/library-namespaces.md) |
 | Web Userscript Installer | [architecture/web-installer.md](architecture/web-installer.md) |
 | Trust boundaries + CSP strategy | [architecture/security.md](architecture/security.md) |
 | Build pipeline + configuration injection | [architecture/build-pipeline.md](architecture/build-pipeline.md) |

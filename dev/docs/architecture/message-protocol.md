@@ -65,6 +65,12 @@ Via `chrome.runtime.sendMessage` / `chrome.tabs.sendMessage`.
 | `sponsor-status` | `{sponsor}` | Sponsor detection (fire-and-forget via `send-message-safe!`) |
 | `get-sponsored-username` | - | Get configured sponsor username |
 
+**Userscript Loader → Background** (content script, ISOLATED world):
+
+| Type | Payload | Purpose |
+|------|---------|---------|
+| `loader-resolution-errors` | `{errors, url}` | Report `epupp://` resolution errors from early loader |
+
 **Background → Content Bridge**:
 
 | Type | Payload | Purpose |
@@ -144,6 +150,7 @@ Via `chrome.runtime.sendMessage`.
 | `evaluate-script` | `{tabId, scriptId, code, inject}` | `{success, error?}` | Run a script in the current tab |
 | `panel-save-script` | `{script}` | `{success, error?, isUpdate?, id?}` | Save script from DevTools panel |
 | `panel-rename-script` | `{from, to}` | `{success, error?}` | Rename script from DevTools panel |
+| `get-runtime-status` | `{tabId}` | `{success, errors}` | Query per-tab runtime errors (resolution failures) |
 | `toggle-fs-sync` | `{tabId, enabled}` | `{success}` | Enable/disable FS sync for a tab (single-tab: enabling revokes other tabs) |
 | `get-fs-sync-status` | `{tabId}` | `{fsSyncTabId}` | Query FS sync status (null when no tab has sync enabled) |
 
@@ -153,6 +160,7 @@ Via `chrome.runtime.sendMessage`.
 |------|---------|---------|
 | `connections-changed` | `{connections}` | Broadcast connection list updates |
 | `system-banner` | `{event-type, operation, script-name, error?, bulk-id?, bulk-index?, bulk-count?}` | System notification banner (FS operations, validation errors) |
+| `runtime-status` | `{tab-id, errors}` | Per-tab runtime error status (resolution failures, cleared on navigation) |
 | `fs-sync-status-changed` | `{fsSyncTabId}` | FS sync status changed (null when disabled) |
 
 ## Related

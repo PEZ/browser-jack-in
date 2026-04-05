@@ -50,6 +50,7 @@
          :sponsor/checked-at nil
          :sponsor/sponsored-username "PEZ"
          :repl/connections []         ; Source of truth for connections
+         :runtime/errors {}           ; {script-name -> error-envelope} for current tab
          ;; Shadow lists for rendering with animation state
          ;; Shape: [{:item <original> :ui/entering? bool :ui/leaving? bool}]
          :ui/scripts-shadow []
@@ -70,13 +71,15 @@
 ;; =============================================================
 
 (defn get-active-tab
-  "Gets the active tab. In tests, checks for window.__scittle_tamper_test_url override."
+  "Gets the active tab. In tests, checks for window.__scittle_tamper_test_url
+   and window.__scittle_tamper_test_tab_id overrides."
   []
   (js/Promise.
    (fn [resolve]
      ;; Test override: if window.__scittle_tamper_test_url is set, return a mock tab
      (if-let [test-url js/window.__scittle_tamper_test_url]
-       (resolve #js {:id -1 :url test-url})
+       (let [test-tab-id (or js/window.__scittle_tamper_test_tab_id -1)]
+         (resolve #js {:id test-tab-id :url test-url}))
        ;; Normal: query Chrome tabs API
        (js/chrome.tabs.query
         #js {:active true :currentWindow true}
@@ -263,7 +266,8 @@
     (let [tab (js-await (get-active-tab))]
       (dispatch [[:db/ax.assoc
                   :scripts/current-url (.-url tab)
-                  :scripts/current-tab-id (.-id tab)]]))
+                  :scripts/current-tab-id (.-id tab)]
+                 [:popup/ax.load-runtime-status]]))
 
     :popup/fx.evaluate-script
     (let [[script] args
@@ -441,6 +445,17 @@
          ;; Keywords are strings, so {:keys [tab-id]} works with "tab-id" keys
          (let [connections (.-connections response)]
            (dispatch [[:db/ax.assoc :repl/connections connections]])))))
+
+    :popup/fx.load-runtime-status
+    (let [[tab-id] args]
+      (when tab-id
+        (js/chrome.runtime.sendMessage
+         #js {:type "get-runtime-status" :tabId tab-id}
+         (fn [response]
+           (when (and response (.-success response))
+             (dispatch [[:popup/ax.handle-runtime-status
+                         {:tab-id tab-id
+                          :errors (.-errors response)}]]))))))
 
     :popup/fx.reveal-script
     (let [[script-name] args
@@ -651,7 +666,7 @@
                     script-id :script/id
                     :as script}
                    current-url
-                   {:keys [reveal-highlight? recently-modified? leaving? entering?]}]
+                   {:keys [reveal-highlight? recently-modified? leaving? entering? runtime-error]}]
   (let [matching-pattern (script-utils/get-matching-pattern current-url script)
         builtin? (script-utils/builtin-script? script)
         ;; All patterns for display - join for single row, newlines for tooltip
@@ -690,7 +705,12 @@
         (when builtin?
           [:span.builtin-indicator {:title "Built-in script"}
            [icons/package]])
-        [:span.script-name-text {:title name} name]]
+        [:span.script-name-text {:title name} name]
+        (when runtime-error
+          [:span.script-error-indicator
+           {:title (or (:error/message runtime-error) "Resolution error")
+            :data-e2e "script-error"}
+           [icons/warning {:size 14}]])]
        [:div.script-actions
         [view-elements/action-button
          {:button/variant :secondary
@@ -736,7 +756,8 @@
           description]])]]))
 
 (defn matching-scripts-section [{:scripts/keys [list current-url]
-                                 :ui/keys [scripts-shadow reveal-highlight-script-name recently-modified-scripts]}]
+                                 :ui/keys [scripts-shadow reveal-highlight-script-name recently-modified-scripts]
+                                 :runtime/keys [errors]}]
   (let [;; Filter and sort shadow items by matching URL
         matching-shadow (->> scripts-shadow
                              (filterv #(and (not (script-utils/special-script? (:item %)))
@@ -748,7 +769,8 @@
         user-scripts (filterv #(not (script-utils/builtin-script? %)) list)
         no-user-scripts? (empty? user-scripts)
         example-pattern (script-utils/url-to-match-pattern current-url {:wildcard-scheme? true})
-        modified-set (or recently-modified-scripts #{})]
+        modified-set (or recently-modified-scripts #{})
+        errors (or errors {})]
     [:div.script-list
      (if (seq matching-shadow)
        (for [{:keys [item] :ui/keys [entering? leaving?]} matching-shadow
@@ -758,7 +780,8 @@
           {:reveal-highlight? (= (:script/name script) reveal-highlight-script-name)
            :recently-modified? (contains? modified-set (:script/name script))
            :leaving? leaving?
-           :entering? entering?}])
+           :entering? entering?
+           :runtime-error (get errors (:script/name script))}])
        [:div.no-scripts
         (if no-user-scripts?
           ;; No user scripts at all - guide to create first one
@@ -805,7 +828,8 @@
 ;; ============================================================
 
 (defn manual-scripts-section [{:scripts/keys [current-url]
-                               :ui/keys [scripts-shadow reveal-highlight-script-name recently-modified-scripts]}]
+                               :ui/keys [scripts-shadow reveal-highlight-script-name recently-modified-scripts]
+                               :runtime/keys [errors]}]
   (let [manual-shadow (->> scripts-shadow
                            (filterv (fn [{:keys [item]}]
                                      (and (not (script-utils/special-script? item))
@@ -813,7 +837,8 @@
                            (sort-by (fn [{:keys [item]}]
                                       [(if (script-utils/builtin-script? item) 1 0)
                                        (str/lower-case (or (:script/name item) ""))])))
-        modified-set (or recently-modified-scripts #{})]
+        modified-set (or recently-modified-scripts #{})
+        errors (or errors {})]
     [:div.script-list
      (if (seq manual-shadow)
        (for [{:keys [item] :ui/keys [entering? leaving?]} manual-shadow
@@ -823,14 +848,16 @@
           {:reveal-highlight? (= (:script/name script) reveal-highlight-script-name)
            :recently-modified? (contains? modified-set (:script/name script))
            :leaving? leaving?
-           :entering? entering?}])
+           :entering? entering?
+           :runtime-error (get errors (:script/name script))}])
        [:div.no-scripts
         "No manual scripts."
         [:div.no-scripts-hint
          "Scripts without auto-run patterns appear here."]])]))
 
 (defn other-scripts-section [{:scripts/keys [current-url]
-                              :ui/keys [scripts-shadow reveal-highlight-script-name recently-modified-scripts]}]
+                              :ui/keys [scripts-shadow reveal-highlight-script-name recently-modified-scripts]
+                              :runtime/keys [errors]}]
   (let [other-shadow (->> scripts-shadow
                           (filterv (fn [{:keys [item]}]
                                     (and (not (script-utils/special-script? item))
@@ -839,7 +866,8 @@
                           (sort-by (fn [{:keys [item]}]
                                      [(if (script-utils/builtin-script? item) 1 0)
                                       (str/lower-case (or (:script/name item) ""))])))
-        modified-set (or recently-modified-scripts #{})]
+        modified-set (or recently-modified-scripts #{})
+        errors (or errors {})]
     [:div.script-list
      (if (seq other-shadow)
        (for [{:keys [item] :ui/keys [entering? leaving?]} other-shadow
@@ -849,20 +877,23 @@
           {:reveal-highlight? (= (:script/name script) reveal-highlight-script-name)
            :recently-modified? (contains? modified-set (:script/name script))
            :leaving? leaving?
-           :entering? entering?}])
+           :entering? entering?
+           :runtime-error (get errors (:script/name script))}])
        [:div.no-scripts
         "No auto-run scripts for other pages."
         [:div.no-scripts-hint
          "Scripts with match patterns that don't match this page appear here."]])]))
 
 (defn special-scripts-section [{:scripts/keys [current-url]
-                                :ui/keys [scripts-shadow reveal-highlight-script-name recently-modified-scripts]}]
+                                :ui/keys [scripts-shadow reveal-highlight-script-name recently-modified-scripts]
+                                :runtime/keys [errors]}]
   (let [special-shadow (->> scripts-shadow
                             (filterv (fn [{:keys [item]}]
                                        (script-utils/special-script? item)))
                             (sort-by (fn [{:keys [item]}]
                                        (str/lower-case (or (:script/name item) "")))))
-        modified-set (or recently-modified-scripts #{})]
+        modified-set (or recently-modified-scripts #{})
+        errors (or errors {})]
     [:div.script-list
      (if (seq special-shadow)
        (for [{:keys [item] :ui/keys [entering? leaving?]} special-shadow
@@ -872,7 +903,8 @@
           {:reveal-highlight? (= (:script/name script) reveal-highlight-script-name)
            :recently-modified? (contains? modified-set (:script/name script))
            :leaving? leaving?
-           :entering? entering?}])
+           :entering? entering?
+           :runtime-error (get errors (:script/name script))}])
        [:div.no-scripts
         "No special scripts."
         [:div.no-scripts-hint
@@ -1183,6 +1215,10 @@
          (dispatch! [[:db/ax.assoc :repl/connections connections]])))
      (when (= "fs-sync-status-changed" (.-type message))
        (dispatch! [[:db/ax.assoc :fs/sync-tab-id (.-fsSyncTabId message)]]))
+     (when (= "runtime-status" (.-type message))
+       (dispatch! [[:popup/ax.handle-runtime-status
+                    {:tab-id (aget message "tab-id")
+                     :errors (aget message "errors")}]]))
      ;; Return false - we don't send async response
      false))
 

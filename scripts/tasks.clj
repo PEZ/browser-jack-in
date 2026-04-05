@@ -89,6 +89,7 @@
                                  ["panel" "extension/panel.mjs"]
                                  ["content-bridge" "extension/content_bridge.mjs"]
                                  ["ws-bridge" "extension/ws_bridge.mjs"]
+                                 ["userscript-loader" "extension/userscript_loader.mjs"]
                                  ["devtools" "extension/devtools.mjs"]]]
       (println (str "  Bundling " bundle-name ".js..."))
       (p/shell "npx" "esbuild" entry "--bundle" "--format=iife"
@@ -103,7 +104,7 @@
     (fs/copy "extension/panel.html" "build/panel.html" {:replace-existing true})
     (fs/copy "extension/panel.css" "build/panel.css" {:replace-existing true})
     ;; Copy early injection loaders (content scripts for document-start/document-end)
-    (fs/copy "extension/userscript-loader.js" "build/userscript-loader.js" {:replace-existing true})
+    ;; userscript-loader is now bundled via esbuild (from src/userscript_loader.cljs)
     (fs/copy "extension/trigger-scittle.js" "build/trigger-scittle.js" {:replace-existing true})
     ;; Copy userscripts (raw source, evaluated by Scittle)
     (fs/create-dirs "build/userscripts")

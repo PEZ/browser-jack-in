@@ -469,4 +469,13 @@
       {:uf/fxs [[:popup/fx.remove-storage-keys redundant-keys]
                 [:popup/fx.set-storage-key "epupp_migration_ports_normalized_v1" true]]})
 
+    :popup/ax.handle-runtime-status
+    (let [[{:keys [tab-id errors]}] args
+          current-tab-id (:scripts/current-tab-id state)]
+      (when (= tab-id current-tab-id)
+        {:uf/db (assoc state :runtime/errors (or errors {}))}))
+
+    :popup/ax.load-runtime-status
+    {:uf/fxs [[:popup/fx.load-runtime-status (:scripts/current-tab-id state)]]}
+
     :uf/unhandled-ax))

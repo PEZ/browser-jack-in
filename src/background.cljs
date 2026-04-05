@@ -16,6 +16,7 @@
             [bg-icon :as bg-icon]
             [bg-ws :as bg-ws]
             [bg-inject :as bg-inject]
+            [dep-resolver :as dep-resolver]
             [permissions :as permissions]))
 
 (def ^:private config js/EXTENSION_CONFIG)
@@ -27,7 +28,8 @@
                    :ws/connections {}
                    :icon/states {}
                    :connected-tabs/history {}
-                   :fs/sync-tab-id nil}))  ; tab-id -> {:port ws-port} - tracks intentionally connected tabs
+                   :fs/sync-tab-id nil
+                   :runtime/errors {}}))  ; tab-id -> {:port ws-port} - tracks intentionally connected tabs
 
 ;; Ephemeral tracking - NOT Uniflow state. Tracks which tabs have had the
 ;; web installer injected to avoid redundant re-injection.
@@ -326,38 +328,48 @@
 
 (defn ^:async process-navigation!
   "Process a navigation event after ensuring initialization is complete.
-   Find matching scripts and execute them.
+   Find matching scripts, resolve dependencies via dep-resolver, and execute the plan.
    Only processes document-idle scripts - early-timing scripts are handled
    by registered content scripts (see registration.cljs).
-   Checks host permission before injection (Firefox treats these as revocable)."
+   Checks host permission before injection (Firefox treats these as revocable).
+   On resolution errors: skips failing scripts, logs to console, broadcasts banner."
   [dispatch! tab-id url icon-state]
   (let [has-perm? (js-await (permissions/check-tab-permission tab-id))]
     (if has-perm?
-      (let [all-scripts (url-matching/get-matching-scripts url)
-              ;; Filter to only document-idle scripts (default for scripts without run-at)
-              ;; Early-timing scripts (document-start, document-end) are handled by
-              ;; registerContentScripts and should not be injected again here.
-              idle-scripts (filter #(= "document-idle"
-                                       (or (:script/run-at %) "document-idle"))
-                                   all-scripts)]
-          ;; Log for E2E debugging
-          (js-await (test-logger/log-event! "NAVIGATION_PROCESSED"
-                                            {:url url
-                                             :all-scripts-count (count all-scripts)
-                                             :idle-scripts-count (count idle-scripts)}))
-          (when (seq idle-scripts)
-            (log/debug "Background:Inject" "Found" (count idle-scripts) "document-idle scripts for" url)
-            (log/debug "Background:Inject" "Executing" (count idle-scripts) "scripts")
-            (js-await (test-logger/log-event! "AUTO_INJECT_START" {:count (count idle-scripts)}))
-            (when (some #(= bg-utils/sponsor-script-id (:script/id %)) idle-scripts)
-              (dispatch! [[:sponsor/ax.set-pending tab-id]]))
-            (try
+      (let [matching-scripts (url-matching/get-matching-scripts url)
+            idle-scripts (filter #(= "document-idle"
+                                     (or (:script/run-at %) "document-idle"))
+                                 matching-scripts)]
+        (js-await (test-logger/log-event! "NAVIGATION_PROCESSED"
+                                          {:url url
+                                           :all-scripts-count (count matching-scripts)
+                                           :idle-scripts-count (count idle-scripts)}))
+        (when (seq idle-scripts)
+          (log/debug "Background:Inject" "Found" (count idle-scripts) "document-idle scripts for" url)
+          (js-await (test-logger/log-event! "AUTO_INJECT_START" {:count (count idle-scripts)}))
+          (when (some #(= bg-utils/sponsor-script-id (:script/id %)) idle-scripts)
+            (dispatch! [[:sponsor/ax.set-pending tab-id]]))
+          (try
+            (let [all-scripts (storage/get-scripts)
+                  plan (dep-resolver/resolve-execution-plan (vec idle-scripts) all-scripts)
+                  errors (:plan/errors plan)]
+              ;; Handle resolution errors: log and broadcast, but continue with resolved scripts
+              (when (seq errors)
+                (doseq [err errors]
+                  (log/error "Background:Resolve" (:error/message err))
+                  (js-await (test-logger/log-event! "RESOLUTION_ERROR"
+                                                    {:script (:error/script-name err)
+                                                     :dep (:error/dep-raw err)
+                                                     :message (:error/message err)})))
+                (dispatch! [[:banner/ax.broadcast-resolution-errors errors]
+                            [:runtime/ax.set-tab-errors tab-id errors]]))
+              ;; Execute the plan (which excludes errored subtrees)
               (js-await (bg-inject/ensure-scittle! dispatch! tab-id icon-state))
-              (js-await (bg-inject/execute-scripts! tab-id idle-scripts))
-              (catch :default err
-                (log/error "Background:Inject" "Failed:" (.-message err))
-                (js-await (test-logger/log-event! "AUTO_INJECT_ERROR" {:error (.-message err)})))))))
-      (log/debug "Background:Inject" "Skipping navigation - host permission not granted for" url)))
+              (js-await (bg-inject/execute-plan! tab-id plan)))
+            (catch :default err
+              (log/error "Background:Inject" "Failed:" (.-message err))
+              (js-await (test-logger/log-event! "AUTO_INJECT_ERROR" {:error (.-message err)}))))))
+      (log/debug "Background:Inject" "Skipping navigation - host permission not granted for" url))))
 
 (defn- handle-ws-connect [message tab-id dispatch!]
   (dispatch! [[:ws/ax.handle-connect tab-id (.-port message)]])
@@ -437,13 +449,37 @@
     true))
 
 (defn- handle-load-manifest [message tab-id dispatch! send-response]
-  (let [manifest (.-manifest message)]
-    (dispatch! [[:msg/ax.load-manifest send-response tab-id manifest]])
+  (let [manifest (.-manifest message)
+        all-scripts (storage/get-scripts)]
+    (dispatch! [[:msg/ax.load-manifest send-response tab-id manifest all-scripts]])
     true))
 
 (defn- handle-get-connections [dispatch! send-response]
   (dispatch! [[:msg/ax.get-connections send-response]])
   false)
+
+(defn- handle-loader-resolution-errors [message sender dispatch!]
+  (let [tab-id (when (.-tab sender) (.. sender -tab -id))
+        js-errors (.-errors message)
+        errors (when js-errors
+                 (mapv (fn [e]
+                         {:error/type (.-errorType e)
+                          :error/phase :resolve
+                          :error/surface :early-loader
+                          :error/script-name (.-scriptName e)
+                          :error/dep-raw (.-depRaw e)
+                          :error/dep-chain (when (.-depChain e) (vec (.-depChain e)))
+                          :error/message (.-message e)})
+                       (vec js-errors)))]
+    (when (and tab-id (seq errors))
+      (dispatch! [[:banner/ax.broadcast-resolution-errors errors]
+                  [:runtime/ax.set-tab-errors tab-id errors]]))
+    false))
+
+(defn- handle-get-runtime-status [message dispatch! send-response]
+  (let [tab-id (.-tabId message)]
+    (dispatch! [[:runtime/ax.get-tab-errors send-response tab-id]])
+    true))
 
 (defn- handle-connect-tab [message dispatch! send-response]
   (let [target-tab-id (.-tabId message)
@@ -534,8 +570,9 @@
 (defn- handle-inject-libs [message dispatch! send-response]
   (let [target-tab-id (.-tabId message)
         libs (when (.-libs message)
-               (vec (.-libs message)))]
-    (dispatch! [[:msg/ax.inject-libs send-response target-tab-id libs]])
+               (vec (.-libs message)))
+        all-scripts (storage/get-scripts)]
+    (dispatch! [[:msg/ax.inject-libs send-response target-tab-id libs all-scripts]])
     true))
 
 (defn- handle-evaluate-script [message dispatch! send-response]
@@ -656,6 +693,8 @@
                       "web-installer-save-script" (handle-web-installer-save-script message sender dispatch! send-response)
                       "load-manifest" (handle-load-manifest message tab-id dispatch! send-response)
                       "get-connections" (handle-get-connections dispatch! send-response)
+                      "get-runtime-status" (handle-get-runtime-status message dispatch! send-response)
+                      "loader-resolution-errors" (handle-loader-resolution-errors message sender dispatch!)
                       "connect-tab" (handle-connect-tab message dispatch! send-response)
                       "check-status" (handle-check-status message dispatch! send-response)
                       "disconnect-tab" (handle-disconnect-tab message dispatch!)
@@ -982,6 +1021,16 @@
     (let [[tab-id file] args]
       (bg-inject/inject-libs-sequentially! tab-id [file]))
 
+    :msg/fx.inject-script-code
+    (let [[tab-id script-id code] args]
+      (bg-inject/send-tab-message tab-id {:type "inject-userscript"
+                                          :id (str "userscript-" script-id)
+                                          :code code}))
+
+    :msg/fx.log-resolution-error
+    (let [[error-envelope] args]
+      (log/error "Background:Resolve" (:error/message error-envelope)))
+
     :msg/fx.send-response
     (let [[send-response response-data] args]
       (send-response (clj->js response-data)))
@@ -1166,6 +1215,14 @@
     :banner/fx.broadcast-system
     (let [[event] args]
       (bg-icon/broadcast-system-banner! event))
+
+    :runtime/fx.broadcast-tab-status
+    (let [[tab-id errors] args]
+      (js/chrome.runtime.sendMessage
+       #js {:type "runtime-status"
+            :tab-id tab-id
+            :errors errors}
+       (fn [_] (when js/chrome.runtime.lastError nil))))
 
     :msg/fx.handle-permission-granted
     (let [[tab-id icon-state] args]

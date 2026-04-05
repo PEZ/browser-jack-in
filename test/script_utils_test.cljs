@@ -889,3 +889,98 @@
     (test "Edge Add-ons blocked for Edge" test-scriptability-edge-addons-blocked)
     (test "Firefox domains NOT blocked for Chrome" test-scriptability-firefox-domain-not-blocked-for-chrome)
     (test "Edge domains NOT blocked for Firefox" test-scriptability-edge-domain-not-blocked-for-firefox)))
+
+;; ============================================================
+;; Storage contract pinning (Phase 0)
+;; ============================================================
+
+(defn- test-storage-contract-stored-fields []
+  (let [script {:script/id "script-1"
+                :script/name "test.cljs"
+                :script/description "Test"
+                :script/match ["*://example.com/*"]
+                :script/code "(ns test)"
+                :script/enabled true
+                :script/created "2026-01-01T00:00:00.000Z"
+                :script/modified "2026-01-02T00:00:00.000Z"
+                :script/run-at "document-end"
+                :script/inject ["scittle://reagent.js"]
+                :script/builtin? false
+                :script/always-enabled? false
+                :script/special? true
+                :script/web-installer-scan true}
+        js-obj (script-utils/script->js script)
+        stored-keys (set (vec (js/Object.keys js-obj)))]
+    ;; These fields ARE persisted to chrome.storage
+    (-> (expect (contains? stored-keys "id")) (.toBeTruthy))
+    (-> (expect (contains? stored-keys "code")) (.toBeTruthy))
+    (-> (expect (contains? stored-keys "enabled")) (.toBeTruthy))
+    (-> (expect (contains? stored-keys "created")) (.toBeTruthy))
+    (-> (expect (contains? stored-keys "modified")) (.toBeTruthy))
+    (-> (expect (contains? stored-keys "builtin")) (.toBeTruthy))
+    (-> (expect (contains? stored-keys "alwaysEnabled")) (.toBeTruthy))
+    (-> (expect (contains? stored-keys "runAt")) (.toBeTruthy))
+    (-> (expect (contains? stored-keys "match")) (.toBeTruthy))
+    (-> (expect (contains? stored-keys "special")) (.toBeTruthy))
+    (-> (expect (contains? stored-keys "webInstallerScan")) (.toBeTruthy))))
+
+(defn- test-storage-contract-derived-fields-not-stored []
+  (let [script {:script/id "script-1"
+                :script/name "test.cljs"
+                :script/description "Test"
+                :script/match ["*://example.com/*"]
+                :script/code "(ns test)"
+                :script/enabled true
+                :script/created "2026-01-01T00:00:00.000Z"
+                :script/modified "2026-01-02T00:00:00.000Z"
+                :script/run-at "document-end"
+                :script/inject ["scittle://reagent.js" "epupp://my_lib.cljs"]
+                :script/builtin? false}
+        js-obj (script-utils/script->js script)
+        stored-keys (set (vec (js/Object.keys js-obj)))]
+    ;; These fields are NOT stored - re-derived from manifest on load
+    (-> (expect (contains? stored-keys "name")) (.toBeFalsy))
+    (-> (expect (contains? stored-keys "description")) (.toBeFalsy))
+    (-> (expect (contains? stored-keys "inject")) (.toBeFalsy))))
+
+(defn- test-storage-contract-exact-field-count []
+  (let [script {:script/id "script-1"
+                :script/code "(ns test)"
+                :script/enabled true
+                :script/created "2026-01-01"
+                :script/modified "2026-01-02"
+                :script/builtin? false}
+        js-obj (script-utils/script->js script)
+        key-count (.-length (js/Object.keys js-obj))]
+    ;; Exactly 11 fields: id, code, enabled, created, modified,
+    ;; builtin, alwaysEnabled, special, webInstallerScan, runAt, match
+    (-> (expect key-count) (.toBe 11))))
+
+(defn- test-storage-contract-roundtrip-preserves-stored-fields []
+  (let [script {:script/id "script-1"
+                :script/code "^{:epupp/script-name \"test.cljs\"\n  :epupp/inject [\"scittle://reagent.js\" \"epupp://lib.cljs\"]}\n(ns test)"
+                :script/enabled true
+                :script/created "2026-01-01T00:00:00.000Z"
+                :script/modified "2026-01-02T00:00:00.000Z"
+                :script/builtin? false
+                :script/run-at "document-end"
+                :script/match ["*://example.com/*"]}
+        js-obj (script-utils/script->js script)
+        parsed (first (script-utils/parse-scripts #js [js-obj]
+                        {:extract-manifest mp/extract-manifest}))]
+    ;; Stored fields survive roundtrip
+    (-> (expect (:script/id parsed)) (.toBe "script-1"))
+    (-> (expect (:script/enabled parsed)) (.toBe true))
+    (-> (expect (:script/created parsed)) (.toBe "2026-01-01T00:00:00.000Z"))
+    (-> (expect (:script/modified parsed)) (.toBe "2026-01-02T00:00:00.000Z"))
+    ;; Derived fields re-derived from manifest
+    (-> (expect (:script/name parsed)) (.toBe "test.cljs"))
+    (-> (expect (:script/inject parsed))
+        (.toEqual ["scittle://reagent.js" "epupp://lib.cljs"]))))
+
+(describe "Storage contract"
+          (fn []
+            (test "script->js includes all stored fields" test-storage-contract-stored-fields)
+            (test "script->js excludes derived fields (name, description, inject)" test-storage-contract-derived-fields-not-stored)
+            (test "script->js produces exactly 11 fields" test-storage-contract-exact-field-count)
+            (test "roundtrip through JS preserves stored and re-derives from manifest" test-storage-contract-roundtrip-preserves-stored-fields)))

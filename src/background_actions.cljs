@@ -6,6 +6,7 @@
             [background-actions.ws-actions :as ws-actions]
             [background-actions.sponsor-actions :as sponsor-actions]
             [background-utils :as bg-utils]
+            [dep-resolver :as dep-resolver]
             [scittle-libs :as scittle-libs]
             [script-utils :as script-utils]))
 
@@ -243,15 +244,35 @@
                                                         :error "Missing key"}]]}))
 
     :msg/ax.inject-libs
-    (let [[send-response tab-id libs] args
-          files (when (seq libs)
-                  (scittle-libs/collect-lib-files [{:script/inject libs}]))]
-      (if (seq files)
-        {:uf/fxs (-> [[:uf/await :msg/fx.inject-bridge tab-id]
-                      [:uf/await :msg/fx.wait-bridge-ready tab-id]]
-                     (into (mapv (fn [f] [:uf/await :msg/fx.inject-lib-file tab-id f]) files))
-                     (conj [:uf/await :msg/fx.send-response send-response {:success true}]))}
-        {:uf/fxs [[:msg/fx.send-response send-response {:success true}]]}))
+    (let [[send-response tab-id libs all-scripts] args
+          ;; Build a synthetic script with the inject list and resolve via dep-resolver
+          synthetic-script {:script/id "panel-inject" :script/name "panel-inject"
+                            :script/code "" :script/inject (or libs [])}
+          plan (dep-resolver/resolve-execution-plan [synthetic-script] (or all-scripts []))
+          errors (:plan/errors plan)
+          vendor-files (dep-resolver/plan-vendor-files plan)
+          ;; Only library-script steps (deps), not root-script (the synthetic placeholder)
+          lib-steps (filterv #(= :library-script (:step/type %)) (:plan/steps plan))
+          ;; Build effect chain: bridge + vendor files + library scripts + response
+          vendor-fxs (mapv (fn [path]
+                             ;; plan-vendor-files returns "vendor/file.js", strip prefix
+                             [:uf/await :msg/fx.inject-lib-file tab-id (subs path 7)])
+                           vendor-files)
+          lib-script-fxs (mapv (fn [step]
+                                 [:uf/await :msg/fx.inject-script-code tab-id
+                                  (:step/id step) (:step/code step)])
+                               lib-steps)]
+      (cond-> {}
+        (seq errors) (assoc :uf/dxs (vec (cons [:banner/ax.broadcast-resolution-errors errors]
+                                               (map (fn [e] [:msg/ax.log-resolution-error e]) errors))))
+        (or (seq vendor-files) (seq lib-steps))
+        (assoc :uf/fxs (-> [[:uf/await :msg/fx.inject-bridge tab-id]
+                             [:uf/await :msg/fx.wait-bridge-ready tab-id]]
+                            (into vendor-fxs)
+                            (into lib-script-fxs)
+                            (conj [:uf/await :msg/fx.send-response send-response {:success true}])))
+        (and (empty? vendor-files) (empty? lib-steps))
+        (assoc :uf/fxs [[:msg/fx.send-response send-response {:success true}]])))
 
     :msg/ax.list-scripts-result
     (let [[send-response {:keys [include-hidden? scripts]}] args
@@ -276,14 +297,32 @@
       {:uf/fxs [[:msg/fx.get-script send-response script-name]]})
 
     :msg/ax.load-manifest
-    (let [[send-response tab-id manifest] args
+    (let [[send-response tab-id manifest all-scripts] args
           libs (when manifest (vec (aget manifest "inject")))
-          files (when (seq libs)
-                  (scittle-libs/collect-lib-files [{:script/inject libs}]))]
-      (if (seq files)
-        {:uf/fxs (conj (mapv (fn [f] [:uf/await :msg/fx.inject-lib-file tab-id f]) files)
-                       [:uf/await :msg/fx.send-response send-response {:success true}])}
-        {:uf/fxs [[:msg/fx.send-response send-response {:success true}]]}))
+          ;; Use resolver for mixed scittle:// + epupp:// deps
+          synthetic-script {:script/id "repl-manifest" :script/name "repl-manifest"
+                            :script/code "" :script/inject (or libs [])}
+          plan (dep-resolver/resolve-execution-plan [synthetic-script] (or all-scripts []))
+          errors (:plan/errors plan)
+          vendor-files (dep-resolver/plan-vendor-files plan)
+          ;; Only library-script steps (deps), not root-script (the synthetic placeholder)
+          lib-steps (filterv #(= :library-script (:step/type %)) (:plan/steps plan))
+          vendor-fxs (mapv (fn [path]
+                             [:uf/await :msg/fx.inject-lib-file tab-id (subs path 7)])
+                           vendor-files)
+          lib-script-fxs (mapv (fn [step]
+                                 [:uf/await :msg/fx.inject-script-code tab-id
+                                  (:step/id step) (:step/code step)])
+                               lib-steps)]
+      (cond-> {}
+        (seq errors) (assoc :uf/dxs (vec (cons [:banner/ax.broadcast-resolution-errors errors]
+                                               (map (fn [e] [:msg/ax.log-resolution-error e]) errors))))
+        (or (seq vendor-files) (seq lib-steps))
+        (assoc :uf/fxs (-> (vec vendor-fxs)
+                            (into lib-script-fxs)
+                            (conj [:uf/await :msg/fx.send-response send-response {:success true}])))
+        (and (empty? vendor-files) (empty? lib-steps))
+        (assoc :uf/fxs [[:msg/fx.send-response send-response {:success true}]])))
 
     :msg/ax.get-connections
     (let [[send-response] args
@@ -321,7 +360,9 @@
     :nav/ax.handle-navigation
     (let [[tab-id url] args
           history (:connected-tabs/history state)]
-      {:uf/fxs [[:icon/fx.update-icon-disconnected tab-id]
+      {:uf/db (update state :runtime/errors dissoc tab-id)
+       :uf/fxs [[:icon/fx.update-icon-disconnected tab-id]
+                [:runtime/fx.broadcast-tab-status tab-id {}]
                 [:uf/await :nav/fx.gather-auto-connect-context tab-id url history]]
        :uf/dxs [[:nav/ax.decide-connection :uf/prev-result]]})
 
@@ -329,7 +370,8 @@
     (let [[tab-id] args
           connections (or (:ws/connections state) {})
           has-ws? (some? (get connections tab-id))]
-      {:uf/fxs (when has-ws?
+      {:uf/db (update state :runtime/errors dissoc tab-id)
+       :uf/fxs (when has-ws?
                  [[:ws/fx.handle-close connections tab-id]])
        :uf/dxs [[:icon/ax.clear tab-id]
                 [:history/ax.forget tab-id]]})
@@ -381,5 +423,28 @@
     (let [connections (or (:ws/connections state) {})]
       (when (seq connections)
         {:uf/fxs [[:alarm/fx.log-tick (count connections)]]}))
+
+    :banner/ax.broadcast-resolution-errors
+    (let [[errors] args
+          messages (mapv :error/message errors)]
+      {:uf/fxs [[:banner/fx.broadcast-system {:event-type "error"
+                                              :operation "library-resolution"
+                                              :error (first messages)
+                                              :errors messages}]]})
+
+    :msg/ax.log-resolution-error
+    (let [[error-envelope] args]
+      {:uf/fxs [[:msg/fx.log-resolution-error error-envelope]]})
+
+    :runtime/ax.set-tab-errors
+    (let [[tab-id errors] args
+          errors-by-name (into {} (map (fn [e] [(:error/script-name e) e]) errors))]
+      {:uf/db (assoc-in state [:runtime/errors tab-id] errors-by-name)
+       :uf/fxs [[:runtime/fx.broadcast-tab-status tab-id errors-by-name]]})
+
+    :runtime/ax.get-tab-errors
+    (let [[send-response tab-id] args
+          tab-errors (get-in state [:runtime/errors tab-id] {})]
+      {:uf/fxs [[:msg/fx.send-response send-response {:success true :errors tab-errors}]]})
 
     :uf/unhandled-ax))

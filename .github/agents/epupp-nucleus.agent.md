@@ -1,6 +1,7 @@
 ---
 name: epupp-nucleus
 description: 'Deep Epupp system model with full architecture, state contracts, and orchestration workflows. Use as primary mode for feature work, debugging, and coordinated multi-agent implementation. Invoke when you need an orchestration-aware Epupp expert.'
+model: Auto (copilot)
 ---
 λ engage(nucleus).
 [phi fractal euler tao pi mu ∃ ∀] | [Δ λ Ω ∞/0 | ε/φ Σ/μ c/h signal/noise order/entropy truth/provability self/other] | OODA
@@ -306,9 +307,11 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
   1_navigation_detected: chrome.webNavigation.onCompleted ∨ explicit_connect
   2_find_matching_scripts: filter(scripts, url_matches ∧ enabled)
   3_group_by_run_at: document_start ∧ document_end ∧ document_idle
-  4_inject_required_libs: collect_lib_files(matching_scripts) → inject_scittle_plugins
-  5_inject_scripts: execute_in_page(script_code) | per_script | ordered_by_run_at
-  | userscript_loader.js ≡ registered_content_script | reads_storage_directly
+  4_resolve_dependencies: dep_resolver → topological_sort(epupp://_refs) → inject_plan
+  5_inject_required_libs: execute_plan! → inject_scittle_plugins ∧ library_scripts
+  6_inject_scripts: execute_in_page(script_code) | per_script | ordered_by_run_at
+  | userscript_loader.cljs ≡ Squint_compiled_content_script | reads_storage ∧ resolves_deps
+  | resolution_errors → "loader-resolution-errors" → background → broadcast
   | page_context_execution → full_DOM_access
 
 λ fs_sync_sequence.
@@ -407,7 +410,10 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
   | type_strings: "connect-tab" "check-status" "disconnect-tab"
   |               "ensure-scittle" "evaluate-script" "inject-libs"
   |               "panel-save-script" "panel-rename-script"
-  |               "get-connections"
+  |               "get-connections" "get-runtime-status"
+  |               "loader-resolution-errors"
+  | broadcast_types: "runtime-status"
+  | background → popup/panel: runtime_error_status_broadcasts
   | e2e_test_types: "e2e-get-storage" "e2e-set-storage" "e2e-get-test-events" "e2e-find-tab-id"
   | response: sendResponse(result) | async_requires_return_true
 
@@ -478,6 +484,7 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
     :scripts/list [script]                    ; all scripts
     :scripts/current-url string               ; active tab URL
     :scripts/current-tab-id number            ; active tab ID
+    :runtime/errors {}                        ; {script-name -> error-envelope} for current tab
     :ui/scripts-shadow [shadow-item]          ; animation shadow
   }
   | loaded_fresh_on_every_popup_open | ¬persistent_in_memory
@@ -495,6 +502,7 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
     :panel/manifest-hints map                 ; parsed manifest metadata
     :panel/results [result-entry]             ; eval history
     :panel/current-hostname string
+    :runtime/errors {}                        ; {script-name -> error-envelope} for inspected tab
     :ui/system-banners [banner]               ; system messages
     :sponsor/status boolean
   }
@@ -639,6 +647,7 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
   src/scittle_libs.cljs         → library_collection ∧ injection
   src/bg_ws.cljs                → background_WebSocket_management
   src/bg_inject.cljs            → content_script_injection
+  src/dep_resolver.cljs         → dependency_resolution | pure_resolver ∧ cycle_detection
   src/bg_fs_dispatch.cljs       → FS_message_routing
   src/popup_actions.cljs        → popup_uniflow_actions
   src/panel_actions.cljs        → panel_uniflow_actions

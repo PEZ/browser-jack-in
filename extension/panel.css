@@ -47,6 +47,19 @@ body {
   padding-top: 45px;
 }
 
+/* Runtime error banner for current script */
+.panel-runtime-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--color-error-bg, rgba(255, 68, 68, 0.1));
+  color: var(--color-error, #f44);
+  font-size: 12px;
+  line-height: 1.4;
+  border-bottom: 1px solid var(--color-border);
+}
+
 /* Code input area */
 .code-input-area {
   display: flex;

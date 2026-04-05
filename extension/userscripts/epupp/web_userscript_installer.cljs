@@ -96,6 +96,7 @@
 ;; Key behaviors that must match:
 ;; - auto-run-match is OPTIONAL (nil means manual-only script)
 ;; - auto-run-match preserves vector/string as-is
+;; - inject accepts string/vector and preserves all string URLs (including epupp://)
 
 (defn- get-first-form
   "Read the first form from code text. Returns map or nil."
@@ -107,6 +108,21 @@
       (js/console.error "[Web Userscript Installer] Parse error:" e)
       nil)))
 
+(defn normalize-inject
+  "Normalize :epupp/inject to vector of strings.
+   Accepts nil, string, vector, or seq. Keeps all string URLs, including epupp:// entries."
+  [inject-value]
+  (let [to-vec (fn [v]
+                 (cond
+                   (nil? v) []
+                   (string? v) [v]
+                   (vector? v) v
+                   (sequential? v) (vec v)
+                   :else []))]
+    (->> (to-vec inject-value)
+         (filter string?)
+         vec)))
+
 (defn extract-manifest
   "Extract manifest from the first form (must be a data map)."
   [code-text]
@@ -117,12 +133,23 @@
             run-at (if (contains? valid-run-at-values raw-run-at)
                      raw-run-at
                      default-run-at)
-            auto-run-match (get m :epupp/auto-run-match)]
+            auto-run-match (get m :epupp/auto-run-match)
+            raw-inject (get m :epupp/inject)
+            inject (normalize-inject raw-inject)]
         {:script-name normalized-name
          :raw-script-name raw-name
          :name-normalized? (not= raw-name normalized-name)
          :auto-run-match auto-run-match
          :description (get m :epupp/description)
+         :inject inject
+         :inject-invalid? (and (contains? m :epupp/inject)
+                               (or (not (or (string? raw-inject)
+                                            (vector? raw-inject)
+                                            (sequential? raw-inject)))
+                                   (not-every? string? (if (or (vector? raw-inject)
+                                                                (sequential? raw-inject))
+                                                         raw-inject
+                                                         []))))
          :run-at run-at
          :raw-run-at raw-run-at
          :run-at-invalid? (and raw-run-at
@@ -394,7 +421,8 @@
 
 (defn installation-modal [{:keys [id manifest code status]} icon-url install-allowed?]
   (let [{:keys [script-name raw-script-name name-normalized?
-                auto-run-match description run-at run-at-invalid? raw-run-at]} manifest
+                auto-run-match description inject inject-invalid?
+                run-at run-at-invalid? raw-run-at]} manifest
         page-url js/window.location.href
         is-update? (= status :update)
         modal-title (if is-update? "Update Userscript" "Install Userscript")
@@ -423,6 +451,27 @@
         [:tr
          [:td "Description"]
          [:td (or description [:em "Not specified"])]]
+        [:tr
+         [:td "Dependencies"]
+         [:td
+          (let [has-epupp-deps? (some #(string/starts-with? % "epupp://") inject)]
+            (if (seq inject)
+              [:div
+               (for [url inject]
+                 [:div [:code url]
+                  (when (string/starts-with? url "epupp://")
+                    [:span.epupp-modal__note " (user library)"])])
+               (when has-epupp-deps?
+                 [:div.epupp-modal__note
+                  {:style {:margin-top "4px"}
+                   :data-e2e-epupp-deps-note true}
+                  "User library dependencies must be installed separately"])]
+              [:em "None"]))
+          (when inject-invalid?
+            [:span
+             [:br]
+             [:span.epupp-modal__note.is-warning
+              "Invalid :epupp/inject value - keeping string entries only"]])]]
         [:tr
          [:td "Run At"]
          [:td

@@ -485,4 +485,8 @@
         (seq fxs) (assoc :uf/fxs fxs)
         (seq dxs) (assoc :uf/dxs dxs)))
 
+    :panel/ax.handle-runtime-status
+    (let [[{:keys [errors]}] args]
+      {:uf/db (assoc state :runtime/errors (or errors {}))})
+
     :uf/unhandled-ax))

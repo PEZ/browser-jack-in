@@ -271,3 +271,46 @@
             (test "normalizes string to single-element vector" test-normalizes-string-to-single-element-vector)
             (test "preserves vector as-is" test-preserves-vector-as-is)
             (test "normalizes invalid types to empty vector" test-normalizes-invalid-types-to-empty-vector)))
+
+;; ============================================================
+;; inject preserves arbitrary strings (Phase 0 contract pinning)
+;; ============================================================
+
+(defn- test-inject-preserves-epupp-protocol-urls []
+  (let [code "^{:epupp/script-name \"test.cljs\"
+  :epupp/inject [\"epupp://utils/dom.cljs\" \"epupp://helpers.cljs\"]}
+(ns test)"
+        manifest (mp/extract-manifest code)]
+    (-> (expect (:inject manifest))
+        (.toEqual ["epupp://utils/dom.cljs" "epupp://helpers.cljs"]))))
+
+(defn- test-inject-preserves-mixed-protocol-urls []
+  (let [code "^{:epupp/script-name \"test.cljs\"
+  :epupp/inject [\"scittle://reagent.js\" \"epupp://utils/dom.cljs\" \"https://cdn.example.com/lib.js\"]}
+(ns test)"
+        manifest (mp/extract-manifest code)]
+    (-> (expect (:inject manifest))
+        (.toEqual ["scittle://reagent.js" "epupp://utils/dom.cljs" "https://cdn.example.com/lib.js"]))))
+
+(defn- test-inject-preserves-single-epupp-url-as-vector []
+  (let [code "^{:epupp/script-name \"test.cljs\"
+  :epupp/inject \"epupp://my_lib.cljs\"}
+(ns test)"
+        manifest (mp/extract-manifest code)]
+    (-> (expect (:inject manifest))
+        (.toEqual ["epupp://my_lib.cljs"]))))
+
+(defn- test-inject-preserves-arbitrary-strings []
+  (let [code "^{:epupp/script-name \"test.cljs\"
+  :epupp/inject [\"anything-goes\" \"file:///local/path.js\" \"relative/path.js\"]}
+(ns test)"
+        manifest (mp/extract-manifest code)]
+    (-> (expect (:inject manifest))
+        (.toEqual ["anything-goes" "file:///local/path.js" "relative/path.js"]))))
+
+(describe "inject preserves arbitrary strings"
+          (fn []
+            (test "preserves epupp:// protocol URLs" test-inject-preserves-epupp-protocol-urls)
+            (test "preserves mixed protocol URLs" test-inject-preserves-mixed-protocol-urls)
+            (test "preserves single epupp:// URL normalized to vector" test-inject-preserves-single-epupp-url-as-vector)
+            (test "preserves arbitrary strings without validation" test-inject-preserves-arbitrary-strings)))

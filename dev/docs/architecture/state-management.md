@@ -6,12 +6,15 @@ isolated. The architecture coordinates through message passing.
 ## State Domains
 
 - Background worker: connection lifecycle, toolbar icon state,
-  auto-connect, reconnect-on-navigation, and per-tab FS sync state
-  (`:fs/sync-tab-id` - ephemeral, not persisted).
+  auto-connect, reconnect-on-navigation, per-tab FS sync state
+  (`:fs/sync-tab-id` - ephemeral, not persisted), and per-tab runtime errors
+  (`:runtime/errors` - ephemeral, keyed by `[tab-id script-name]`, cleared on
+  navigation or service worker restart).
 - Content bridge: ephemeral relay state and keepalive behavior.
-- Popup: UI state, connection status, settings, and script list derived from
-  storage.
-- Panel: editor state, evaluation results, and per-hostname persistence.
+- Popup: UI state, connection status, settings, script list derived from
+  storage, and runtime errors for the current tab (`:runtime/errors`).
+- Panel: editor state, evaluation results, per-hostname persistence, and
+  runtime errors for the inspected tab (`:runtime/errors`).
 - Storage: source of truth for userscripts, user-managed origins, and
   sponsor status (`:sponsor/status`, `:sponsor/checked-at` with 90-day expiry).
 

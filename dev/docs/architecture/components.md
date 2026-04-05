@@ -16,7 +16,7 @@ This document is a map of where the architecture lives in code.
 | `bg_icon.cljs` | Service Worker | Extension icon state management |
 | `registration.cljs` | Service Worker | Content script registration for early-timing scripts |
 | `content_bridge.cljs` | Content Script (ISOLATED) | Message relay, DOM injection, keepalive, FS forwarder |
-| `userscript-loader.js` | Content Script (ISOLATED) | Early script injection at document-start/end |
+| `userscript_loader.cljs` | Content Script (ISOLATED) | Early script injection at document-start/end (compiled through Squint pipeline) |
 | `trigger-scittle.js` | Page Script (MAIN) | Triggers Scittle to evaluate injected tags |
 | `ws_bridge.cljs` | Page Script (MAIN) | Virtual WebSocket for Scittle REPL |
 | `popup.cljs` | Extension Popup | REPL connection UI, script management, settings |
@@ -30,6 +30,7 @@ This document is a map of where the architecture lives in code.
 | `script_utils.cljs` | Shared | Pure utilities for script data and URL pattern matching |
 | `manifest_parser.cljs` | Shared | Parse manifest maps from code (`:epupp/*`) |
 | `scittle_libs.cljs` | Shared | Resolve Scittle library URLs and dependency lists |
+| `dep_resolver.cljs` | Shared | Pure dependency resolver for mixed `scittle://` + `epupp://` graphs: topological ordering, dedup, cycle detection |
 | `event_handler.cljs` | Shared | Uniflow event system |
 | `icons.cljc` | Shared | SVG icon components |
 | `view_elements.cljs` | Shared | Shared Hiccup components (buttons, status, empty states, sponsor heart) |

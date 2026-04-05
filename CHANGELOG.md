@@ -6,6 +6,10 @@ Changes to Epupp
 
 ## [Unreleased]
 
+- Library namespaces: any userscript can serve as a shared library via `epupp://script-name.cljs` in `:epupp/inject`. Dependencies resolve transitively with dedup and cycle detection. Works across all execution paths (auto-run, early timing, panel Run, REPL `load-manifest`). Missing libraries surface errors in console, system banner, and per-script warning indicator.
+- Early userscript loader rewritten in Squint (compiled through the standard build pipeline).
+- Web installer shows `epupp://` dependencies as "(user library)" in install preview.
+
 ## [0.0.14] - 2026-03-19
 
 - Support namespace-only manifest script names. (Still stored as normalized filename, replacing `.` with `/`.)

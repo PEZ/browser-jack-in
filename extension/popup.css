@@ -348,6 +348,14 @@ body.ready .script-item {
   text-overflow: ellipsis;
 }
 
+.script-error-indicator {
+  display: inline-flex;
+  color: var(--color-error, #f44);
+  cursor: help;
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+
 .builtin-indicator {
   display: inline-flex;
   color: var(--color-text-muted);

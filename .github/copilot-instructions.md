@@ -150,6 +150,7 @@ Human ⊗ AI ⊗ REPL
   | state/events             → dev/docs/architecture/uniflow.md ∧ state-management.md
   | messaging                → dev/docs/architecture/message-protocol.md
   | injection/REPL           → dev/docs/architecture/injection-flows.md
+  | library_deps             → dev/docs/architecture/library-namespaces.md
   | userscripts              → dev/docs/userscripts-architecture.md
   | build/release            → dev/docs/dev.md
   | finding_source           → dev/docs/architecture/components.md

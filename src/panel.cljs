@@ -3,6 +3,7 @@
    Communicates with inspected page via chrome.devtools.inspectedWindow."
   (:require [clojure.string :as str]
             [reagami :as r]
+            [dep-resolver :as dep-resolver]
             [event-handler :as event-handler]
             [icons :as icons]
             [log :as log]
@@ -34,6 +35,8 @@
          :panel/page-banner nil          ; Page-level banner (e.g., unscriptable page)
          :panel/scripts-list []          ; bulk-id -> [script-name ...]
          :panel/tab-connected? false     ; Is the inspected tab connected to REPL?
+         :panel/inspected-tab-id nil     ; Tab ID of the inspected page
+         :runtime/errors {}              ; {script-name -> error-envelope} for inspected tab
          :sponsor/status false
          :sponsor/checked-at nil}))
 
@@ -475,20 +478,36 @@
      [:code (str/join ", " unknown-keys)]]))
 
 (defn- valid-require-url?
-  "Returns true if the URL is a valid scittle:// URL that resolves to a known library."
+  "Returns true if the URL is a valid scittle:// or epupp:// URL."
   [url]
-  (some? (scittle-libs/resolve-scittle-url url)))
+  (case (dep-resolver/classify-inject-url url)
+    :scittle (some? (scittle-libs/resolve-scittle-url url))
+    :epupp (some? (dep-resolver/parse-epupp-url url))
+    false))
+
+(defn- epupp-url?
+  "Returns true if the URL is an epupp:// URL."
+  [url]
+  (= :epupp (dep-resolver/classify-inject-url url)))
 
 (defn- categorize-requires
-  "Categorize require URLs into valid and invalid.
-   Returns {:valid [...] :invalid [...]}."
-  [requires]
+  "Categorize require URLs into valid, invalid, and missing-epupp.
+   Returns {:valid [...] :invalid [...] :missing-epupp [...]}."
+  [requires scripts-list]
   (when (seq requires)
-    (let [scittle-urls (filter scittle-libs/scittle-url? requires)
-          valid-urls (filter valid-require-url? scittle-urls)
-          invalid-urls (remove valid-require-url? scittle-urls)]
+    (let [known-urls (filter #(not= :unknown (dep-resolver/classify-inject-url %)) requires)
+          valid-urls (filter valid-require-url? known-urls)
+          invalid-urls (remove valid-require-url? known-urls)
+          ;; Check epupp:// refs against scripts-list for live validation
+          epupp-urls (filter epupp-url? valid-urls)
+          script-names (set (map :script/name scripts-list))
+          missing-epupp (filterv (fn [url]
+                                   (let [name (dep-resolver/parse-epupp-url url)]
+                                     (and name (not (contains? script-names name)))))
+                                 epupp-urls)]
       {:valid (vec valid-urls)
-       :invalid (vec invalid-urls)})))
+       :invalid (vec invalid-urls)
+       :missing-epupp missing-epupp})))
 
 (defn- invalid-requires-warning
   "Render warning for invalid require URLs."
@@ -501,6 +520,19 @@
       (for [[idx url] (map-indexed vector invalid-requires)]
         ^{:key idx}
         [:li [:code url]])]]))
+
+(defn- missing-epupp-warning
+  "Render warning for epupp:// references pointing to scripts not in storage."
+  [missing-epupp]
+  (when (seq missing-epupp)
+    [:div.manifest-warning
+     [:span.warning-icon "⚠️"]
+     [:span "Library scripts not found: "]
+     [:ul.invalid-requires-list
+      (for [[idx url] (map-indexed vector missing-epupp)]
+        ^{:key idx}
+        [:li [:code url]])]]))
+
 
 (defn- no-manifest-message
   "Message shown when code has no manifest annotations."
@@ -536,7 +568,7 @@
         ;; Extract hint details
         {:keys [name-normalized? raw-script-name unknown-keys run-at-invalid? raw-run-at inject]} manifest-hints
         ;; Categorize require URLs for validation display
-        {:keys [valid invalid]} (categorize-requires inject)
+        {:keys [valid invalid missing-epupp]} (categorize-requires inject scripts-list)
         ;; Site match can be string or already joined (from panel actions)
         auto-run-matches (format-auto-run-match script-match)
         ;; Use raw name when present (for validation), normalize for comparisons
@@ -643,6 +675,9 @@
         ;; Invalid requires warning
         [invalid-requires-warning invalid]
 
+        ;; Missing epupp:// library warning
+        [missing-epupp-warning missing-epupp]
+
         ;; Save actions
         [:div.save-actions
          [view-elements/action-button
@@ -745,6 +780,10 @@
        "hostname: " (:panel/current-hostname state)
        " | code-len: " (count (:panel/code state))
        " | original-name: " (or (:panel/original-name state) "nil")])
+    (when-let [error (get (:runtime/errors state) (:panel/script-name state))]
+      [:div.panel-runtime-error {:data-e2e "panel-script-error"}
+       [icons/warning {:size 14}]
+       [:span (:error/message error)]])
     [save-script-section state]
     [code-input state]
     [results-area state]
@@ -891,7 +930,15 @@
        (dispatch! [[:editor/ax.set-tab-connected tab-connected?]])
        ;; If disconnected, also reset scittle status
        (when-not tab-connected?
-         (dispatch! [[:editor/ax.handle-ws-close]]))))
+         (dispatch! [[:editor/ax.handle-ws-close]])))
+
+     ;; Runtime status updates - per-script resolution errors
+     (= "runtime-status" (.-type message))
+     (let [tab-id (aget message "tab-id")
+           inspected-tab-id js/chrome.devtools.inspectedWindow.tabId]
+       (when (= tab-id inspected-tab-id)
+         (dispatch! [[:panel/ax.handle-runtime-status
+                      {:errors (aget message "errors")}]]))))
    ;; Return false - we don't send async response
    false))
 

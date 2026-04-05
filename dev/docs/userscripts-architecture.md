@@ -72,8 +72,10 @@ See [architecture/state-management.md](architecture/state-management.md) for com
 
 **`:script/inject` values:**
 - Vector of `scittle://` URLs for bundled Scittle ecosystem libraries
-- Dependencies are resolved automatically (e.g., `scittle://reagent.js` loads React)
-- See README for available libraries
+- Vector of `epupp://` URLs for user library scripts (any stored userscript)
+- Both protocols can be mixed in the same vector
+- Dependencies are resolved transitively (e.g., `scittle://reagent.js` loads React; `epupp://my_lib.cljs` loads that library's own dependencies)
+- See [architecture/library-namespaces.md](architecture/library-namespaces.md) for the full design
 
 **`:script/source` provenance tracking:**
 

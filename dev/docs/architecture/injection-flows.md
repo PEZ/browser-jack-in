@@ -29,14 +29,17 @@ See [connected-repl.md](connected-repl.md) for full details including message fl
 2. `handle-navigation!` waits for storage initialization
 3. `process-navigation!` gets matching enabled scripts
 4. Filters to `document-idle` scripts only
-5. `ensure-scittle!` → `execute-scripts!`
-6. `execute-scripts!` flow:
+5. Resolve dependencies via `dep_resolver` (handles mixed `scittle://` + `epupp://` graphs, topological ordering, dedup, cycle detection)
+6. `ensure-scittle!` → `execute-plan!`
+7. `execute-plan!` flow:
    - Inject content bridge
    - Wait for bridge ready (ping/pong)
    - Send `clear-userscripts` message
-    - Inject required Scittle libraries (in dependency order)
-   - Send `inject-userscript` for each script
+   - Inject required Scittle libraries (in dependency order)
+   - Inject `epupp://` library scripts (in dependency order)
+   - Send `inject-userscript` for each root script
    - Send `inject-script` for `trigger-scittle.js`
+8. Surface any resolution errors (missing libraries, cycles) in console, system banner, and per-script warning indicator
 
 ### Panel Evaluation (from DevTools)
 
@@ -112,14 +115,16 @@ flowchart TD
 
 ### Userscript Loader Flow
 
-The loader ([userscript-loader.js](../../../extension/userscript-loader.js)) runs in ISOLATED world at document-start:
+The loader (`src/userscript_loader.cljs`, compiled through Squint to `extension/userscript-loader.mjs` then bundled to `build/userscript-loader.js`) runs in ISOLATED world at document-start:
 
 1. Guard against multiple injections (`window.__epuppLoaderInjected`)
 2. Read all scripts from `chrome.storage.local`
 3. Filter to enabled scripts with early timing matching current URL
-4. Inject `vendor/scittle.js` asynchronously (waits for `onload` before proceeding)
-5. Inject each matching script as `<script type="application/x-scittle">`
-6. Inject `trigger-scittle.js` to evaluate all Scittle scripts
+4. Resolve `epupp://` library dependencies (transitive, with dedup and cycle detection)
+5. Inject `vendor/scittle.js` asynchronously (waits for `onload` before proceeding)
+6. Inject required Scittle libraries, then `epupp://` library scripts in dependency order
+7. Inject each matching root script as `<script type="application/x-scittle">`
+8. Inject `trigger-scittle.js` to evaluate all Scittle scripts
 
 Note: Registration uses `document_start` for both `document-start` and
 `document-end` scripts. The loader does not delay `document-end` scripts.
@@ -128,14 +133,16 @@ If a script needs DOM-ready semantics, it should handle that in code.
 ```mermaid
 sequenceDiagram
     participant Chrome
-    participant Loader as userscript-loader.js<br/>(ISOLATED)
+    participant Loader as userscript_loader.cljs<br/>(ISOLATED)
     participant Page as Page (MAIN)
 
     Chrome->>Loader: document-start
     Loader->>Loader: Read storage
     Loader->>Loader: Filter matching scripts
+    Loader->>Loader: Resolve epupp:// dependencies
     Loader->>Page: Inject scittle.js (async, waits for onload)
-    loop Each matching script
+    Loader->>Page: Inject Scittle libraries + epupp:// libraries
+    loop Each matching root script
         Loader->>Page: Inject <script type="x-scittle">
     end
     Loader->>Page: Inject trigger-scittle.js

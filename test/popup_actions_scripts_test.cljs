@@ -132,6 +132,41 @@
         (.toBeUndefined))))
 
 ;; ============================================================
+;; Runtime Status Actions Tests
+;; ============================================================
+
+(defn- test-handle-runtime-status-stores-errors-for-current-tab []
+  (let [state (assoc initial-state :scripts/current-tab-id 42 :runtime/errors {})
+        result (popup-actions/handle-action state uf-data
+                 [:popup/ax.handle-runtime-status {:tab-id 42
+                                                   :errors {"my/script.cljs" {:error/message "err"}}}])]
+    (-> (expect (count (:runtime/errors (:uf/db result)))) (.toBe 1))
+    (-> (expect (get-in (:uf/db result) [:runtime/errors "my/script.cljs" :error/message])) (.toBe "err"))))
+
+(defn- test-handle-runtime-status-ignores-different-tab []
+  (let [state (assoc initial-state :scripts/current-tab-id 42 :runtime/errors {})
+        result (popup-actions/handle-action state uf-data
+                 [:popup/ax.handle-runtime-status {:tab-id 99
+                                                   :errors {"my/script.cljs" {:error/message "err"}}}])]
+    ;; Should return nil (no state change)
+    (-> (expect result) (.toBeUndefined))))
+
+(defn- test-handle-runtime-status-clears-on-empty []
+  (let [state (assoc initial-state
+                     :scripts/current-tab-id 42
+                     :runtime/errors {"old.cljs" {:error/message "old"}})
+        result (popup-actions/handle-action state uf-data
+                 [:popup/ax.handle-runtime-status {:tab-id 42 :errors {}}])]
+    (-> (expect (count (:runtime/errors (:uf/db result)))) (.toBe 0))))
+
+(defn- test-load-runtime-status-triggers-effect []
+  (let [state (assoc initial-state :scripts/current-tab-id 42)
+        result (popup-actions/handle-action state uf-data [:popup/ax.load-runtime-status])
+        [fx-name fx-tab-id] (first (:uf/fxs result))]
+    (-> (expect fx-name) (.toBe :popup/fx.load-runtime-status))
+    (-> (expect fx-tab-id) (.toBe 42))))
+
+;; ============================================================
 ;; Test Registration
 ;; ============================================================
 
@@ -148,4 +183,10 @@
 
             ;; Evaluate action
             (test ":popup/ax.evaluate-script triggers effect" test-evaluate-script-triggers-effect)
-            (test ":popup/ax.evaluate-script returns nil for non-existent" test-evaluate-script-returns-nil-for-non-existent)))
+            (test ":popup/ax.evaluate-script returns nil for non-existent" test-evaluate-script-returns-nil-for-non-existent)
+
+            ;; Runtime status
+            (test ":popup/ax.handle-runtime-status stores errors for current tab" test-handle-runtime-status-stores-errors-for-current-tab)
+            (test ":popup/ax.handle-runtime-status ignores different tab" test-handle-runtime-status-ignores-different-tab)
+            (test ":popup/ax.handle-runtime-status clears on empty errors" test-handle-runtime-status-clears-on-empty)
+            (test ":popup/ax.load-runtime-status triggers effect" test-load-runtime-status-triggers-effect)))
