@@ -83,7 +83,58 @@ TBD: PRs welcome
 
 ## [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
 
-TBD: PRs welcome
+[Claude Code](https://docs.anthropic.com/en/docs/claude-code) is Anthropic's CLI agent for software engineering. It connects to Epupp via `clj-nrepl-eval`, a command-line nREPL client, giving Claude direct access to evaluate ClojureScript in your browser tab.
+
+What this means in practice: you describe what you want, Claude writes ClojureScript, evaluates it in your browser, gets structured data back, and iterates — all without you copy-pasting anything. You navigate and provide judgment; Claude writes and evaluates code; the REPL is the shared workspace.
+
+When Claude Code connects to Epupp, in its words: "it gets something extraordinary: a live, bidirectional channel into a real browser tab running on a real human's machine, with their real cookies, sessions, and authenticated state. Through an nREPL port, Claude can evaluate ClojureScript expressions that execute inside the page's DOM — reading elements, extracting data, modifying content, injecting UI — and get structured Clojure data back. It's not a headless browser or a screenshot. It's the actual page the user is looking at, and both the human and the AI see the same thing change in real time. The user scrolls, the DOM updates, and Claude can immediately query what appeared. Claude types an expression, the page transforms, and the user sees it happen. This makes Epupp the closest thing to "pair programming on the web" that exists — the human navigates and provides judgment, the AI writes and evaluates code, and the REPL is their shared workspace."
+
+### Prerequisites
+
+In addition to the [general prerequisites](#prerequisistes):
+
+0. Install [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
+0. Install `clj-nrepl-eval` via [bbin](https://github.com/babashka/bbin):
+   ```bash
+   bbin install io.github.bhauman/clojure-mcp-light
+   ```
+
+### Connecting
+
+0. Start the browser-nrepl relay from your **my-epupp-hq** directory:
+   ```bash
+   bb browser-nrepl
+   ```
+0. Connect the browser tab: Click **Connect** in the Epupp extension's popup UI.
+0. Start Claude Code in your **my-epupp-hq** directory:
+   ```bash
+   claude
+   ```
+0. Tell Claude the REPL is connected:
+   ```
+   The Epupp REPL is connected on port 1339. Do something fun with the page.
+   ```
+
+Claude will use `clj-nrepl-eval -p 1339 "<code>"` to evaluate expressions. For example:
+
+```bash
+# Check what page is connected
+clj-nrepl-eval -p 1339 '(.-title js/document)'
+
+# Query the DOM
+clj-nrepl-eval -p 1339 '(mapv #(.-textContent %) (js/document.querySelectorAll "h2"))'
+
+# Modify the page
+clj-nrepl-eval -p 1339 '(set! (.. js/document -body -style -backgroundColor) "pink")'
+```
+
+### Tips
+
+- **AGENTS.md**: This project includes an `AGENTS.md` with Epupp-specific instructions that Claude Code reads automatically. It teaches Claude the Scittle environment, common patterns, and pitfalls.
+- **Navigation**: Claude should use `(js/setTimeout #(set! (.-location js/window) "https://...") 50)` to navigate — direct assignment hangs the REPL because the page unload kills the connection.
+- **Timeouts**: For heavy pages, Claude may need longer timeouts: `clj-nrepl-eval -p 1339 --timeout 30000 '<code>'`
+- **State persists**: Definitions (`def`, `defn`) persist across evaluations within a page session. Page reload or navigation clears everything.
+- **Authenticated access**: Because the REPL runs inside your actual browser tab, Claude has access to whatever you're logged into — your YouTube history, LinkedIn feed, internal tools, etc.
 
 ## Your Favorite AI Agent Harness
 
