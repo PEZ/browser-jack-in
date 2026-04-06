@@ -1553,40 +1553,40 @@
                   test-tab-handle-removed-clears-tab-errors)))
 
 ;; ============================================================
-;; Git Dep Action Tests
+;; External Dep Action Tests
 ;; ============================================================
 
-(def ^:private git-dep-sha "abcdef0123456789abcdef0123456789abcdef01")
+(def ^:private ext-dep-sha "abcdef0123456789abcdef0123456789abcdef01")
 
 (defn- test-resolve-uncached-urls-with-uncached-returns-fetch-effect []
-  (let [git-url (str "git://github.com/user/repo@" git-dep-sha "/lib.cljs")
-        state {:storage/git-dep-cache {}}
+  (let [ext-url (str "https://raw.githubusercontent.com/user/repo/" ext-dep-sha "/lib.cljs")
+        state {:storage/ext-dep-cache {}}
         result (bg-actions/handle-action state uf-data
-                                         [:git-dep/ax.resolve-uncached-urls [git-url]])]
+                                         [:ext-dep/ax.resolve-uncached-urls [ext-url]])]
     (-> (expect result) (.toBeTruthy))
     (-> (expect (:uf/fxs result)) (.toBeTruthy))
     (let [fx (first (:uf/fxs result))]
       (-> (expect (first fx)) (.toBe :uf/await))
-      (-> (expect (second fx)) (.toBe :git-dep/fx.fetch-deps)))
+      (-> (expect (second fx)) (.toBe :ext-dep/fx.fetch-deps)))
     (-> (expect (:uf/dxs result)) (.toBeTruthy))
     (let [dx (first (:uf/dxs result))]
-      (-> (expect (first dx)) (.toBe :git-dep/ax.cache-results))
+      (-> (expect (first dx)) (.toBe :ext-dep/ax.cache-results))
       (-> (expect (second dx)) (.toBe :uf/prev-result)))))
 
 (defn- test-resolve-uncached-urls-empty-list-returns-nil []
-  (let [state {:storage/git-dep-cache {}}
+  (let [state {:storage/ext-dep-cache {}}
         result (bg-actions/handle-action state uf-data
-                 [:git-dep/ax.resolve-uncached-urls []])]
+                 [:ext-dep/ax.resolve-uncached-urls []])]
     (-> (expect result) (.toBeFalsy))))
 
 (defn- test-resolve-uncached-urls-all-cached-returns-nil []
-  (let [git-url (str "git://github.com/user/repo@" git-dep-sha "/lib.cljs")
-        state {:storage/git-dep-cache {git-url {:cache/code "(ns lib)" :cache/sha git-dep-sha}}}
+  (let [ext-url (str "https://raw.githubusercontent.com/user/repo/" ext-dep-sha "/lib.cljs")
+        state {:storage/ext-dep-cache {ext-url {:cache/code "(ns lib)" :cache/url ext-url}}}
         result (bg-actions/handle-action state uf-data
-                 [:git-dep/ax.resolve-uncached-urls [git-url]])]
+                 [:ext-dep/ax.resolve-uncached-urls [ext-url]])]
     (-> (expect result) (.toBeFalsy))))
 
-(describe ":git-dep/ax.resolve-uncached-urls"
+(describe ":ext-dep/ax.resolve-uncached-urls"
           (fn []
             (test "with uncached URLs returns fetch effect and cache-results deferred action"
                   test-resolve-uncached-urls-with-uncached-returns-fetch-effect)
@@ -1594,59 +1594,59 @@
             (test "with all cached URLs returns nil" test-resolve-uncached-urls-all-cached-returns-nil)))
 
 ;; ============================================================
-;; Git Dep Cache Results Action Tests
+;; External Dep Cache Results Action Tests
 ;; ============================================================
 
 (defn- test-cache-results-merges-into-cache-and-persists []
-  (let [url (str "git://github.com/user/repo@" git-dep-sha "/lib.cljs")
-        entry {:cache/code "(ns lib)" :cache/sha git-dep-sha :cache/schema-version 1}
+  (let [url (str "https://raw.githubusercontent.com/user/repo/" ext-dep-sha "/lib.cljs")
+        entry {:cache/code "(ns lib)" :cache/url url :cache/schema-version 1}
         fetch-result {:resolved {url entry} :errors []}
-        state {:storage/git-dep-cache {}}
+        state {:storage/ext-dep-cache {}}
         result (bg-actions/handle-action state uf-data
-                 [:git-dep/ax.cache-results fetch-result])]
-    (-> (expect (get-in result [:uf/db :storage/git-dep-cache url]))
+                 [:ext-dep/ax.cache-results fetch-result])]
+    (-> (expect (get-in result [:uf/db :storage/ext-dep-cache url]))
         (.toBeTruthy))
-    (-> (expect (:cache/code (get-in result [:uf/db :storage/git-dep-cache url])))
+    (-> (expect (:cache/code (get-in result [:uf/db :storage/ext-dep-cache url])))
         (.toBe "(ns lib)"))
     (-> (expect (some #(= [:storage/fx.persist!] %) (:uf/fxs result)))
         (.toBeTruthy))))
 
 (defn- test-cache-results-preserves-existing-cache []
-  (let [existing-url "git://github.com/old/repo@sha/old.cljs"
-        new-url (str "git://github.com/user/repo@" git-dep-sha "/new.cljs")
-        fetch-result {:resolved {new-url {:cache/code "(ns new)" :cache/sha git-dep-sha}} :errors []}
-        state {:storage/git-dep-cache {existing-url {:cache/code "(ns old)"}}}
+  (let [existing-url "https://raw.githubusercontent.com/old/repo/abcdef0123456789abcdef0123456789abcdef01/old.cljs"
+        new-url (str "https://raw.githubusercontent.com/user/repo/" ext-dep-sha "/new.cljs")
+        fetch-result {:resolved {new-url {:cache/code "(ns new)" :cache/url new-url}} :errors []}
+        state {:storage/ext-dep-cache {existing-url {:cache/code "(ns old)"}}}
         result (bg-actions/handle-action state uf-data
-                 [:git-dep/ax.cache-results fetch-result])]
-    (-> (expect (get-in result [:uf/db :storage/git-dep-cache existing-url]))
+                 [:ext-dep/ax.cache-results fetch-result])]
+    (-> (expect (get-in result [:uf/db :storage/ext-dep-cache existing-url]))
         (.toBeTruthy))
-    (-> (expect (get-in result [:uf/db :storage/git-dep-cache new-url]))
+    (-> (expect (get-in result [:uf/db :storage/ext-dep-cache new-url]))
         (.toBeTruthy))))
 
 (defn- test-cache-results-empty-resolved-still-persists []
   (let [fetch-result {:resolved {} :errors []}
-        state {:storage/git-dep-cache {"existing" {:cache/code "old"}}}
+        state {:storage/ext-dep-cache {"existing" {:cache/code "old"}}}
         result (bg-actions/handle-action state uf-data
-                 [:git-dep/ax.cache-results fetch-result])]
+                 [:ext-dep/ax.cache-results fetch-result])]
     (-> (expect (some #(= [:storage/fx.persist!] %) (:uf/fxs result)))
         (.toBeTruthy))
-    (-> (expect (get-in result [:uf/db :storage/git-dep-cache "existing"]))
+    (-> (expect (get-in result [:uf/db :storage/ext-dep-cache "existing"]))
         (.toBeTruthy))))
 
 (defn- test-cache-results-with-errors-broadcasts-banner []
   (let [fetch-result {:resolved {}
-                      :errors [{:error/type :git-dep/fetch-failed
+                      :errors [{:error/type :ext-dep/fetch-failed
                                 :error/message "Failed to fetch dep"}]}
-        state {:storage/git-dep-cache {}}
+        state {:storage/ext-dep-cache {}}
         result (bg-actions/handle-action state uf-data
-                 [:git-dep/ax.cache-results fetch-result])]
+                 [:ext-dep/ax.cache-results fetch-result])]
     (-> (expect (count (:uf/fxs result))) (.toBe 2))
     (-> (expect (some #(= [:storage/fx.persist!] %) (:uf/fxs result)))
         (.toBeTruthy))
     (-> (expect (some #(= :banner/fx.broadcast-system (first %)) (:uf/fxs result)))
         (.toBeTruthy))))
 
-(describe ":git-dep/ax.cache-results"
+(describe ":ext-dep/ax.cache-results"
   (fn []
     (test "merges resolved entries into cache and persists" test-cache-results-merges-into-cache-and-persists)
     (test "preserves existing cache entries" test-cache-results-preserves-existing-cache)

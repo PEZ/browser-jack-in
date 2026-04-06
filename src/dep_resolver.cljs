@@ -1,10 +1,10 @@
 (ns dep-resolver
-  "Pure dependency resolver for mixed scittle:// + epupp:// dependency graphs.
+  "Pure dependency resolver for mixed scittle:// + epupp:// + external dependency graphs.
    Receives all data as arguments - no storage reads, no side effects.
    Produces an ordered execution plan of vendor files, library scripts,
    and root scripts with deduplication and error detection."
   (:require [clojure.string :as string]
-            [git-dep :as git-dep]
+            [ext-dep :as ext-dep]
             [scittle-libs :as scittle-libs]
             [script-utils :as script-utils]))
 
@@ -14,12 +14,12 @@
 
 (defn classify-inject-url
   "Classify an inject URL by protocol.
-   Returns :scittle, :epupp, :git-dep, or :unknown."
+   Returns :scittle, :epupp, :ext-dep, or :unknown."
   [url]
   (cond
     (and (string? url) (string/starts-with? url "scittle://")) :scittle
     (and (string? url) (string/starts-with? url "epupp://")) :epupp
-    (git-dep/git-dep-url? url) :git-dep
+    (ext-dep/valid-ext-dep-url? url) :ext-dep
     :else :unknown))
 
 (defn parse-epupp-url
@@ -76,9 +76,9 @@
   "Resolve transitive dependencies for a single script.
    Walks depth-first, collecting vendor URLs and resolved scripts in order.
    Detects missing libraries, self-references, cycles, and cache misses.
-   git-dep-cache is a map of URL->cache-entry for git:// dependencies (may be nil).
+   ext-dep-cache is a map of URL->cache-entry for external dependencies (may be nil).
    Returns {:resolved [items-in-order] :errors [envelopes] :vendor-urls [strings]}"
-  [root-script catalog git-dep-cache]
+  [root-script catalog ext-dep-cache]
   (let [errors (atom [])
         vendor-urls (atom [])
         resolved-order (atom [])
@@ -121,15 +121,15 @@
                             :else
                             (walk (get catalog dep-name) new-chain)))))
 
-                    (= kind :git-dep)
-                    (walk-git-dep url chain)))))
+                    (= kind :ext-dep)
+                    (walk-ext-dep url chain)))))
 
-            (walk-git-dep [url chain]
+            (walk-ext-dep [url chain]
               (let [new-chain (conj chain url)]
                 (cond
                   (some #(= % url) chain)
                   (swap! errors conj
-                         (make-error :git-dep/cycle
+                         (make-error :ext-dep/cycle
                                      (first chain) url new-chain
                                      (str "Dependency cycle detected: "
                                           (string/join " -> " new-chain))))
@@ -138,19 +138,19 @@
                   nil
 
                   :else
-                  (if-let [entry (get git-dep-cache url)]
+                  (if-let [entry (get ext-dep-cache url)]
                     (do
                       (swap! seen conj url)
                       (resolve-deps (get entry :cache/inject []) new-chain)
                       (swap! resolved-order conj
-                             {:step/type :git-dep-script
+                             {:step/type :ext-dep-script
                               :step/url url
                               :step/code (:cache/code entry)
-                              :step/source :git}))
+                              :step/source :ext}))
                     (swap! errors conj
-                           (make-error :git-dep/cache-miss
+                           (make-error :ext-dep/cache-miss
                                        (first chain) url new-chain
-                                       (str "Git dependency not in cache: " url
+                                       (str "External dependency not in cache: " url
                                             (format-required-by new-chain))))))))
 
             (walk [current-script chain]
@@ -174,18 +174,18 @@
    Parameters:
    - root-scripts: collection of scripts to resolve (the 'roots')
    - all-scripts: collection of ALL available scripts (for library lookup)
-   - git-dep-cache: (optional) map of git URL -> cache entry for git:// dependencies
+   - ext-dep-cache: (optional) map of ext dep URL -> cache entry for external dependencies
 
    Returns:
-   {:plan/steps [{:step/type :vendor-file|:library-script|:git-dep-script|:root-script ...}]
+   {:plan/steps [{:step/type :vendor-file|:library-script|:ext-dep-script|:root-script ...}]
     :plan/vendor-namespaces [string]  ; namespace names for vendor verification
     :plan/errors [error-envelopes]}"
   ([root-scripts all-scripts]
    (resolve-execution-plan root-scripts all-scripts nil))
-  ([root-scripts all-scripts git-dep-cache]
+  ([root-scripts all-scripts ext-dep-cache]
    (let [catalog (build-catalog all-scripts)
          root-ids (set (map :script/id root-scripts))
-         results (mapv #(resolve-script-deps % catalog git-dep-cache) root-scripts)
+         results (mapv #(resolve-script-deps % catalog ext-dep-cache) root-scripts)
          all-errors (vec (mapcat :errors results))
          all-vendor-urls (vec (distinct (mapcat :vendor-urls results)))
          vendor-files (scittle-libs/collect-lib-files
@@ -210,7 +210,7 @@
                                :step/source :scittle})
                             vendor-files)
          non-root-steps (mapv (fn [item]
-                                (if (= :git-dep-script (:step/type item))
+                                (if (= :ext-dep-script (:step/type item))
                                   item
                                   {:step/type :library-script
                                    :step/id (:script/id item)
@@ -235,7 +235,7 @@
   (mapv :step/path (filterv #(= :vendor-file (:step/type %)) (:plan/steps plan))))
 
 (defn plan-script-steps
-  "Extract library, git-dep, and root script steps from plan (in order)."
+  "Extract library, ext-dep, and root script steps from plan (in order)."
   [plan]
-  (filterv #(contains? #{:library-script :git-dep-script :root-script} (:step/type %))
+  (filterv #(contains? #{:library-script :ext-dep-script :root-script} (:step/type %))
            (:plan/steps plan)))

@@ -7,7 +7,7 @@
             [background-actions.sponsor-actions :as sponsor-actions]
             [background-utils :as bg-utils]
             [dep-resolver :as dep-resolver]
-            [git-dep :as git-dep]
+            [ext-dep :as ext-dep]
             [scittle-libs :as scittle-libs]
             [script-utils :as script-utils]))
 
@@ -249,12 +249,12 @@
           ;; Build a synthetic script with the inject list and resolve via dep-resolver
           synthetic-script {:script/id "panel-inject" :script/name "panel-inject"
                             :script/code "" :script/inject (or libs [])}
-          git-dep-cache (or (:storage/git-dep-cache state) {})
-          plan (dep-resolver/resolve-execution-plan [synthetic-script] (or all-scripts []) git-dep-cache)
+          ext-dep-cache (or (:storage/ext-dep-cache state) {})
+          plan (dep-resolver/resolve-execution-plan [synthetic-script] (or all-scripts []) ext-dep-cache)
           errors (:plan/errors plan)
           vendor-files (dep-resolver/plan-vendor-files plan)
-          ;; Only library-script and git-dep-script steps (deps), not root-script (the synthetic placeholder)
-          lib-steps (filterv #(contains? #{:library-script :git-dep-script} (:step/type %)) (:plan/steps plan))
+          ;; Only library-script and ext-dep-script steps (deps), not root-script (the synthetic placeholder)
+          lib-steps (filterv #(contains? #{:library-script :ext-dep-script} (:step/type %)) (:plan/steps plan))
           ;; Build effect chain: bridge + vendor files + library scripts + response
           vendor-fxs (mapv (fn [path]
                              ;; plan-vendor-files returns "vendor/file.js", strip prefix
@@ -304,12 +304,12 @@
           ;; Use resolver for mixed scittle:// + epupp:// deps
           synthetic-script {:script/id "repl-manifest" :script/name "repl-manifest"
                             :script/code "" :script/inject (or libs [])}
-          git-dep-cache (or (:storage/git-dep-cache state) {})
-          plan (dep-resolver/resolve-execution-plan [synthetic-script] (or all-scripts []) git-dep-cache)
+          ext-dep-cache (or (:storage/ext-dep-cache state) {})
+          plan (dep-resolver/resolve-execution-plan [synthetic-script] (or all-scripts []) ext-dep-cache)
           errors (:plan/errors plan)
           vendor-files (dep-resolver/plan-vendor-files plan)
-          ;; Only library-script and git-dep-script steps (deps)
-          lib-steps (filterv #(contains? #{:library-script :git-dep-script} (:step/type %)) (:plan/steps plan))
+          ;; Only library-script and ext-dep-script steps (deps)
+          lib-steps (filterv #(contains? #{:library-script :ext-dep-script} (:step/type %)) (:plan/steps plan))
           vendor-fxs (mapv (fn [path]
                              [:uf/await :msg/fx.inject-lib-file tab-id (subs path 7)])
                            vendor-files)
@@ -460,7 +460,7 @@
         (let [scripts-with-deps (filterv #(seq (:script/inject %)) all-scripts)
               plan (when (seq scripts-with-deps)
                      (dep-resolver/resolve-execution-plan scripts-with-deps all-scripts
-                                                         (or (:storage/git-dep-cache state) {})))
+                                                         (or (:storage/ext-dep-cache state) {})))
               new-errors (if plan (:plan/errors plan) [])
               all-known-errors (reduce into #{} (vals errors-by-tab))
               truly-new (filterv (fn [e] (not (some #(= (:error/script-name %) (:error/script-name e))
@@ -475,26 +475,26 @@
                                                         :error (:error/message (first truly-new))
                                                         :errors (mapv :error/message truly-new)}]))})))
 
-    :git-dep/ax.resolve-uncached-urls
-    (let [[git-urls] args
-          existing-cache (or (:storage/git-dep-cache state) {})
-          uncached (filterv #(not (contains? existing-cache %)) git-urls)]
+    :ext-dep/ax.resolve-uncached-urls
+    (let [[ext-urls] args
+          existing-cache (or (:storage/ext-dep-cache state) {})
+          uncached (filterv #(not (contains? existing-cache %)) ext-urls)]
       (when (seq uncached)
-        {:uf/fxs [[:uf/await :git-dep/fx.fetch-deps uncached existing-cache]]
-         :uf/dxs [[:git-dep/ax.cache-results :uf/prev-result]]}))
+        {:uf/fxs [[:uf/await :ext-dep/fx.fetch-deps uncached existing-cache]]
+         :uf/dxs [[:ext-dep/ax.cache-results :uf/prev-result]]}))
 
-    :git-dep/ax.cache-results
+    :ext-dep/ax.cache-results
     (let [[fetch-result] args
           resolved (or (:resolved fetch-result) {})
           errors (or (:errors fetch-result) [])
-          existing-cache (or (:storage/git-dep-cache state) {})
+          existing-cache (or (:storage/ext-dep-cache state) {})
           merged-cache (merge existing-cache resolved)]
-      (cond-> {:uf/db (assoc state :storage/git-dep-cache merged-cache)
+      (cond-> {:uf/db (assoc state :storage/ext-dep-cache merged-cache)
                :uf/fxs [[:storage/fx.persist!]]}
         (seq errors)
         (update :uf/fxs conj [:banner/fx.broadcast-system
                                {:event-type "error"
-                                :operation "git-dep-resolution"
+                                :operation "ext-dep-resolution"
                                 :error (:error/message (first errors))
                                 :errors (mapv :error/message errors)}])))
 

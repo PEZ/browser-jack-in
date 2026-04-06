@@ -24,7 +24,7 @@
   (atom {:storage/schema-version current-schema-version
          :storage/scripts []
          :storage/granted-origins []
-         :storage/git-dep-cache {}
+         :storage/ext-dep-cache {}
          :sponsor/status false
          :sponsor/checked-at nil}))
 
@@ -111,7 +111,7 @@
                   #js {:schemaVersion schema-version
                        :scripts (clj->js (mapv script-utils/script->js scripts))
                        :grantedOrigins (clj->js granted-origins)
-                       :gitDepCache (clj->js (:storage/git-dep-cache db))
+                       :extDepCache (clj->js (:storage/ext-dep-cache db))
                        :sponsorStatus (:sponsor/status db)
                        :sponsorCheckedAt (:sponsor/checked-at db)}
                   (fn [] (resolve nil))))))))
@@ -120,16 +120,16 @@
   "Load scripts from chrome.storage.local into !db atom.
    Returns a promise that resolves when loaded."
   []
-  (let [result (js-await (js/chrome.storage.local.get #js ["schemaVersion" "scripts" "grantedOrigins" "granted-origins" "sponsorStatus" "sponsorCheckedAt" "gitDepCache"]))
+  (let [result (js-await (js/chrome.storage.local.get #js ["schemaVersion" "scripts" "grantedOrigins" "granted-origins" "sponsorStatus" "sponsorCheckedAt" "extDepCache"]))
         {:storage/keys [schema-version scripts granted-origins remove-keys migrated?]}
         (normalize-storage-result result)
         sponsor-status (boolean (.-sponsorStatus result))
         sponsor-checked-at (.-sponsorCheckedAt result)
-        git-dep-cache (or (.-gitDepCache result) {})]
+        ext-dep-cache (or (.-extDepCache result) {})]
     (reset! !db {:storage/schema-version schema-version
                  :storage/scripts scripts
                  :storage/granted-origins granted-origins
-                 :storage/git-dep-cache git-dep-cache
+                 :storage/ext-dep-cache ext-dep-cache
                  :sponsor/status sponsor-status
                  :sponsor/checked-at sponsor-checked-at})
     (when migrated?
@@ -179,9 +179,9 @@
                              (vec (.-newValue origins-change))
                              [])]
            (swap! !db assoc :storage/granted-origins new-origins)))
-       (when-let [git-dep-cache-change (.-gitDepCache changes)]
-         (let [new-cache (or (js->clj (.-newValue git-dep-cache-change)) {})]
-           (swap! !db assoc :storage/git-dep-cache new-cache)))
+       (when-let [ext-dep-cache-change (.-extDepCache changes)]
+         (let [new-cache (or (js->clj (.-newValue ext-dep-cache-change)) {})]
+           (swap! !db assoc :storage/ext-dep-cache new-cache)))
        (when-let [sponsor-change (.-sponsorStatus changes)]
          (swap! !db assoc :sponsor/status (boolean (.-newValue sponsor-change))))
        (when-let [checked-change (.-sponsorCheckedAt changes)]
@@ -350,18 +350,18 @@
   (persist!))
 
 ;; ============================================================
-;; Git Dependency Cache
+;; External Dependency Cache
 ;; ============================================================
 
-(defn get-git-dep-cache
-  "Get the full git dependency cache map."
+(defn get-ext-dep-cache
+  "Get the full external dependency cache map."
   []
-  (:storage/git-dep-cache @!db))
+  (:storage/ext-dep-cache @!db))
 
-(defn get-cached-git-dep
-  "Get a cached git dependency entry by URL key. Returns nil if not found."
+(defn get-cached-ext-dep
+  "Get a cached external dependency entry by URL key. Returns nil if not found."
   [url]
-  (get (get-git-dep-cache) url))
+  (get (get-ext-dep-cache) url))
 
 ;; ============================================================
 ;; Built-in userscripts

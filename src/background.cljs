@@ -17,7 +17,7 @@
             [bg-ws :as bg-ws]
             [bg-inject :as bg-inject]
             [dep-resolver :as dep-resolver]
-            [git-dep :as git-dep]
+            [ext-dep :as ext-dep]
             [permissions :as permissions]))
 
 (def ^:private config js/EXTENSION_CONFIG)
@@ -353,7 +353,7 @@
           (try
             (let [all-scripts (storage/get-scripts)
                   plan (dep-resolver/resolve-execution-plan (vec idle-scripts) all-scripts
-                                                           (storage/get-git-dep-cache))
+                                                           (storage/get-ext-dep-cache))
                   errors (:plan/errors plan)]
               ;; Handle resolution errors: log and broadcast, but continue with resolved scripts
               (when (seq errors)
@@ -778,7 +778,7 @@
                     (js-await (bg-inject/ensure-scittle! dispatch! tab-id :disconnected))
                     (let [all-scripts (storage/get-scripts)
                           plan (dep-resolver/resolve-execution-plan [installer] all-scripts
-                                                                   (storage/get-git-dep-cache))]
+                                                                   (storage/get-ext-dep-cache))]
                       (js-await (bg-inject/execute-plan! tab-id plan)))
                     (swap! !installer-injected-tabs conj tab-id))))))
           (log/debug "Background" "Installer scan skipped - host permission not granted for tab" tab-id))))
@@ -891,12 +891,16 @@
                          (js-await (registration/sync-registrations!))
                          (let [all-scripts (storage/get-scripts)
                                all-inject-urls (mapcat :script/inject all-scripts)
-                               git-urls (git-dep/extract-git-dep-urls (vec all-inject-urls))]
-                           (dispatch! (cond-> [[:runtime/ax.re-resolve-on-change all-scripts]]
-                                        (seq git-urls)
-                                        (conj [:git-dep/ax.resolve-uncached-urls git-urls])))))))
-                    (when (aget changes "gitDepCache")
-                      (log/debug "Background" "Git dep cache changed, re-resolving")
+                               ext-urls (ext-dep/extract-ext-dep-urls (vec all-inject-urls))]
+                           ;; Resolve uncached ext-deps FIRST so the cache is populated
+                           ;; before re-resolve runs (Uniflow processes actions sequentially)
+                           (dispatch! (cond-> []
+                                        (seq ext-urls)
+                                        (conj [:ext-dep/ax.resolve-uncached-urls ext-urls])
+                                        true
+                                        (conj [:runtime/ax.re-resolve-on-change all-scripts])))))))
+                    (when (aget changes "extDepCache")
+                      (log/debug "Background" "Ext dep cache changed, re-resolving")
                       ((^:async fn []
                          (js-await (ensure-initialized! dispatch!))
                          (let [all-scripts (storage/get-scripts)]
@@ -975,6 +979,12 @@
                              (log/set-debug-enabled! enabled)
                              (res true)))))))
            (js-await (registration/sync-registrations!))
+           ;; Cold-start: resolve any uncached ext-dep URLs
+           (let [all-scripts (storage/get-scripts)
+                 all-inject-urls (mapcat :script/inject all-scripts)
+                 ext-urls (ext-dep/extract-ext-dep-urls (vec all-inject-urls))]
+             (when (seq ext-urls)
+               (dispatch! [[:ext-dep/ax.resolve-uncached-urls ext-urls]])))
            (log/info "Background" "Initialization complete")
            (js-await (test-logger/log-event! "EXTENSION_STARTED"
                                              {:version (.-version (.getManifest js/chrome.runtime))}))
@@ -1105,11 +1115,11 @@
         (catch :default err
           {:success false :error (.-message err)})))
 
-    :git-dep/fx.fetch-deps
+    :ext-dep/fx.fetch-deps
     (let [[uncached-urls existing-cache] args]
-      (js-await (git-dep/resolve-and-fetch!
+      (js-await (ext-dep/resolve-and-fetch!
                  {:inject-urls uncached-urls
-                  :git-dep-cache existing-cache
+                  :ext-dep-cache existing-cache
                   :fetch-fn fetch-text!
                   :parse-manifest-fn manifest-parser/extract-manifest
                   :now (.now js/Date)})))
