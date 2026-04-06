@@ -18,7 +18,7 @@
 
 (def known-epupp-keys
   "Set of known epupp manifest keys."
-  #{"epupp/script-name" "epupp/auto-run-match" "epupp/description" "epupp/run-at" "epupp/inject"})
+  #{"epupp/script-name" "epupp/auto-run-match" "epupp/description" "epupp/run-at" "epupp/inject" "epupp/library?"})
 
 (defn- get-epupp-keys
   "Returns vector of all epupp/ prefixed keys found in parsed object."
@@ -67,6 +67,7 @@
                           (when (string? d) d))
             raw-run-at (aget parsed "epupp/run-at")
             raw-inject (aget parsed "epupp/inject")
+            library? (boolean (aget parsed "epupp/library?"))
             ;; Coerced values
             script-name (when raw-script-name
                           (script-utils/normalize-script-name raw-script-name))
@@ -91,6 +92,7 @@
          "raw-run-at" raw-run-at
          "run-at-invalid?" run-at-invalid?
          "inject" inject-urls
+         "library?" library?
          "found-keys" found-keys
          "unknown-keys" unknown-keys}))))
 

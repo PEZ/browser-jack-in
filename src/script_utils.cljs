@@ -55,6 +55,7 @@
         manifest-run-at (get manifest "run-at")
         manifest-inject (get manifest "inject")
         manifest-match (get manifest "auto-run-match")
+        manifest-library? (get manifest "library?")
         manifest-has-auto-run-key? (when has-manifest?
                                      (some #(= % "epupp/auto-run-match")
                                            (get manifest "found-keys")))
@@ -78,7 +79,8 @@
                            :script/inject inject)
       (some? manifest-name) (assoc :script/name manifest-name)
       (and has-manifest? (some? manifest-description)) (assoc :script/description manifest-description)
-      (and has-manifest? (nil? manifest-description)) (dissoc :script/description))))
+      (and has-manifest? (nil? manifest-description)) (dissoc :script/description)
+      (and has-manifest? manifest-library?) (assoc :script/library? true))))
 
 (defn parse-scripts
   "Convert JS scripts array to Clojure with namespaced keys"
@@ -325,6 +327,11 @@
    Special scripts appear in a dedicated 'Special' section in the popup."
   [script]
   (boolean (:script/special? script)))
+
+(defn library-script?
+  "Check if a script is a library script via :script/library? metadata."
+  [script]
+  (boolean (:script/library? script)))
 
 (defn name-matches-builtin?
   "Check if a normalized script name matches any builtin script's normalized name.

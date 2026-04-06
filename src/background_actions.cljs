@@ -447,4 +447,13 @@
           tab-errors (get-in state [:runtime/errors tab-id] {})]
       {:uf/fxs [[:msg/fx.send-response send-response {:success true :errors tab-errors}]]})
 
+    :runtime/ax.re-resolve-on-change
+    (let [[all-scripts] args
+          errors-by-tab (:runtime/errors state)]
+      (when (seq errors-by-tab)
+        {:uf/fxs (vec (mapcat (fn [[tab-id tab-errors]]
+                                (when (seq tab-errors)
+                                  [[:runtime/fx.re-resolve-tab tab-id tab-errors all-scripts]]))
+                              errors-by-tab))}))
+
     :uf/unhandled-ax))

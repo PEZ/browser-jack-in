@@ -172,6 +172,7 @@ The popup has the following sections:
 1. **REPL Connect**. Shows how to connect the current tab's REPL to your editor and/or AI agent. Also shows which tabs are currently connected.
 2. Userscripts sections:
    * **Manual/on-demand**. Scripts that do not auto-run on any page, use the **play** button to run them.
+   * **Libraries**. Scripts marked with `:epupp/library? true` that have no auto-run pattern. These are dependency-only scripts used by other scripts via `:epupp/inject`. Collapsed by default.
    * **Auto-run for this page**. Scripts that has an `:epupp/auto-run-match` pattern than matches the current page.
    * *Auto-run not matching this page*. Scripts that auto-runs on some other pages, but not the current one.
    * **Special**. Built-in scripts that has some special way of being triggered to start. (Currently only the **Web Userscript Installer**)
@@ -264,6 +265,7 @@ The manifest is a plain Clojure map at the top of the file. Your code runs in th
 | `:epupp/description` | No | - | Shown in the popup UI. |
 | `:epupp/run-at` | No | `"document-idle"` | When to run: `"document-start"`, `"document-end"`, or `"document-idle"`. |
 | `:epupp/inject` | No | `[]` | Scittle library URLs (`scittle://`) and/or user library references (`epupp://`) to load before the script runs. |
+| `:epupp/library?` | No | `false` | Mark as a library script. Library-only scripts (no `:epupp/auto-run-match`) appear in a dedicated Libraries section in the popup. Scripts with both `:epupp/library?` and `:epupp/auto-run-match` appear in their auto-run section. |
 
 Scripts with `:epupp/auto-run-match` start disabled. Enable them in the popup for auto-injection on matching pages. Scripts without this key only run when you click the Play button in the popup.
 
@@ -351,7 +353,8 @@ Any userscript can serve as a shared library. Reference it from another script's
 **Library script** (`utils/dom.cljs`):
 ```clojure
 {:epupp/script-name "utils/dom.cljs"
- :epupp/description "DOM utility functions"}
+ :epupp/description "DOM utility functions"
+ :epupp/library? true}
 
 (ns utils.dom)
 
@@ -375,27 +378,18 @@ Any userscript can serve as a shared library. Reference it from another script's
 
 Epupp resolves dependencies transitively: if your library itself has `epupp://` or `scittle://` dependencies, those are resolved too. Cycles are detected and reported.
 
-Library-ness is emergent - there is no special flag. Any script becomes a library when another script references it. Disabled scripts and built-in scripts are valid library targets.
-
-If a library is missing, Epupp shows errors in the console, a system banner, and a warning indicator (⚠) next to the affected script in the popup and panel.
+Any script becomes a library when another script references it via `:epupp/inject`. Disabled scripts and built-in scripts are valid library targets. Scripts can also declare `:epupp/library? true` in their manifest to appear in the popup's Libraries section (when they have no auto-run pattern).
 
 > [!NOTE]
-> When a script both auto-runs and is used as a library by another auto-run script on the same page, it may execute twice (once as a library injection, once as its own auto-run). This is a known v1 limitation.
+> When a script both auto-runs and is used as a library by another auto-run script on the same page, it may execute twice (once as a library injection, once as its own auto-run).
 
 From a live REPL session, you can load libraries at runtime with `epupp.repl/manifest!`:
 
 ```clojure
-(epupp.repl/manifest! {:epupp/inject ["scittle://pprint.js"]})
+(epupp.repl/manifest! {:epupp/inject ["scittle://pprint.js"
+                                      "epupp://utils/dom.cljs"]})
 (require '[cljs.pprint :as pprint])
 (pprint/pprint {:some "data"})
-```
-
-Works with `epupp://` libraries too:
-
-```clojure
-(epupp.repl/manifest! {:epupp/inject ["epupp://utils/dom.cljs"]})
-(require '[utils.dom :as dom])
-(dom/hide! "#sidebar")
 ```
 
 Safe to call multiple times - already-loaded libraries are skipped.

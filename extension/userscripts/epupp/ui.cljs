@@ -1,5 +1,6 @@
 {:epupp/script-name "epupp/ui.cljs"
- :epupp/description "Epupp branding and UI components. Available for use in userscripts."}
+ :epupp/description "Epupp branding and UI components. Available for use in userscripts."
+ :epupp/library? true}
 
 (ns epupp.ui)
 

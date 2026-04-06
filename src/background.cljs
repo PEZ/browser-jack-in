@@ -885,7 +885,9 @@
                       (log/debug "Background" "Scripts changed, syncing registrations")
                       ((^:async fn []
                          (js-await (ensure-initialized! dispatch!))
-                         (js-await (registration/sync-registrations!)))))
+                         (js-await (registration/sync-registrations!))
+                         (let [all-scripts (storage/get-scripts)]
+                           (dispatch! [[:runtime/ax.re-resolve-on-change all-scripts]])))))
                     (when (aget changes "settings/debug-logging")
                       (let [change (aget changes "settings/debug-logging")
                             enabled (boolean (.-newValue change))]
@@ -1226,6 +1228,18 @@
             :tab-id tab-id
             :errors errors}
        (fn [_] (when js/chrome.runtime.lastError nil))))
+
+    :runtime/fx.re-resolve-tab
+    (let [[tab-id old-errors-map all-scripts] args
+          errored-names (set (keys old-errors-map))
+          scripts-to-check (filterv #(contains? errored-names (:script/name %)) all-scripts)
+          plan (when (seq scripts-to-check)
+                 (dep-resolver/resolve-execution-plan scripts-to-check all-scripts))
+          new-errors (if plan (:plan/errors plan) [])
+          truly-new (filterv (fn [e] (not (contains? old-errors-map (:error/script-name e))))
+                             new-errors)]
+      (dispatch! (cond-> [[:runtime/ax.set-tab-errors tab-id new-errors]]
+                   (seq truly-new) (conj [:banner/ax.broadcast-resolution-errors truly-new]))))
 
     :msg/fx.handle-permission-granted
     (let [[tab-id icon-state] args]

@@ -6,6 +6,7 @@
 {:dev false
  :sectionsCollapsed {:repl-connect false
                      :manual-scripts false
+                     :libraries true
                      :matching-scripts false
                      :other-scripts true
                      :special true

@@ -314,3 +314,71 @@
             (test "preserves mixed protocol URLs" test-inject-preserves-mixed-protocol-urls)
             (test "preserves single epupp:// URL normalized to vector" test-inject-preserves-single-epupp-url-as-vector)
             (test "preserves arbitrary strings without validation" test-inject-preserves-arbitrary-strings)))
+
+;; ============================================================
+;; :epupp/library? manifest key tests
+;; ============================================================
+
+(defn- test-parses-library-true []
+  (let [code "^{:epupp/script-name \"my_lib.cljs\"
+  :epupp/library? true}
+(ns my-lib)"
+        manifest (mp/extract-manifest code)]
+    (-> (expect (:library? manifest))
+        (.toBe true))))
+
+(defn- test-library-defaults-to-false-when-omitted []
+  (let [code "^{:epupp/script-name \"test.cljs\"}
+(ns test)"
+        manifest (mp/extract-manifest code)]
+    (-> (expect (:library? manifest))
+        (.toBe false))))
+
+(defn- test-library-key-recognized-as-known []
+  (let [code "^{:epupp/script-name \"my_lib.cljs\"
+  :epupp/library? true}
+(ns my-lib)"
+        manifest (mp/extract-manifest code)]
+    (-> (expect (:found-keys manifest))
+        (.toContain "epupp/library?"))
+    (-> (expect (:unknown-keys manifest))
+        (.not.toContain "epupp/library?"))))
+
+(describe "manifest-parser :epupp/library? key"
+          (fn []
+            (test "parses :epupp/library? true" test-parses-library-true)
+            (test "library? defaults to false when omitted" test-library-defaults-to-false-when-omitted)
+            (test "library? recognized as known key" test-library-key-recognized-as-known)))
+
+;; ============================================================
+;; Built-in library manifest verification
+;; ============================================================
+
+(defn- test-builtin-ui-manifest-has-library-true []
+  (let [code "{:epupp/script-name \"epupp/ui.cljs\"
+ :epupp/description \"Epupp branding and UI components. Available for use in userscripts.\"
+ :epupp/library? true}
+
+(ns epupp.ui)"
+        manifest (mp/extract-manifest code)]
+    (-> (expect (:library? manifest))
+        (.toBe true))
+    (-> (expect (:script-name manifest))
+        (.toBe "epupp/ui.cljs"))))
+
+(defn- test-builtin-helpers-manifest-has-library-true []
+  (let [code "{:epupp/script-name \"epupp/internal/helpers.cljs\"
+ :epupp/description \"Internal helpers for built-in Epupp scripts: bridge messaging and manifest parsing\"
+ :epupp/library? true}
+
+(ns epupp.internal.helpers)"
+        manifest (mp/extract-manifest code)]
+    (-> (expect (:library? manifest))
+        (.toBe true))
+    (-> (expect (:script-name manifest))
+        (.toBe "epupp/internal/helpers.cljs"))))
+
+(describe "built-in library manifests"
+          (fn []
+            (test "epupp/ui.cljs manifest has :epupp/library? true" test-builtin-ui-manifest-has-library-true)
+            (test "epupp/internal/helpers.cljs manifest has :epupp/library? true" test-builtin-helpers-manifest-has-library-true)))

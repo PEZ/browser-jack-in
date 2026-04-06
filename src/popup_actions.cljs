@@ -255,6 +255,7 @@
                         (assoc-in [:ui/sections-collapsed :matching-scripts] false)
                         (assoc-in [:ui/sections-collapsed :other-scripts] false)
                         (assoc-in [:ui/sections-collapsed :manual-scripts] false)
+                        (assoc-in [:ui/sections-collapsed :libraries] false)
                         (assoc :ui/reveal-highlight-script-name script-name))]
       {:uf/db new-state
        :uf/fxs [[:popup/fx.reveal-script script-name]

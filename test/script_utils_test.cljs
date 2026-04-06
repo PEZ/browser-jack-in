@@ -984,3 +984,114 @@
             (test "script->js excludes derived fields (name, description, inject)" test-storage-contract-derived-fields-not-stored)
             (test "script->js produces exactly 11 fields" test-storage-contract-exact-field-count)
             (test "roundtrip through JS preserves stored and re-derives from manifest" test-storage-contract-roundtrip-preserves-stored-fields)))
+
+;; ============================================================
+;; library-script? predicate tests
+;; ============================================================
+
+(defn- test-library-script-true-when-flag-set []
+  (let [script {:script/name "my_lib.cljs" :script/library? true}]
+    (-> (expect (script-utils/library-script? script))
+        (.toBe true))))
+
+(defn- test-library-script-false-when-flag-absent []
+  (let [script {:script/name "regular.cljs"}]
+    (-> (expect (script-utils/library-script? script))
+        (.toBe false))))
+
+(defn- test-library-script-false-when-flag-false []
+  (let [script {:script/name "regular.cljs" :script/library? false}]
+    (-> (expect (script-utils/library-script? script))
+        (.toBe false))))
+
+(defn- test-library-script-false-when-flag-nil []
+  (let [script {:script/name "regular.cljs" :script/library? nil}]
+    (-> (expect (script-utils/library-script? script))
+        (.toBe false))))
+
+(describe "library-script? predicate"
+  (fn []
+    (test "returns true when :script/library? is true" test-library-script-true-when-flag-set)
+    (test "returns false when :script/library? is absent" test-library-script-false-when-flag-absent)
+    (test "returns false when :script/library? is false" test-library-script-false-when-flag-false)
+    (test "returns false when :script/library? is nil" test-library-script-false-when-flag-nil)))
+
+;; ============================================================
+;; derive-script-fields library? flow tests
+;; ============================================================
+
+(defn- test-derive-library-true-from-manifest []
+  (let [code "^{:epupp/script-name \"my_lib.cljs\"
+  :epupp/library? true}
+(ns my-lib)"
+        script {:script/id "lib-1" :script/code code}
+        manifest (mp/extract-manifest code)
+        derived (script-utils/derive-script-fields script manifest)]
+    (-> (expect (:script/library? derived))
+        (.toBe true))))
+
+(defn- test-derive-no-library-when-omitted []
+  (let [code "^{:epupp/script-name \"regular.cljs\"}
+(ns regular)"
+        script {:script/id "reg-1" :script/code code}
+        manifest (mp/extract-manifest code)
+        derived (script-utils/derive-script-fields script manifest)]
+    (-> (expect (:script/library? derived))
+        (.toBeUndefined))))
+
+(describe "derive-script-fields library? flow"
+  (fn []
+    (test "manifest with library? true sets :script/library?" test-derive-library-true-from-manifest)
+    (test "manifest without library? does not set :script/library?" test-derive-no-library-when-omitted)))
+
+;; ============================================================
+;; Library section classification tests
+;; ============================================================
+
+(defn- test-classify-library-only-no-match []
+  (let [script {:script/name "my_lib.cljs"
+                :script/library? true
+                :script/match []}
+        is-library-section? (and (script-utils/library-script? script)
+                                 (not (script-utils/special-script? script))
+                                 (empty? (:script/match script)))
+        is-manual-section? (and (not (script-utils/special-script? script))
+                                (not (script-utils/library-script? script))
+                                (empty? (:script/match script)))]
+    (-> (expect is-library-section?)
+        (.toBe true))
+    (-> (expect is-manual-section?)
+        (.toBe false))))
+
+(defn- test-classify-library-with-match-goes-to-matching []
+  (let [script {:script/name "lib_with_match.cljs"
+                :script/library? true
+                :script/match ["https://example.com/*"]}
+        is-library-section? (and (script-utils/library-script? script)
+                                 (not (script-utils/special-script? script))
+                                 (empty? (:script/match script)))
+        has-match? (seq (:script/match script))]
+    (-> (expect is-library-section?)
+        (.toBe false))
+    (-> (expect has-match?)
+        (.toBeTruthy))))
+
+(defn- test-classify-non-library-no-match-goes-to-manual []
+  (let [script {:script/name "manual.cljs"
+                :script/match []}
+        is-library-section? (and (script-utils/library-script? script)
+                                 (not (script-utils/special-script? script))
+                                 (empty? (:script/match script)))
+        is-manual-section? (and (not (script-utils/special-script? script))
+                                (not (script-utils/library-script? script))
+                                (empty? (:script/match script)))]
+    (-> (expect is-library-section?)
+        (.toBe false))
+    (-> (expect is-manual-section?)
+        (.toBe true))))
+
+(describe "Library section classification"
+  (fn []
+    (test "library-only script (no match) goes to libraries section" test-classify-library-only-no-match)
+    (test "library with match patterns goes to matching, not libraries" test-classify-library-with-match-goes-to-matching)
+    (test "non-library script (no match) goes to manual section" test-classify-non-library-no-match-goes-to-manual)))

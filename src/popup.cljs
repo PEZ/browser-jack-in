@@ -25,6 +25,7 @@
          :ui/sections-collapsed (or (.-sectionsCollapsed config)
                                     {:repl-connect false
                                      :manual-scripts false
+                                     :libraries true
                                      :matching-scripts false
                                      :other-scripts true
                                      :special true
@@ -833,6 +834,7 @@
   (let [manual-shadow (->> scripts-shadow
                            (filterv (fn [{:keys [item]}]
                                      (and (not (script-utils/special-script? item))
+                                          (not (script-utils/library-script? item))
                                           (empty? (:script/match item)))))
                            (sort-by (fn [{:keys [item]}]
                                       [(if (script-utils/builtin-script? item) 1 0)
@@ -854,6 +856,35 @@
         "No manual scripts."
         [:div.no-scripts-hint
          "Scripts without auto-run patterns appear here."]])]))
+
+(defn libraries-section [{:scripts/keys [current-url]
+                          :ui/keys [scripts-shadow reveal-highlight-script-name recently-modified-scripts]
+                          :runtime/keys [errors]}]
+  (let [library-shadow (->> scripts-shadow
+                            (filterv (fn [{:keys [item]}]
+                                       (and (script-utils/library-script? item)
+                                            (not (script-utils/special-script? item))
+                                            (empty? (:script/match item)))))
+                            (sort-by (fn [{:keys [item]}]
+                                       [(if (script-utils/builtin-script? item) 1 0)
+                                        (str/lower-case (or (:script/name item) ""))])))
+        modified-set (or recently-modified-scripts #{})
+        errors (or errors {})]
+    [:div.script-list
+     (if (seq library-shadow)
+       (for [{:keys [item] :ui/keys [entering? leaving?]} library-shadow
+             :let [script item]]
+         ^{:key (:script/id script)}
+         [script-item script current-url
+          {:reveal-highlight? (= (:script/name script) reveal-highlight-script-name)
+           :recently-modified? (contains? modified-set (:script/name script))
+           :leaving? leaving?
+           :entering? entering?
+           :runtime-error (get errors (:script/name script))}])
+       [:div.no-scripts
+        "No library scripts."
+        [:div.no-scripts-hint
+         "Scripts with :epupp/library? true appear here."]])]))
 
 (defn other-scripts-section [{:scripts/keys [current-url]
                               :ui/keys [scripts-shadow reveal-highlight-script-name recently-modified-scripts]
@@ -1113,7 +1144,7 @@
                              (filterv script-utils/special-script?))
         matching-scripts (->> list
                               (filterv #(and (not (script-utils/special-script? %))
-                                            (script-utils/get-matching-pattern current-url %))))
+                                             (script-utils/get-matching-pattern current-url %))))
         other-autorun-scripts (->> list
                                    (filterv (fn [s]
                                               (and (not (script-utils/special-script? s))
@@ -1121,7 +1152,13 @@
                                                    (not (script-utils/get-matching-pattern current-url s))))))
         manual-scripts (->> list
                             (filterv #(and (not (script-utils/special-script? %))
-                                          (empty? (:script/match %)))))
+                                           (not (script-utils/library-script? %))
+                                           (empty? (:script/match %)))))
+        library-scripts (->> list
+                             (filterv (fn [s]
+                                        (and (script-utils/library-script? s)
+                                             (not (script-utils/special-script? s))
+                                             (empty? (:script/match s))))))
         settings-max-height 700]
     [:div
      [view-elements/app-header
@@ -1163,6 +1200,12 @@
                            :badge-count (count other-autorun-scripts)
                            :max-height (str (+ 50 (* 105 (max 1 (count other-autorun-scripts)))) "px")}
       [other-scripts-section state]]
+     [collapsible-section {:id :libraries
+                           :title "Libraries"
+                           :expanded? (not (:libraries sections-collapsed))
+                           :badge-count (count library-scripts)
+                           :max-height (str (+ 50 (* 105 (max 1 (count library-scripts)))) "px")}
+      [libraries-section state]]
      (when (seq special-scripts)
        [collapsible-section {:id :special
                              :title "Special"

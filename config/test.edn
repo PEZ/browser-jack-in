@@ -7,6 +7,7 @@
  :test true  ; <-- Enables structured test logging to chrome.storage.local
  :sectionsCollapsed {:repl-connect false
                      :manual-scripts false
+                     :libraries false
                      :matching-scripts false
                      :other-scripts false
                      :special false

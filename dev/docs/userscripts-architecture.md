@@ -64,6 +64,7 @@ See [architecture/state-management.md](architecture/state-management.md) for com
 - `:script/description` - `:epupp/description`
 - `:script/run-at` - `:epupp/run-at`
 - `:script/inject` - `:epupp/inject`
+- `:script/library?` - `:epupp/library?` (when `true`)
 
 **`:script/run-at` values:**
 - `"document-start"` - Runs before page scripts (via `registerContentScripts` + loader)
@@ -266,6 +267,7 @@ For the detailed step-by-step implementation of injection flows, see [architectu
 - List all scripts with enable/disable checkboxes (for scripts with patterns only) and delete buttons
 - Built-in scripts have a grey left border (`.script-item-builtin`) and cube icon
 - Scripts without patterns show "No auto-run (manual only)" instead of checkbox
+- **Libraries section** for scripts with `:epupp/library? true` and no auto-run match. Collapsed by default. Scripts with both `:epupp/library?` and auto-run patterns appear in their auto-run section instead
 - Checkbox tooltip indicates "Auto-run enabled" or "Auto-run disabled" status
 - Connection status and REPL connect workflow (unchanged from before)
 - Port configuration for browser-nrepl

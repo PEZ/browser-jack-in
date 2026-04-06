@@ -1,5 +1,6 @@
 {:epupp/script-name "epupp/internal/helpers.cljs"
- :epupp/description "Internal helpers for built-in Epupp scripts: bridge messaging and manifest parsing"}
+ :epupp/description "Internal helpers for built-in Epupp scripts: bridge messaging and manifest parsing"
+ :epupp/library? true}
 
 (ns epupp.internal.helpers
   (:require [clojure.edn :as edn]
