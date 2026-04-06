@@ -162,6 +162,14 @@ Human ⊗ AI ⊗ REPL
   | dev/docs/architecture/security.md      → trust_boundaries ∧ CSP
   | dev/docs/architecture/build-pipeline.md → build_config_injection
 
+λ docs_sync.
+  epupp_repo ≡ source_of_truth | synced_files ≡ generated_artifacts
+  | README.md                   → my-epupp-hq/docs/epupp-README.md
+  | docs/repl-fs-sync.md        → my-epupp-hq/docs/repl-fs-sync.md
+  | docs/connecting-to-epupp.md → my-epupp-hq/docs/connecting-to-epupp.md
+  | ¬edit(synced_copies) | ¬resync(synced_copies) | treat_as_generated
+  | ∀doc_updates: edit_here(epupp/) | human_runs(bb_docs-sync)_when_ready
+
 ## Delegation
 
 λ subagents.
