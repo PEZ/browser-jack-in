@@ -29,7 +29,7 @@ See [connected-repl.md](connected-repl.md) for full details including message fl
 2. `handle-navigation!` waits for storage initialization
 3. `process-navigation!` gets matching enabled scripts
 4. Filters to `document-idle` scripts only
-5. Resolve dependencies via `dep_resolver` (handles mixed `scittle://` + `epupp://` graphs, topological ordering, dedup, cycle detection)
+5. Resolve dependencies via `dep_resolver` (handles mixed `scittle://` + `epupp://` + `git://`/`gist://` graphs, topological ordering, dedup, cycle detection)
 6. `ensure-scittle!` → `execute-plan!`
 7. `execute-plan!` flow:
    - Inject content bridge
@@ -37,6 +37,7 @@ See [connected-repl.md](connected-repl.md) for full details including message fl
    - Send `clear-userscripts` message
    - Inject required Scittle libraries (in dependency order)
    - Inject `epupp://` library scripts (in dependency order)
+   - Inject `git://`/`gist://` dependency scripts from cache (in dependency order)
    - Send `inject-userscript` for each root script
    - Send `inject-script` for `trigger-scittle.js`
 8. Surface any resolution errors (missing libraries, cycles) in console, system banner, and per-script warning indicator
@@ -75,6 +76,51 @@ flowchart TD
     SCAN -->|Found| INJECT["Inject Scittle +\ninstaller script"]
     SCAN -->|Not found| SKIP
 ```
+
+## Git-Hosted Dependency Resolution
+
+Git-hosted dependencies (`git://` and `gist://` URLs) use a two-phase model that separates fetching from injection.
+
+### Phase 1: Resolve on Save
+
+When a script is saved (via panel or FS API) and its `:epupp/inject` contains `git://` or `gist://` URLs:
+
+1. `:git-dep/ax.resolve-for-script` action extracts git dep URLs from the manifest
+2. URLs not already in cache are passed to `:git-dep/fx.fetch-deps` effect
+3. The effect fetches raw content from forge-specific URLs (e.g., `raw.githubusercontent.com`)
+4. Fetched content is parsed for transitive `:epupp/inject` dependencies (recursive)
+5. `:git-dep/ax.cache-results` merges results into `gitDepCache` in `chrome.storage.local`
+
+Cache entries are keyed by the original `git://`/`gist://` URL and contain:
+
+```clojure
+{:cache/code "..."              ; fetched source code
+ :cache/sha "abc123..."         ; the pinned SHA
+ :cache/raw-url "https://..."   ; resolved forge raw URL
+ :cache/inject [...]            ; transitive deps from manifest
+ :cache/fetched-at 1234567890   ; timestamp
+ :cache/schema-version 1}
+```
+
+### Phase 2: Inject from Cache
+
+At page load, the dependency resolver treats `git://`/`gist://` URLs as `:git-dep` kind. It looks up cached content and produces `:git-dep-script` steps in the execution plan. If a URL is not in cache, a `:git-dep/cache-miss` error is surfaced.
+
+### Error Types
+
+| Error | Cause |
+|-------|-------|
+| `:git-dep/cache-miss` | Git dep not in cache at injection time (save the script to trigger fetch) |
+| `:git-dep/fetch-failed` | Network error fetching raw content |
+| `:git-dep/parse-failed` | URL didn't match expected format |
+| `:git-dep/cycle` | Circular dependency chain detected |
+
+### Constraints (v1)
+
+- Public repos/gists only (no authentication)
+- SHA pinning required (no branch/tag references)
+- No cache eviction (SHA-pinned content is immutable)
+- GitLab snippets are deferred (only GitLab repo files via `git://` work)
 
 ## Content Script Registration
 
@@ -120,9 +166,9 @@ The loader (`src/userscript_loader.cljs`, compiled through Squint to `extension/
 1. Guard against multiple injections (`window.__epuppLoaderInjected`)
 2. Read all scripts from `chrome.storage.local`
 3. Filter to enabled scripts with early timing matching current URL
-4. Resolve `epupp://` library dependencies (transitive, with dedup and cycle detection)
+4. Resolve `epupp://` and `git://`/`gist://` library dependencies (transitive, with dedup and cycle detection)
 5. Inject `vendor/scittle.js` asynchronously (waits for `onload` before proceeding)
-6. Inject required Scittle libraries, then `epupp://` library scripts in dependency order
+6. Inject required Scittle libraries, then `epupp://` library scripts and cached git dep scripts in dependency order
 7. Inject each matching root script as `<script type="application/x-scittle">`
 8. Inject `trigger-scittle.js` to evaluate all Scittle scripts
 

@@ -17,6 +17,7 @@
             [bg-ws :as bg-ws]
             [bg-inject :as bg-inject]
             [dep-resolver :as dep-resolver]
+            [git-dep :as git-dep]
             [permissions :as permissions]))
 
 (def ^:private config js/EXTENSION_CONFIG)
@@ -351,7 +352,8 @@
             (dispatch! [[:sponsor/ax.set-pending tab-id]]))
           (try
             (let [all-scripts (storage/get-scripts)
-                  plan (dep-resolver/resolve-execution-plan (vec idle-scripts) all-scripts)
+                  plan (dep-resolver/resolve-execution-plan (vec idle-scripts) all-scripts
+                                                           (storage/get-git-dep-cache))
                   errors (:plan/errors plan)]
               ;; Handle resolution errors: log and broadcast, but continue with resolved scripts
               (when (seq errors)
@@ -775,7 +777,8 @@
                   (when found?
                     (js-await (bg-inject/ensure-scittle! dispatch! tab-id :disconnected))
                     (let [all-scripts (storage/get-scripts)
-                          plan (dep-resolver/resolve-execution-plan [installer] all-scripts)]
+                          plan (dep-resolver/resolve-execution-plan [installer] all-scripts
+                                                                   (storage/get-git-dep-cache))]
                       (js-await (bg-inject/execute-plan! tab-id plan)))
                     (swap! !installer-injected-tabs conj tab-id))))))
           (log/debug "Background" "Installer scan skipped - host permission not granted for tab" tab-id))))
@@ -886,6 +889,12 @@
                       ((^:async fn []
                          (js-await (ensure-initialized! dispatch!))
                          (js-await (registration/sync-registrations!))
+                         (let [all-scripts (storage/get-scripts)]
+                           (dispatch! [[:runtime/ax.re-resolve-on-change all-scripts]])))))
+                    (when (aget changes "gitDepCache")
+                      (log/debug "Background" "Git dep cache changed, re-resolving")
+                      ((^:async fn []
+                         (js-await (ensure-initialized! dispatch!))
                          (let [all-scripts (storage/get-scripts)]
                            (dispatch! [[:runtime/ax.re-resolve-on-change all-scripts]])))))
                     (when (aget changes "settings/debug-logging")
@@ -1092,6 +1101,15 @@
         (catch :default err
           {:success false :error (.-message err)})))
 
+    :git-dep/fx.fetch-deps
+    (let [[uncached-urls existing-cache] args]
+      (js-await (git-dep/resolve-and-fetch!
+                 {:inject-urls uncached-urls
+                  :git-dep-cache existing-cache
+                  :fetch-fn fetch-text!
+                  :parse-manifest-fn manifest-parser/extract-manifest
+                  :now (.now js/Date)})))
+
     ;; Navigation effects for gather-then-decide pattern
 
     :icon/fx.update-icon-disconnected
@@ -1209,13 +1227,15 @@
                            (some? bulk-id) (assoc :script/bulk-id bulk-id)
                            (some? bulk-index) (assoc :script/bulk-index bulk-index)
                            (some? bulk-count) (assoc :script/bulk-count bulk-count))]
-              (fs-dispatch/dispatch-fs-action! send-response [:fs/ax.save-script script]))))
+              (fs-dispatch/dispatch-fs-action! send-response [:fs/ax.save-script script]
+                                              {:dispatch-fn dispatch!}))))
         (catch :default err
           (send-response #js {:success false :error (str "Parse error: " (.-message err))}))))
 
     :fs/fx.dispatch-action
     (let [[send-response action] args]
-      (fs-dispatch/dispatch-fs-action! send-response action))
+      (fs-dispatch/dispatch-fs-action! send-response action
+                                      {:dispatch-fn dispatch!}))
 
     :banner/fx.broadcast-system
     (let [[event] args]

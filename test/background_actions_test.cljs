@@ -1551,3 +1551,120 @@
                   test-nav-handle-navigation-clears-tab-errors)
             (test "tab removed clears tab runtime errors"
                   test-tab-handle-removed-clears-tab-errors)))
+
+;; ============================================================
+;; Git Dep Action Tests
+;; ============================================================
+
+(def ^:private git-dep-sha "abcdef0123456789abcdef0123456789abcdef01")
+
+(defn- test-resolve-for-script-with-git-deps-returns-fetch-effect []
+  (let [git-url (str "git://github.com/user/repo@" git-dep-sha "/lib.cljs")
+        code (str "{:epupp/script-name \"test.cljs\""
+                  " :epupp/inject [\"scittle://replicant.js\""
+                  " \"" git-url "\"]}"
+                  "\n(ns test)")
+        state {:storage/git-dep-cache {}}
+        result (bg-actions/handle-action state uf-data
+                 [:git-dep/ax.resolve-for-script code])]
+    (-> (expect result) (.toBeTruthy))
+    (-> (expect (:uf/fxs result)) (.toBeTruthy))
+    (let [fx (first (:uf/fxs result))]
+      (-> (expect (first fx)) (.toBe :uf/await))
+      (-> (expect (second fx)) (.toBe :git-dep/fx.fetch-deps)))
+    (-> (expect (:uf/dxs result)) (.toBeTruthy))
+    (let [dx (first (:uf/dxs result))]
+      (-> (expect (first dx)) (.toBe :git-dep/ax.cache-results))
+      (-> (expect (second dx)) (.toBe :uf/prev-result)))))
+
+(defn- test-resolve-for-script-no-git-deps-returns-nil []
+  (let [code "{:epupp/script-name \"test.cljs\" :epupp/inject [\"scittle://replicant.js\"]}\n(ns test)"
+        state {:storage/git-dep-cache {}}
+        result (bg-actions/handle-action state uf-data
+                 [:git-dep/ax.resolve-for-script code])]
+    (-> (expect result) (.toBeFalsy))))
+
+(defn- test-resolve-for-script-all-cached-returns-nil []
+  (let [git-url (str "git://github.com/user/repo@" git-dep-sha "/lib.cljs")
+        code (str "{:epupp/script-name \"test.cljs\""
+                  " :epupp/inject [\"" git-url "\"]}"
+                  "\n(ns test)")
+        state {:storage/git-dep-cache {git-url {:cache/code "(ns lib)" :cache/sha git-dep-sha}}}
+        result (bg-actions/handle-action state uf-data
+                 [:git-dep/ax.resolve-for-script code])]
+    (-> (expect result) (.toBeFalsy))))
+
+(defn- test-resolve-for-script-no-manifest-returns-nil []
+  (let [code "(ns bare-script)\n(println \"no manifest\")"
+        state {:storage/git-dep-cache {}}
+        result (bg-actions/handle-action state uf-data
+                 [:git-dep/ax.resolve-for-script code])]
+    (-> (expect result) (.toBeFalsy))))
+
+(describe ":git-dep/ax.resolve-for-script"
+  (fn []
+    (test "with git dep URLs returns fetch effect and cache-results deferred action"
+      test-resolve-for-script-with-git-deps-returns-fetch-effect)
+    (test "with no git dep URLs returns nil" test-resolve-for-script-no-git-deps-returns-nil)
+    (test "with all cached git dep URLs returns nil" test-resolve-for-script-all-cached-returns-nil)
+    (test "with no manifest returns nil" test-resolve-for-script-no-manifest-returns-nil)))
+
+;; ============================================================
+;; Git Dep Cache Results Action Tests
+;; ============================================================
+
+(defn- test-cache-results-merges-into-cache-and-persists []
+  (let [url (str "git://github.com/user/repo@" git-dep-sha "/lib.cljs")
+        entry {:cache/code "(ns lib)" :cache/sha git-dep-sha :cache/schema-version 1}
+        fetch-result {:resolved {url entry} :errors []}
+        state {:storage/git-dep-cache {}}
+        result (bg-actions/handle-action state uf-data
+                 [:git-dep/ax.cache-results fetch-result])]
+    (-> (expect (get-in result [:uf/db :storage/git-dep-cache url]))
+        (.toBeTruthy))
+    (-> (expect (:cache/code (get-in result [:uf/db :storage/git-dep-cache url])))
+        (.toBe "(ns lib)"))
+    (-> (expect (some #(= [:storage/fx.persist!] %) (:uf/fxs result)))
+        (.toBeTruthy))))
+
+(defn- test-cache-results-preserves-existing-cache []
+  (let [existing-url "git://github.com/old/repo@sha/old.cljs"
+        new-url (str "git://github.com/user/repo@" git-dep-sha "/new.cljs")
+        fetch-result {:resolved {new-url {:cache/code "(ns new)" :cache/sha git-dep-sha}} :errors []}
+        state {:storage/git-dep-cache {existing-url {:cache/code "(ns old)"}}}
+        result (bg-actions/handle-action state uf-data
+                 [:git-dep/ax.cache-results fetch-result])]
+    (-> (expect (get-in result [:uf/db :storage/git-dep-cache existing-url]))
+        (.toBeTruthy))
+    (-> (expect (get-in result [:uf/db :storage/git-dep-cache new-url]))
+        (.toBeTruthy))))
+
+(defn- test-cache-results-empty-resolved-still-persists []
+  (let [fetch-result {:resolved {} :errors []}
+        state {:storage/git-dep-cache {"existing" {:cache/code "old"}}}
+        result (bg-actions/handle-action state uf-data
+                 [:git-dep/ax.cache-results fetch-result])]
+    (-> (expect (some #(= [:storage/fx.persist!] %) (:uf/fxs result)))
+        (.toBeTruthy))
+    (-> (expect (get-in result [:uf/db :storage/git-dep-cache "existing"]))
+        (.toBeTruthy))))
+
+(defn- test-cache-results-with-errors-broadcasts-banner []
+  (let [fetch-result {:resolved {}
+                      :errors [{:error/type :git-dep/fetch-failed
+                                :error/message "Failed to fetch dep"}]}
+        state {:storage/git-dep-cache {}}
+        result (bg-actions/handle-action state uf-data
+                 [:git-dep/ax.cache-results fetch-result])]
+    (-> (expect (count (:uf/fxs result))) (.toBe 2))
+    (-> (expect (some #(= [:storage/fx.persist!] %) (:uf/fxs result)))
+        (.toBeTruthy))
+    (-> (expect (some #(= :banner/fx.broadcast-system (first %)) (:uf/fxs result)))
+        (.toBeTruthy))))
+
+(describe ":git-dep/ax.cache-results"
+  (fn []
+    (test "merges resolved entries into cache and persists" test-cache-results-merges-into-cache-and-persists)
+    (test "preserves existing cache entries" test-cache-results-preserves-existing-cache)
+    (test "empty resolved still triggers persist" test-cache-results-empty-resolved-still-persists)
+    (test "with errors broadcasts banner" test-cache-results-with-errors-broadcasts-banner)))

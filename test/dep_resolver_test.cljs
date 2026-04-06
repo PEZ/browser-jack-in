@@ -116,6 +116,20 @@
   (-> (expect (resolver/classify-inject-url 42))
       (.toBe :unknown)))
 
+(defn- test-classify-git-url []
+  (-> (expect (resolver/classify-inject-url
+               "git://github.com/user/repo@abcdef0123456789abcdef0123456789abcdef01/file.cljs"))
+      (.toBe :git-dep)))
+
+(defn- test-classify-gist-url []
+  (-> (expect (resolver/classify-inject-url
+               "gist://gist.github.com/user/id@abcdef0123456789abcdef0123456789abcdef01/file.cljs"))
+      (.toBe :git-dep)))
+
+(defn- test-classify-invalid-git-url-as-unknown []
+  (-> (expect (resolver/classify-inject-url "git://evil.com/user/repo@abc/file.cljs"))
+      (.toBe :unknown)))
+
 ;; ============================================================
 ;; parse-epupp-url tests
 ;; ============================================================
@@ -429,44 +443,282 @@
 ;; Test Registration
 ;; ============================================================
 
+(def git-url-a
+  "git://github.com/user/libs@abcdef0123456789abcdef0123456789abcdef01/lib_a.cljs")
+
+(def git-url-b
+  "git://github.com/user/libs@abcdef0123456789abcdef0123456789abcdef01/lib_b.cljs")
+
+(def git-url-c
+  "git://github.com/user/libs@abcdef0123456789abcdef0123456789abcdef01/lib_c.cljs")
+
+(def git-cache-a
+  {:cache/code "(ns lib-a)"
+   :cache/sha "abcdef0123456789abcdef0123456789abcdef01"
+   :cache/raw-url "https://raw.githubusercontent.com/user/libs/abcdef0123456789abcdef0123456789abcdef01/lib_a.cljs"
+   :cache/inject []
+   :cache/fetched-at 1712419200000
+   :cache/schema-version 1})
+
+(def git-cache-b-depends-on-a
+  {:cache/code "(ns lib-b (:require [lib-a]))"
+   :cache/sha "abcdef0123456789abcdef0123456789abcdef01"
+   :cache/raw-url "https://raw.githubusercontent.com/user/libs/abcdef0123456789abcdef0123456789abcdef01/lib_b.cljs"
+   :cache/inject [git-url-a]
+   :cache/fetched-at 1712419200000
+   :cache/schema-version 1})
+
+(def git-cache-c-depends-on-b
+  {:cache/code "(ns lib-c (:require [lib-b]))"
+   :cache/sha "abcdef0123456789abcdef0123456789abcdef01"
+   :cache/raw-url "https://raw.githubusercontent.com/user/libs/abcdef0123456789abcdef0123456789abcdef01/lib_c.cljs"
+   :cache/inject [git-url-b]
+   :cache/fetched-at 1712419200000
+   :cache/schema-version 1})
+
+(def git-cache-cycle-a
+  {:cache/code "(ns cycle-a)"
+   :cache/sha "abcdef0123456789abcdef0123456789abcdef01"
+   :cache/raw-url "https://raw.githubusercontent.com/user/libs/abcdef0123456789abcdef0123456789abcdef01/lib_a.cljs"
+   :cache/inject [git-url-b]
+   :cache/fetched-at 1712419200000
+   :cache/schema-version 1})
+
+(def git-cache-cycle-b
+  {:cache/code "(ns cycle-b)"
+   :cache/sha "abcdef0123456789abcdef0123456789abcdef01"
+   :cache/raw-url "https://raw.githubusercontent.com/user/libs/abcdef0123456789abcdef0123456789abcdef01/lib_b.cljs"
+   :cache/inject [git-url-a]
+   :cache/fetched-at 1712419200000
+   :cache/schema-version 1})
+
+(def git-cache-with-scittle
+  {:cache/code "(ns lib-with-scittle)"
+   :cache/sha "abcdef0123456789abcdef0123456789abcdef01"
+   :cache/raw-url "https://raw.githubusercontent.com/user/libs/abcdef0123456789abcdef0123456789abcdef01/lib_a.cljs"
+   :cache/inject ["scittle://replicant.js"]
+   :cache/fetched-at 1712419200000
+   :cache/schema-version 1})
+
+(def script-depends-on-git
+  {:script/id "id-git-user" :script/name "git_user.cljs" :script/code "(ns git-user)"
+   :script/inject [git-url-a] :script/enabled true})
+
+(def script-depends-on-git-and-epupp
+  {:script/id "id-mixed-git" :script/name "mixed_git.cljs" :script/code "(ns mixed-git)"
+   :script/inject ["scittle://replicant.js" "epupp://b.cljs" git-url-a] :script/enabled true})
+
+(defn- test-git-dep-cached-produces-step []
+  (let [cache {git-url-a git-cache-a}
+        all [script-depends-on-git]
+        plan (resolver/resolve-execution-plan [script-depends-on-git] all cache)
+        steps (:plan/steps plan)
+        git-steps (filterv #(= :git-dep-script (:step/type %)) steps)]
+    (-> (expect (count (:plan/errors plan)))
+        (.toBe 0))
+    (-> (expect (count git-steps))
+        (.toBe 1))
+    (let [step (first git-steps)]
+      (-> (expect (:step/url step))
+          (.toBe git-url-a))
+      (-> (expect (:step/code step))
+          (.toBe "(ns lib-a)"))
+      (-> (expect (:step/source step))
+          (.toBe :git)))))
+
+(defn- test-git-dep-cache-miss-produces-error []
+  (let [cache {}
+        all [script-depends-on-git]
+        plan (resolver/resolve-execution-plan [script-depends-on-git] all cache)
+        errors (:plan/errors plan)]
+    (-> (expect (count errors))
+        (.toBe 1))
+    (let [err (first errors)]
+      (-> (expect (:error/type err))
+          (.toBe :git-dep/cache-miss))
+      (-> (expect (:error/phase err))
+          (.toBe :resolve))
+      (-> (expect (:error/dep-raw err))
+          (.toBe git-url-a))
+      (-> (expect (:error/message err))
+          (.toContain "not in cache")))))
+
+(defn- test-git-dep-nil-cache-produces-error []
+  (let [all [script-depends-on-git]
+        plan (resolver/resolve-execution-plan [script-depends-on-git] all nil)
+        errors (:plan/errors plan)]
+    (-> (expect (count errors))
+        (.toBe 1))
+    (-> (expect (:error/type (first errors)))
+        (.toBe :git-dep/cache-miss))))
+
+(defn- test-git-dep-transitive []
+  (let [cache {git-url-a git-cache-a
+               git-url-b git-cache-b-depends-on-a}
+        script {:script/id "id-trans" :script/name "trans.cljs" :script/code "(ns trans)"
+                :script/inject [git-url-b] :script/enabled true}
+        all [script]
+        plan (resolver/resolve-execution-plan [script] all cache)
+        steps (:plan/steps plan)
+        git-steps (filterv #(= :git-dep-script (:step/type %)) steps)]
+    (-> (expect (count (:plan/errors plan)))
+        (.toBe 0))
+    (-> (expect (count git-steps))
+        (.toBe 2))
+    (let [urls (mapv :step/url git-steps)
+          a-idx (.indexOf urls git-url-a)
+          b-idx (.indexOf urls git-url-b)]
+      (-> (expect (< a-idx b-idx)) (.toBe true)))))
+
+(defn- test-git-dep-deep-transitive []
+  (let [cache {git-url-a git-cache-a
+               git-url-b git-cache-b-depends-on-a
+               git-url-c git-cache-c-depends-on-b}
+        script {:script/id "id-deep" :script/name "deep.cljs" :script/code "(ns deep)"
+                :script/inject [git-url-c] :script/enabled true}
+        all [script]
+        plan (resolver/resolve-execution-plan [script] all cache)
+        steps (:plan/steps plan)
+        git-steps (filterv #(= :git-dep-script (:step/type %)) steps)]
+    (-> (expect (count (:plan/errors plan)))
+        (.toBe 0))
+    (-> (expect (count git-steps))
+        (.toBe 3))
+    (let [urls (mapv :step/url git-steps)
+          a-idx (.indexOf urls git-url-a)
+          b-idx (.indexOf urls git-url-b)
+          c-idx (.indexOf urls git-url-c)]
+      (-> (expect (< a-idx b-idx)) (.toBe true))
+      (-> (expect (< b-idx c-idx)) (.toBe true)))))
+
+(defn- test-git-dep-mixed-graph []
+  (let [cache {git-url-a git-cache-a}
+        all [script-depends-on-git-and-epupp script-b]
+        plan (resolver/resolve-execution-plan [script-depends-on-git-and-epupp] all cache)
+        steps (:plan/steps plan)
+        vendor-steps (filterv #(= :vendor-file (:step/type %)) steps)
+        git-steps (filterv #(= :git-dep-script (:step/type %)) steps)
+        lib-steps (filterv #(= :library-script (:step/type %)) steps)
+        root-steps (filterv #(= :root-script (:step/type %)) steps)]
+    (-> (expect (count (:plan/errors plan)))
+        (.toBe 0))
+    (-> (expect (> (count vendor-steps) 0)) (.toBe true))
+    (-> (expect (count git-steps)) (.toBe 1))
+    (-> (expect (count lib-steps)) (.toBe 1))
+    (-> (expect (count root-steps)) (.toBe 1))
+    (let [first-vendor-idx 0
+          last-step-idx (dec (count steps))]
+      (-> (expect (:step/type (nth steps first-vendor-idx)))
+          (.toBe :vendor-file))
+      (-> (expect (:step/type (nth steps last-step-idx)))
+          (.toBe :root-script)))))
+
+(defn- test-git-dep-cycle-detection []
+  (let [cache {git-url-a git-cache-cycle-a
+               git-url-b git-cache-cycle-b}
+        script {:script/id "id-cyc" :script/name "cyc.cljs" :script/code "(ns cyc)"
+                :script/inject [git-url-a] :script/enabled true}
+        all [script]
+        plan (resolver/resolve-execution-plan [script] all cache)
+        errors (:plan/errors plan)]
+    (-> (expect (count errors))
+        (.toBe 1))
+    (let [err (first errors)]
+      (-> (expect (:error/type err))
+          (.toBe :git-dep/cycle))
+      (-> (expect (:error/message err))
+          (.toContain "Dependency cycle detected")))))
+
+(defn- test-git-dep-with-scittle-inject []
+  (let [cache {git-url-a git-cache-with-scittle}
+        all [script-depends-on-git]
+        plan (resolver/resolve-execution-plan [script-depends-on-git] all cache)
+        steps (:plan/steps plan)
+        vendor-steps (filterv #(= :vendor-file (:step/type %)) steps)]
+    (-> (expect (count (:plan/errors plan)))
+        (.toBe 0))
+    (-> (expect (> (count vendor-steps) 0))
+        (.toBe true))))
+
+(defn- test-git-dep-dedup-across-roots []
+  (let [cache {git-url-a git-cache-a}
+        root-1 {:script/id "id-gr1" :script/name "gr1.cljs" :script/code "(ns gr1)"
+                :script/inject [git-url-a] :script/enabled true}
+        root-2 {:script/id "id-gr2" :script/name "gr2.cljs" :script/code "(ns gr2)"
+                :script/inject [git-url-a] :script/enabled true}
+        all [root-1 root-2]
+        plan (resolver/resolve-execution-plan [root-1 root-2] all cache)
+        steps (:plan/steps plan)
+        git-steps (filterv #(= :git-dep-script (:step/type %)) steps)]
+    (-> (expect (count (:plan/errors plan)))
+        (.toBe 0))
+    (-> (expect (count git-steps))
+        (.toBe 1))))
+
+(defn- test-git-dep-step-shape []
+  (let [cache {git-url-a git-cache-a}
+        all [script-depends-on-git]
+        plan (resolver/resolve-execution-plan [script-depends-on-git] all cache)
+        git-step (first (filterv #(= :git-dep-script (:step/type %)) (:plan/steps plan)))]
+    (-> (expect (:step/type git-step)) (.toBe :git-dep-script))
+    (-> (expect (:step/url git-step)) (.toBe git-url-a))
+    (-> (expect (:step/code git-step)) (.toBe "(ns lib-a)"))
+    (-> (expect (:step/source git-step)) (.toBe :git))))
+
 (describe "dep-resolver"
-  (fn []
-    (describe "classify-inject-url"
-      (fn []
-        (test "classifies scittle:// URLs" test-classify-scittle-url)
-        (test "classifies epupp:// URLs" test-classify-epupp-url)
-        (test "classifies unknown URLs" test-classify-unknown-url)
-        (test "classifies nil as unknown" test-classify-nil)
-        (test "classifies non-string as unknown" test-classify-non-string)))
+          (fn []
+            (describe "classify-inject-url"
+                      (fn []
+                        (test "classifies scittle:// URLs" test-classify-scittle-url)
+                        (test "classifies epupp:// URLs" test-classify-epupp-url)
+                        (test "classifies unknown URLs" test-classify-unknown-url)
+                        (test "classifies nil as unknown" test-classify-nil)
+                        (test "classifies non-string as unknown" test-classify-non-string)
+                        (test "classifies git:// URL as :git-dep" test-classify-git-url)
+                        (test "classifies gist:// URL as :git-dep" test-classify-gist-url)
+                        (test "classifies invalid git:// URL as :unknown" test-classify-invalid-git-url-as-unknown)))
 
-    (describe "parse-epupp-url"
-      (fn []
-        (test "parses simple epupp:// URL" test-parse-simple-url)
-        (test "normalizes script name" test-parse-url-normalizes-name)
-        (test "returns nil for non-epupp URLs" test-parse-url-nil-for-non-epupp)
-        (test "returns nil for empty name" test-parse-url-nil-for-empty-name)
-        (test "returns nil for nil input" test-parse-url-nil-for-nil)))
+            (describe "parse-epupp-url"
+                      (fn []
+                        (test "parses simple epupp:// URL" test-parse-simple-url)
+                        (test "normalizes script name" test-parse-url-normalizes-name)
+                        (test "returns nil for non-epupp URLs" test-parse-url-nil-for-non-epupp)
+                        (test "returns nil for empty name" test-parse-url-nil-for-empty-name)
+                        (test "returns nil for nil input" test-parse-url-nil-for-nil)))
 
-    (describe "build-catalog"
-      (fn []
-        (test "keys scripts by normalized name" test-build-catalog-keys-by-name)
-        (test "skips scripts without name" test-build-catalog-skips-scripts-without-name)))
+            (describe "build-catalog"
+                      (fn []
+                        (test "keys scripts by normalized name" test-build-catalog-keys-by-name)
+                        (test "skips scripts without name" test-build-catalog-skips-scripts-without-name)))
 
-    (describe "resolve-execution-plan"
-      (fn []
-        (test "resolves simple chain (A depends on B)" test-simple-chain)
-        (test "resolves diamond dependency (A->B,C B->D,C->D, D once)" test-diamond-dependency)
-        (test "resolves mixed scittle:// + epupp:// graph" test-mixed-scittle-and-epupp)
-        (test "handles dual-role scripts (auto-run + library)" test-dual-role-script)
-        (test "produces error for missing library" test-missing-library-error)
-        (test "produces error for self-reference" test-self-reference-error)
-        (test "detects dependency cycles" test-cycle-detection-error)
-        (test "deduplicates across multiple roots" test-dedup-across-roots)
-        (test "resolves disabled script as library" test-disabled-script-as-library)
-        (test "resolves built-in script as library" test-builtin-script-as-library)
-        (test "ignores unknown protocol URLs" test-unknown-protocol-ignored)
-        (test "handles script with no dependencies" test-no-deps-script)
-        (test "vendor steps have correct shape" test-vendor-steps-have-correct-shape)
-        (test "epupp steps have correct shape" test-epupp-steps-have-correct-shape)
-        (test "deep chain: error message includes full chain" test-deep-chain-error-message)
-        (test "multiple roots: library appears before all roots" test-multiple-roots-ordering)))))
+            (describe "resolve-execution-plan"
+                      (fn []
+                        (test "resolves simple chain (A depends on B)" test-simple-chain)
+                        (test "resolves diamond dependency (A->B,C B->D,C->D, D once)" test-diamond-dependency)
+                        (test "resolves mixed scittle:// + epupp:// graph" test-mixed-scittle-and-epupp)
+                        (test "handles dual-role scripts (auto-run + library)" test-dual-role-script)
+                        (test "produces error for missing library" test-missing-library-error)
+                        (test "produces error for self-reference" test-self-reference-error)
+                        (test "detects dependency cycles" test-cycle-detection-error)
+                        (test "deduplicates across multiple roots" test-dedup-across-roots)
+                        (test "resolves disabled script as library" test-disabled-script-as-library)
+                        (test "resolves built-in script as library" test-builtin-script-as-library)
+                        (test "ignores unknown protocol URLs" test-unknown-protocol-ignored)
+                        (test "handles script with no dependencies" test-no-deps-script)
+                        (test "vendor steps have correct shape" test-vendor-steps-have-correct-shape)
+                        (test "epupp steps have correct shape" test-epupp-steps-have-correct-shape)
+                        (test "deep chain: error message includes full chain" test-deep-chain-error-message)
+                        (test "multiple roots: library appears before all roots" test-multiple-roots-ordering)))
+
+            (describe "resolve-execution-plan with git deps"
+                      (fn []
+                        (test "cached git dep produces :git-dep-script step" test-git-dep-cached-produces-step)
+                        (test "cache miss produces :git-dep/cache-miss error" test-git-dep-cache-miss-produces-error)
+                        (test "nil cache produces cache-miss error" test-git-dep-nil-cache-produces-error)
+                        (test "transitive git deps resolve in order" test-git-dep-transitive)
+                        (test "deep transitive git deps (A->B->C) resolve in order" test-git-dep-deep-transitive)
+                        (test "mixed graph: scittle + epupp + git resolves correctly" test-git-dep-mixed-graph)
+                        (test "detects cycles across git deps" test-git-dep-cycle-detection)
+                        (test "git dep with scittle inject produces vendor steps" test-git-dep-with-scittle-inject)
+                        (test "deduplicates git deps across multiple roots" test-git-dep-dedup-across-roots)
+                        (test "git dep steps have correct shape" test-git-dep-step-shape)))))

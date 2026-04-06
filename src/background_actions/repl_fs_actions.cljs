@@ -2,7 +2,8 @@
   "Action implementations for background REPL FS operations.
    No Chrome APIs, no atoms, no side effects - just state transitions."
   (:require [script-utils :as script-utils]
-            [manifest-parser :as mp]))
+            [manifest-parser :as mp]
+            [git-dep :as git-dep]))
 
 ;; ============================================================
 ;; Helper Functions (Pure)
@@ -288,11 +289,17 @@
                                   (let [filtered (if (and force? existing-by-name)
                                                    (remove-script-from-list scripts (:script/id existing-by-name))
                                                    scripts)]
-                                    (conj filtered timestamped-script)))]
-            (make-success-response updated-scripts "save" script-name
-                                   {:event-data (cond-> {:script-id script-id
-                                                         :created (not is-update?)}
-                                                  (some? bulk-id) (assoc :bulk-id bulk-id)
-                                                  (some? bulk-index) (assoc :bulk-index bulk-index)
-                                                  (some? bulk-count) (assoc :bulk-count bulk-count))
-                                    :response-data (script->base-info timestamped-script)})))))))
+                                    (conj filtered timestamped-script)))
+                response (make-success-response updated-scripts "save" script-name
+                                                {:event-data (cond-> {:script-id script-id
+                                                                      :created (not is-update?)}
+                                                               (some? bulk-id) (assoc :bulk-id bulk-id)
+                                                               (some? bulk-index) (assoc :bulk-index bulk-index)
+                                                               (some? bulk-count) (assoc :bulk-count bulk-count))
+                                                 :response-data (script->base-info timestamped-script)})
+                ;; Check for git dep URLs to trigger async resolution
+                has-git-deps? (seq (git-dep/extract-git-dep-urls
+                                    (or (:script/inject timestamped-script) [])))]
+            (if has-git-deps?
+              (assoc response :uf/dxs [[:git-dep/ax.resolve-for-script code]])
+              response)))))))

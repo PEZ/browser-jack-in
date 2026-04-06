@@ -4,6 +4,7 @@
    Produces an ordered execution plan of vendor files, library scripts,
    and root scripts with deduplication and error detection."
   (:require [clojure.string :as string]
+            [git-dep :as git-dep]
             [scittle-libs :as scittle-libs]
             [script-utils :as script-utils]))
 
@@ -13,11 +14,12 @@
 
 (defn classify-inject-url
   "Classify an inject URL by protocol.
-   Returns :scittle, :epupp, or :unknown."
+   Returns :scittle, :epupp, :git-dep, or :unknown."
   [url]
   (cond
     (and (string? url) (string/starts-with? url "scittle://")) :scittle
     (and (string? url) (string/starts-with? url "epupp://")) :epupp
+    (git-dep/git-dep-url? url) :git-dep
     :else :unknown))
 
 (defn parse-epupp-url
@@ -71,55 +73,91 @@
 ;; ============================================================
 
 (defn- resolve-script-deps
-  "Resolve transitive epupp:// dependencies for a single script.
+  "Resolve transitive dependencies for a single script.
    Walks depth-first, collecting vendor URLs and resolved scripts in order.
-   Detects missing libraries, self-references, and cycles.
-   Returns {:resolved [scripts-in-order] :errors [envelopes] :vendor-urls [strings]}"
-  [root-script catalog]
+   Detects missing libraries, self-references, cycles, and cache misses.
+   git-dep-cache is a map of URL->cache-entry for git:// dependencies (may be nil).
+   Returns {:resolved [items-in-order] :errors [envelopes] :vendor-urls [strings]}"
+  [root-script catalog git-dep-cache]
   (let [errors (atom [])
         vendor-urls (atom [])
         resolved-order (atom [])
         seen (atom #{})]
-    (letfn [(walk [current-script chain]
+    (letfn [(resolve-deps [inject-urls chain]
+              (doseq [url inject-urls]
+                (let [kind (classify-inject-url url)]
+                  (cond
+                    (= kind :scittle)
+                    (swap! vendor-urls conj url)
+
+                    (= kind :epupp)
+                    (let [dep-name (parse-epupp-url url)]
+                      (when dep-name
+                        (let [new-chain (conj chain dep-name)]
+                          (cond
+                            (= dep-name (peek chain))
+                            (swap! errors conj
+                                   (make-error :library/self-reference
+                                               (first chain) url new-chain
+                                               (str "Self-reference: " dep-name " depends on itself")))
+
+                            (some #(= % dep-name) chain)
+                            (swap! errors conj
+                                   (make-error :library/cycle
+                                               (first chain) url new-chain
+                                               (str "Dependency cycle detected: "
+                                                    (string/join " -> " new-chain))))
+
+                            (nil? (get catalog dep-name))
+                            (swap! errors conj
+                                   (make-error :library/not-found
+                                               (first chain) url new-chain
+                                               (str "Library not found: " dep-name
+                                                    (format-required-by new-chain))))
+
+                            (contains? @seen dep-name)
+                            nil
+
+                            :else
+                            (walk (get catalog dep-name) new-chain)))))
+
+                    (= kind :git-dep)
+                    (walk-git-dep url chain)))))
+
+            (walk-git-dep [url chain]
+              (let [new-chain (conj chain url)]
+                (cond
+                  (some #(= % url) chain)
+                  (swap! errors conj
+                         (make-error :git-dep/cycle
+                                     (first chain) url new-chain
+                                     (str "Dependency cycle detected: "
+                                          (string/join " -> " new-chain))))
+
+                  (contains? @seen url)
+                  nil
+
+                  :else
+                  (if-let [entry (get git-dep-cache url)]
+                    (do
+                      (swap! seen conj url)
+                      (resolve-deps (get entry :cache/inject []) new-chain)
+                      (swap! resolved-order conj
+                             {:step/type :git-dep-script
+                              :step/url url
+                              :step/code (:cache/code entry)
+                              :step/source :git}))
+                    (swap! errors conj
+                           (make-error :git-dep/cache-miss
+                                       (first chain) url new-chain
+                                       (str "Git dependency not in cache: " url
+                                            (format-required-by new-chain))))))))
+
+            (walk [current-script chain]
               (let [script-name (:script/name current-script)]
                 (when-not (contains? @seen script-name)
                   (swap! seen conj script-name)
-                  (doseq [url (get current-script :script/inject [])]
-                    (let [kind (classify-inject-url url)]
-                      (cond
-                        (= kind :scittle)
-                        (swap! vendor-urls conj url)
-
-                        (= kind :epupp)
-                        (let [dep-name (parse-epupp-url url)]
-                          (when dep-name
-                            (let [new-chain (conj chain dep-name)]
-                              (cond
-                                (= dep-name script-name)
-                                (swap! errors conj
-                                       (make-error :library/self-reference
-                                                   (first chain) url new-chain
-                                                   (str "Self-reference: " script-name " depends on itself")))
-
-                                (some #(= % dep-name) chain)
-                                (swap! errors conj
-                                       (make-error :library/cycle
-                                                   (first chain) url new-chain
-                                                   (str "Dependency cycle detected: "
-                                                        (string/join " -> " new-chain))))
-
-                                (nil? (get catalog dep-name))
-                                (swap! errors conj
-                                       (make-error :library/not-found
-                                                   (first chain) url new-chain
-                                                   (str "Library not found: " dep-name
-                                                        (format-required-by new-chain))))
-
-                                (contains? @seen dep-name)
-                                nil
-
-                                :else
-                                (walk (get catalog dep-name) new-chain))))))))
+                  (resolve-deps (get current-script :script/inject []) chain)
                   (swap! resolved-order conj current-script))))]
       (walk root-script [(:script/name root-script)])
       {:resolved @resolved-order
@@ -136,55 +174,60 @@
    Parameters:
    - root-scripts: collection of scripts to resolve (the 'roots')
    - all-scripts: collection of ALL available scripts (for library lookup)
+   - git-dep-cache: (optional) map of git URL -> cache entry for git:// dependencies
 
    Returns:
-   {:plan/steps [{:step/type :vendor-file|:library-script|:root-script ...}]
+   {:plan/steps [{:step/type :vendor-file|:library-script|:git-dep-script|:root-script ...}]
     :plan/vendor-namespaces [string]  ; namespace names for vendor verification
     :plan/errors [error-envelopes]}"
-  [root-scripts all-scripts]
-  (let [catalog (build-catalog all-scripts)
-        root-ids (set (map :script/id root-scripts))
-        results (mapv #(resolve-script-deps % catalog) root-scripts)
-        all-errors (vec (mapcat :errors results))
-        all-vendor-urls (vec (distinct (mapcat :vendor-urls results)))
-        vendor-files (scittle-libs/collect-lib-files
-                      [{:script/inject all-vendor-urls}])
-        vendor-namespaces (scittle-libs/collect-lib-namespaces
-                           [{:script/inject all-vendor-urls}])
-        all-resolved (mapcat :resolved results)
-        seen-ids (atom #{})
-        deduped (reduce (fn [acc script]
-                          (let [sid (:script/id script)]
-                            (if (contains? @seen-ids sid)
-                              acc
-                              (do (swap! seen-ids conj sid)
-                                  (conj acc script)))))
-                        []
-                        all-resolved)
-        library-scripts (filterv #(not (contains? root-ids (:script/id %))) deduped)
-        root-scripts-ordered (filterv #(contains? root-ids (:script/id %)) deduped)
-        vendor-steps (mapv (fn [file]
-                             {:step/type :vendor-file
-                              :step/path (str "vendor/" file)
-                              :step/source :scittle})
-                           vendor-files)
-        library-steps (mapv (fn [script]
-                              {:step/type :library-script
-                               :step/id (:script/id script)
-                               :step/name (:script/name script)
-                               :step/code (:script/code script)
-                               :step/source :epupp})
-                            library-scripts)
-        root-steps (mapv (fn [script]
-                           {:step/type :root-script
-                            :step/id (:script/id script)
-                            :step/name (:script/name script)
-                            :step/code (:script/code script)
-                            :step/source :epupp})
-                         root-scripts-ordered)]
-    {:plan/steps (vec (concat vendor-steps library-steps root-steps))
-     :plan/vendor-namespaces vendor-namespaces
-     :plan/errors all-errors}))
+  ([root-scripts all-scripts]
+   (resolve-execution-plan root-scripts all-scripts nil))
+  ([root-scripts all-scripts git-dep-cache]
+   (let [catalog (build-catalog all-scripts)
+         root-ids (set (map :script/id root-scripts))
+         results (mapv #(resolve-script-deps % catalog git-dep-cache) root-scripts)
+         all-errors (vec (mapcat :errors results))
+         all-vendor-urls (vec (distinct (mapcat :vendor-urls results)))
+         vendor-files (scittle-libs/collect-lib-files
+                       [{:script/inject all-vendor-urls}])
+         vendor-namespaces (scittle-libs/collect-lib-namespaces
+                            [{:script/inject all-vendor-urls}])
+         all-resolved (mapcat :resolved results)
+         seen-ids (atom #{})
+         deduped (reduce (fn [acc item]
+                           (let [id (or (:script/id item) (:step/url item))]
+                             (if (or (nil? id) (contains? @seen-ids id))
+                               acc
+                               (do (swap! seen-ids conj id)
+                                   (conj acc item)))))
+                         []
+                         all-resolved)
+         non-roots (filterv #(not (contains? root-ids (:script/id %))) deduped)
+         root-scripts-ordered (filterv #(contains? root-ids (:script/id %)) deduped)
+         vendor-steps (mapv (fn [file]
+                              {:step/type :vendor-file
+                               :step/path (str "vendor/" file)
+                               :step/source :scittle})
+                            vendor-files)
+         non-root-steps (mapv (fn [item]
+                                (if (= :git-dep-script (:step/type item))
+                                  item
+                                  {:step/type :library-script
+                                   :step/id (:script/id item)
+                                   :step/name (:script/name item)
+                                   :step/code (:script/code item)
+                                   :step/source :epupp}))
+                              non-roots)
+         root-steps (mapv (fn [script]
+                            {:step/type :root-script
+                             :step/id (:script/id script)
+                             :step/name (:script/name script)
+                             :step/code (:script/code script)
+                             :step/source :epupp})
+                          root-scripts-ordered)]
+     {:plan/steps (vec (concat vendor-steps non-root-steps root-steps))
+      :plan/vendor-namespaces vendor-namespaces
+      :plan/errors all-errors})))
 
 (defn plan-vendor-files
   "Extract vendor file paths from plan steps."
@@ -192,7 +235,7 @@
   (mapv :step/path (filterv #(= :vendor-file (:step/type %)) (:plan/steps plan))))
 
 (defn plan-script-steps
-  "Extract library and root script steps from plan (in order)."
+  "Extract library, git-dep, and root script steps from plan (in order)."
   [plan]
-  (filterv #(contains? #{:library-script :root-script} (:step/type %))
+  (filterv #(contains? #{:library-script :git-dep-script :root-script} (:step/type %))
            (:plan/steps plan)))
