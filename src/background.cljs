@@ -1118,6 +1118,9 @@
         (catch :default err
           {:success false :error (.-message err)})))
 
+    :storage/fx.persist!
+    (storage/persist!)
+
     :ext-dep/fx.fetch-deps
     (let [[uncached-urls existing-cache] args]
       (js-await (ext-dep/resolve-and-fetch!

@@ -39,7 +39,7 @@
                (str "https://raw.githubusercontent.com/user/repo/" valid-sha "/lib.cljs")))
       (.toBe true)))
 
-(defn- test-valid-gist-url []
+(defn- test-valid-revisioned-gist-url []
   (-> (expect (ed/valid-ext-dep-url?
                (str "https://gist.githubusercontent.com/user/gistid/raw/" valid-sha "/lib.cljs")))
       (.toBe true)))
@@ -88,6 +88,11 @@
 (defn- test-rejects-gist-without-raw []
   (-> (expect (ed/valid-ext-dep-url?
                (str "https://gist.githubusercontent.com/user/gistid/" valid-sha "/lib.cljs")))
+      (.toBe false)))
+
+(defn- test-rejects-gist-without-revision []
+  (-> (expect (ed/valid-ext-dep-url?
+               "https://gist.githubusercontent.com/user/gistid/raw/lib.cljs"))
       (.toBe false)))
 
 (defn- test-rejects-git-scheme []
@@ -229,7 +234,7 @@
             (describe "valid-ext-dep-url?"
                       (fn []
                         (test "accepts raw.githubusercontent.com repo URL" test-valid-repo-url)
-                        (test "accepts gist.githubusercontent.com gist URL" test-valid-gist-url)
+                        (test "accepts gist URL pinned to raw/{sha}/{filename}" test-valid-revisioned-gist-url)
                         (test "accepts deep nested path" test-valid-deep-path)
                         (test "accepts uppercase SHA in URL" test-valid-upper-sha-url)
                         (test "rejects nil" test-rejects-nil)
@@ -240,6 +245,7 @@
                         (test "rejects short SHA" test-rejects-short-sha)
                         (test "rejects too few path segments" test-rejects-too-few-segments)
                         (test "rejects gist URL without /raw/ segment" test-rejects-gist-without-raw)
+                        (test "rejects gist URL with /raw/{filename} and no SHA revision" test-rejects-gist-without-revision)
                         (test "rejects git:// scheme" test-rejects-git-scheme)
                         (test "rejects scittle:// scheme" test-rejects-scittle-scheme)
                         (test "rejects epupp:// scheme" test-rejects-epupp-scheme)))
