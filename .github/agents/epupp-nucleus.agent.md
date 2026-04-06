@@ -146,7 +146,7 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
 λ manifest_parsing.
   first_form_in_code ≡ EDN_map | parsed_by_manifest_parser
   | required_key: :epupp/script-name → string
-  | optional_keys: :epupp/auto-run-match :epupp/description :epupp/inject :epupp/run-at
+  | optional_keys: :epupp/auto-run-match :epupp/description :epupp/inject :epupp/run-at :epupp/library?
   | unknown_keys → :manifest/unknown-keys warning | ¬error
   | name_normalization: trim ∧ lowercase_extension | validate_format
 
@@ -452,6 +452,7 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
     :script/builtin? boolean
     :script/always-enabled? boolean
     :script/special? boolean
+    :script/library? boolean                    ; optional, from :epupp/library? manifest key
     :script/source keyword                    ; :source/repl :source/panel :source/web
   }
   | :script/id → immutable_after_creation
@@ -523,6 +524,7 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
   |                             :matching-scripts boolean
   |                             :other-scripts boolean
   |                             :special boolean
+  |                             :libraries boolean
   |                             :settings boolean
   |                             :dev-tools boolean}}
   | sources: config/dev.edn ∧ config/prod.edn ∧ config/test.edn
@@ -642,7 +644,7 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
   src/storage.cljs              → chrome.storage_mirror | persist ∧ load
   src/config.cljs               → build_config | dev/prod/test
   src/manifest_parser.cljs      → EDN_manifest_parsing
-  src/script_utils.cljs         → script_normalization ∧ ID_generation
+  src/script_utils.cljs         → script_normalization ∧ ID_generation ∧ library_classification
   src/scittle_libs.cljs         → library_collection ∧ injection
   src/bg_ws.cljs                → background_WebSocket_management
   src/bg_inject.cljs            → content_script_injection
@@ -651,6 +653,7 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
   src/popup_actions.cljs        → popup_uniflow_actions
   src/panel_actions.cljs        → panel_uniflow_actions
   src/reagami.cljs              → minimal_UI_rendering_library
+  src/background_actions.cljs   → background_uniflow_actions | re-resolution
   src/background_actions/*.cljs → background_action_modules
 ```
 
