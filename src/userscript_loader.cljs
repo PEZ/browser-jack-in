@@ -185,7 +185,7 @@
                                  #js ["scripts" "test-mode" "gitDepCache"]))
           raw-scripts (or (.-scripts result) #js [])
           test-mode? (= (aget result "test-mode") true)
-          git-dep-cache (or (js->clj (aget result "gitDepCache") :keywordize-keys true) {})
+          git-dep-cache (or (aget result "gitDepCache") {})
           all-scripts (script-utils/parse-scripts
                        raw-scripts
                        {:extract-manifest manifest-parser/extract-manifest})]
