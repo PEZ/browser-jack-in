@@ -1290,8 +1290,9 @@
                            (script-utils/parse-scripts (.-oldValue scripts-change) {:extract-manifest mp/extract-manifest}))
              new-scripts (when (.-newValue scripts-change)
                            (script-utils/parse-scripts (.-newValue scripts-change) {:extract-manifest mp/extract-manifest}))]
-         ;; Always reload scripts to update UI
-         (dispatch! [[:popup/ax.load-scripts]])
+         ;; Always reload scripts and runtime status to update UI
+         (dispatch! [[:popup/ax.load-scripts]
+                     [:popup/ax.load-runtime-status]])
          ;; If we have both old and new, diff to find modified scripts
          (when (and old-scripts new-scripts)
            (let [{:keys [added modified]} (script-utils/diff-scripts old-scripts new-scripts)

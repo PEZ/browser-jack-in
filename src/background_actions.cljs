@@ -449,11 +449,26 @@
 
     :runtime/ax.re-resolve-on-change
     (let [[all-scripts] args
-          errors-by-tab (:runtime/errors state)]
-      (when (seq errors-by-tab)
-        {:uf/fxs (vec (mapcat (fn [[tab-id tab-errors]]
-                                (when (seq tab-errors)
-                                  [[:runtime/fx.re-resolve-tab tab-id tab-errors all-scripts]]))
-                              errors-by-tab))}))
+          errors-by-tab (:runtime/errors state)
+          connected-tabs (set (keys (:ws/connections state)))
+          error-tabs (set (keys errors-by-tab))
+          all-tabs (into connected-tabs error-tabs)]
+      (when (seq all-tabs)
+        (let [scripts-with-deps (filterv #(seq (:script/inject %)) all-scripts)
+              plan (when (seq scripts-with-deps)
+                     (dep-resolver/resolve-execution-plan scripts-with-deps all-scripts))
+              new-errors (if plan (:plan/errors plan) [])
+              all-known-errors (reduce into #{} (vals errors-by-tab))
+              truly-new (filterv (fn [e] (not (some #(= (:error/script-name %) (:error/script-name e))
+                                                    all-known-errors)))
+                                 new-errors)]
+          {:uf/fxs (cond-> (vec (map (fn [tab-id]
+                                       [:runtime/fx.set-tab-errors tab-id new-errors])
+                                     all-tabs))
+                     (seq truly-new)
+                     (conj [:banner/fx.broadcast-system {:event-type "error"
+                                                        :operation "library-resolution"
+                                                        :error (:error/message (first truly-new))
+                                                        :errors (mapv :error/message truly-new)}]))})))
 
     :uf/unhandled-ax))

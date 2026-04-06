@@ -1226,20 +1226,12 @@
       (js/chrome.runtime.sendMessage
        #js {:type "runtime-status"
             :tab-id tab-id
-            :errors errors}
+            :errors (clj->js errors)}
        (fn [_] (when js/chrome.runtime.lastError nil))))
 
-    :runtime/fx.re-resolve-tab
-    (let [[tab-id old-errors-map all-scripts] args
-          errored-names (set (keys old-errors-map))
-          scripts-to-check (filterv #(contains? errored-names (:script/name %)) all-scripts)
-          plan (when (seq scripts-to-check)
-                 (dep-resolver/resolve-execution-plan scripts-to-check all-scripts))
-          new-errors (if plan (:plan/errors plan) [])
-          truly-new (filterv (fn [e] (not (contains? old-errors-map (:error/script-name e))))
-                             new-errors)]
-      (dispatch! (cond-> [[:runtime/ax.set-tab-errors tab-id new-errors]]
-                   (seq truly-new) (conj [:banner/ax.broadcast-resolution-errors truly-new]))))
+    :runtime/fx.set-tab-errors
+    (let [[tab-id errors] args]
+      (dispatch! [[:runtime/ax.set-tab-errors tab-id errors]]))
 
     :msg/fx.handle-permission-granted
     (let [[tab-id icon-state] args]
