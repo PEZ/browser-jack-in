@@ -218,6 +218,25 @@ Clojure sequence functions don't work on JavaScript collections like `NodeList`,
 (.-length (js/document.querySelectorAll "div"))
 ```
 
+### 10. `js->clj` and `clj->js` Don't Exist
+
+Squint data structures ARE native JavaScript objects - maps are `{}`, vectors are `[]`, keywords are strings. There is no conversion boundary between "Clojure data" and "JS data" like in ClojureScript.
+
+```clojure
+;; ❌ Runtime crash - js->clj compiles to unqualified js__GT_clj() which doesn't exist
+(js->clj some-js-object :keywordize-keys true)
+
+;; ❌ Same problem
+(clj->js {:foo "bar"})
+
+;; ✅ Data from chrome.storage, JSON.parse, etc. is already usable directly
+(let [result (js-await (.get js/chrome.storage.local #js ["myData"]))
+      my-data (or (aget result "myData") {})]
+  (get my-data "someKey"))  ; works - get operates on JS objects in Squint
+```
+
+Since keywords are strings in Squint, there is no "keywordize-keys" concern - keys from JS objects are strings, and Squint keywords are strings, so `(get obj :my-key)` and `(get obj "my-key")` both work.
+
 ## Validating Squint Syntax
 
 **Use `get_errors` (problem report)** to check bracket balance and syntax errors. For compilation checks, use `bb squint-compile` which wraps Squint with proper project configuration.
