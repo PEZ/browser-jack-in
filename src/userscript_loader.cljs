@@ -182,10 +182,10 @@
   [current-url]
   (try
     (let [result (js-await (.get js/chrome.storage.local
-                                 #js ["scripts" "test-mode" "gitDepCache"]))
+                                 #js ["scripts" "test-mode" "extDepCache"]))
           raw-scripts (or (.-scripts result) #js [])
           test-mode? (= (aget result "test-mode") true)
-          git-dep-cache (or (aget result "gitDepCache") {})
+          ext-dep-cache (or (aget result "extDepCache") {})
           all-scripts (script-utils/parse-scripts
                        raw-scripts
                        {:extract-manifest manifest-parser/extract-manifest})]
@@ -202,11 +202,11 @@
             (js/console.log "[Epupp Loader] Found" (count matching) "matching scripts")
 
             ;; Resolve dependency graph
-            (let [plan (dep-resolver/resolve-execution-plan (vec matching) all-scripts git-dep-cache)
+            (let [plan (dep-resolver/resolve-execution-plan (vec matching) all-scripts ext-dep-cache)
                   errors (:plan/errors plan)
                   steps (:plan/steps plan)
                   vendor-steps (filterv #(= :vendor-file (:step/type %)) steps)
-                  script-steps (filterv #(contains? #{:library-script :root-script :git-dep-script} (:step/type %))
+                  script-steps (filterv #(contains? #{:library-script :root-script :ext-dep-script} (:step/type %))
                                         steps)]
 
               ;; Report resolution errors

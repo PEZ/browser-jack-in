@@ -62,7 +62,7 @@ Overwrites fail by default. Pass `{:fs/force? true}` to allow:
 (epupp.fs/save! code {:fs/force? true})
 ```
 
-When a saved script has `git://` or `gist://` URLs in its `:epupp/inject`, Epupp automatically fetches and caches the referenced content in the background. This happens on every save, so updating a script's git dependencies and saving is enough to populate the cache.
+When a saved script has supported HTTPS external dependency URLs in its `:epupp/inject`, Epupp automatically fetches and caches the referenced content in the background. This happens on every save, so updating a script's external dependencies and saving is enough to populate the cache. Supported hosts are `raw.githubusercontent.com` and `gist.githubusercontent.com`, and the URL must be pinned to a full 40-character SHA.
 
 All operations return promises. Use async/await:
 

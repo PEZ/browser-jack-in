@@ -264,7 +264,7 @@ The manifest is a plain Clojure map at the top of the file. Your code runs in th
 | `:epupp/auto-run-match` | No | - | URL glob pattern(s). String or vector of strings. Omit for manual-only scripts. |
 | `:epupp/description` | No | - | Shown in the popup UI. |
 | `:epupp/run-at` | No | `"document-idle"` | When to run: `"document-start"`, `"document-end"`, or `"document-idle"`. |
-| `:epupp/inject` | No | `[]` | Dependency URLs to load before the script runs. Supports `scittle://` (bundled libraries), `epupp://` (user library scripts), `git://` (public git repo files), and `gist://` (GitHub gists). |
+| `:epupp/inject` | No | `[]` | Dependency URLs to load before the script runs. Supports `scittle://` (bundled libraries), `epupp://` (user library scripts), and raw HTTPS URLs from `raw.githubusercontent.com` or `gist.githubusercontent.com` pinned to full SHAs. |
 | `:epupp/library?` | No | `false` | Mark as a library script. Library-only scripts (no `:epupp/auto-run-match`) appear in a dedicated Libraries section in the popup. Scripts with both `:epupp/library?` and `:epupp/auto-run-match` appear in their auto-run section. |
 
 Scripts with `:epupp/auto-run-match` start disabled. Enable them in the popup for auto-injection on matching pages. Scripts without this key only run when you click the Play button in the popup.
@@ -394,27 +394,27 @@ From a live REPL session, you can load libraries at runtime with `epupp.repl/man
 
 Safe to call multiple times - already-loaded libraries are skipped.
 
-### Git-Hosted Dependencies
+### External Dependencies
 
-Scripts can depend on code hosted in public git repositories and GitHub gists via `git://` and `gist://` URLs in `:epupp/inject`. All URLs must be pinned to a full 40-character SHA, ensuring immutable, reproducible dependencies.
+Scripts can depend on code hosted on GitHub's raw content hosts via HTTPS URLs in `:epupp/inject`. Supported hosts are `raw.githubusercontent.com` for repository files and `gist.githubusercontent.com` for gists. All URLs must be pinned to a full 40-character SHA, ensuring immutable, reproducible dependencies.
 
 ```clojure
 {:epupp/script-name "my/tweaks.cljs"
  :epupp/auto-run-match "https://example.com/*"
- :epupp/inject ["git://github.com/user/repo@abc123.../path/to/helpers.cljs"
-                "gist://gist.github.com/user/GIST_ID@def456.../helpers.cljs"]}
+ :epupp/inject ["https://raw.githubusercontent.com/user/repo/0123456789abcdef0123456789abcdef01234567/path/to/helpers.cljs"
+                "https://gist.githubusercontent.com/user/GIST_ID/raw/89abcdef0123456789abcdef0123456789abcdef/helpers.cljs"]}
 ```
 
-**URL format:**
+**Trusted URL formats:**
 
-| Scheme | Format | Hosts |
-|--------|--------|-------|
-| `git://` | `git://host/owner/repo@SHA/path/to/file.cljs` | github.com, gitlab.com, codeberg.org, localhost, 127.0.0.1 |
-| `gist://` | `gist://gist.github.com/user/GIST_ID@SHA/filename.cljs` | gist.github.com |
+| Host | Format |
+|------|--------|
+| `raw.githubusercontent.com` | `https://raw.githubusercontent.com/owner/repo/SHA/path/to/file.cljs` |
+| `gist.githubusercontent.com` | `https://gist.githubusercontent.com/owner/GIST_ID/raw/SHA/filename.cljs` |
 
-Git dependencies are fetched and cached when the script is saved (via panel or FS API). At page load, they're injected from cache - no network requests during injection. Transitive dependencies are supported: a cached git dep can itself reference other dependencies via `:epupp/inject` in its manifest.
+External dependencies are fetched and cached when the script is saved (via panel or FS API). At page load, they're injected from cache - no network requests during injection. Transitive dependencies are supported: a cached external dependency can itself reference other dependencies via `:epupp/inject` in its manifest.
 
-Only public repositories and gists are supported (no authentication in v1). Branch or tag references are not allowed - use a full commit SHA.
+Only public GitHub content is supported (no authentication in v1). Branch or tag references are not allowed - use a full commit SHA.
 
 ## Epupp Userscript Gallery
 

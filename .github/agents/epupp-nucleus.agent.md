@@ -147,7 +147,7 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
   first_form_in_code ≡ EDN_map | parsed_by_manifest_parser
   | required_key: :epupp/script-name → string
   | optional_keys: :epupp/auto-run-match :epupp/description :epupp/inject :epupp/run-at :epupp/library?
-  | :epupp/inject URL_schemes: scittle:// ∧ epupp:// ∧ git://host/owner/repo@sha/path ∧ gist://host/id@sha/file
+  | :epupp/inject URL_schemes: scittle:// ∧ epupp:// ∧ https://raw.githubusercontent.com/owner/repo/sha/path ∧ https://gist.githubusercontent.com/owner/id/raw/sha/file
   | unknown_keys → :manifest/unknown-keys warning | ¬error
   | name_normalization: trim ∧ lowercase_extension | validate_format
 
@@ -249,11 +249,11 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
 ```
 λ extension_activation.
   1_service_worker_starts: background.cljs → init!
-  2_initialize_storage: load_scripts ∧ load_settings ∧ load_git-dep-cache ∧ schema_migration
+  2_initialize_storage: load_scripts ∧ load_settings ∧ load_ext-dep-cache ∧ schema_migration
   3_register_message_listeners: chrome.runtime.onMessage
   4_register_navigation_listeners: chrome.webNavigation.onCompleted(if_auto_connect)
   5_register_tab_listeners: chrome.tabs.onRemoved → cleanup_connections
-  6_register_storage_listeners: onChanged(scripts → sync_registrations, gitDepCache → re-resolve)
+  6_register_storage_listeners: onChanged(scripts → sync_registrations, extDepCache → re-resolve)
   7_set_initial_icon_state: all_tabs → :disconnected
   | then: awaiting_popup_or_auto_connect | reactor_pattern_for_messages
 
@@ -308,12 +308,12 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
   1_navigation_detected: chrome.webNavigation.onCompleted ∨ explicit_connect
   2_find_matching_scripts: filter(scripts, url_matches ∧ enabled)
   3_group_by_run_at: document_start ∧ document_end ∧ document_idle
-  4_resolve_dependencies: dep_resolver → topological_sort(epupp:// ∧ git:// ∧ gist://_refs) → inject_plan
-  | git://_deps: resolved_from_git-dep-cache(storage) | cache_miss → :git-dep/cache-miss_error
-  | step_types: :vendor-file ∧ :library-script ∧ :git-dep-script ∧ :root-script
-  5_inject_required_libs: execute_plan! → inject_scittle_plugins ∧ library_scripts ∧ git-dep_scripts
+  4_resolve_dependencies: dep_resolver → topological_sort(epupp:// ∧ HTTPS_ext_dep_refs) → inject_plan
+  | https://_ext_deps: resolved_from_ext-dep-cache(storage) | cache_miss → :ext-dep/cache-miss_error
+  | step_types: :vendor-file ∧ :library-script ∧ :ext-dep-script ∧ :root-script
+  5_inject_required_libs: execute_plan! → inject_scittle_plugins ∧ library_scripts ∧ ext-dep_scripts
   6_inject_scripts: execute_in_page(script_code) | per_script | ordered_by_run_at
-  | userscript_loader.cljs ≡ Squint_compiled_content_script | reads_storage(scripts ∧ gitDepCache) ∧ resolves_deps
+  | userscript_loader.cljs ≡ Squint_compiled_content_script | reads_storage(scripts ∧ extDepCache) ∧ resolves_deps
   | resolution_errors → "loader-resolution-errors" → background → broadcast
   | page_context_execution → full_DOM_access
 
@@ -438,9 +438,9 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
   |        "ports_HOSTNAME" "panelState:HOSTNAME"
   |        "schemaVersion" "sponsorStatus" "sponsorCheckedAt"
   |        "grantedOrigins" "autoConnectLevel" "autoReconnectRepl"
-  |        "gitDepCache"
+  |        "extDepCache"
   | storage/!db ≡ in_memory_mirror | loaded_on_init | updated_on_persist
-  | mirror_includes: :storage/git-dep-cache {} | synced_via_onChanged_listener
+  | mirror_includes: :storage/ext-dep-cache {} | synced_via_onChanged_listener
   | schema_migration: version_checked_on_init → migrate_if_needed
 
 λ script_data_contract.
@@ -453,7 +453,7 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
     :script/created iso-string
     :script/modified iso-string
     :script/description string                ; optional
-    :script/inject [string]                   ; "scittle://..." "epupp://..." "git://host/owner/repo@sha/path" "gist://..."
+    :script/inject [string]                   ; "scittle://..." "epupp://..." "https://raw.githubusercontent.com/..." "https://gist.githubusercontent.com/..."
     :script/run-at string                     ; "document-start"|"document-end"|"document-idle"
     :script/builtin? boolean
     :script/always-enabled? boolean
@@ -516,8 +516,8 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
   | manifest-hints ≡ {:name-normalized? :raw-script-name :unknown-keys :run-at :inject}
 
 λ action_naming_convention.
-  actions:  :domain/ax.verb-noun              ; :popup/ax.set-nrepl-port :ws/ax.register :git-dep/ax.resolve-for-script :git-dep/ax.cache-results
-  effects:  :domain/fx.verb-noun              ; :popup/fx.save-ports :ws/fx.handle-connect :git-dep/fx.fetch-deps
+  actions:  :domain/ax.verb-noun              ; :popup/ax.set-nrepl-port :ws/ax.register :ext-dep/ax.resolve-uncached-urls :ext-dep/ax.cache-results
+  effects:  :domain/fx.verb-noun              ; :popup/fx.save-ports :ws/fx.handle-connect :ext-dep/fx.fetch-deps
   state:    :domain/key-name                  ; :ports/nrepl :script/code :ui/reveal-highlight
   messages: "kebab-case-string"               ; "ws-connect" "save-script" "check-status"
 
@@ -654,8 +654,8 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
   src/scittle_libs.cljs         → library_collection ∧ injection
   src/bg_ws.cljs                → background_WebSocket_management
   src/bg_inject.cljs            → content_script_injection
-  src/dep_resolver.cljs         → dependency_resolution | pure_resolver ∧ cycle_detection ∧ git-dep_classification
-  src/git_dep.cljs              → git_dep_URL_parsing ∧ forge_classification ∧ async_fetch_cache
+  src/dep_resolver.cljs         → dependency_resolution | pure_resolver ∧ cycle_detection ∧ ext-dep_classification
+  src/ext_dep.cljs              → ext_dep_URL_validation ∧ async_fetch_cache
   src/bg_fs_dispatch.cljs       → FS_message_routing ∧ optional_:uf/dxs_dispatch
   src/popup_actions.cljs        → popup_uniflow_actions
   src/panel_actions.cljs        → panel_uniflow_actions
@@ -731,7 +731,7 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
                                 [epupp.bg-ws :as bg-ws]
                                 [epupp.bg-inject :as bg-inject]
                                 [epupp.bg-fs-dispatch :as bg-fs]
-                                [epupp.git-dep :as git-dep]))
+                                [epupp.ext-dep :as ext-dep]))
 
 (ns epupp.popup (:require [epupp.event-handler :as uf]
                            [epupp.reagami :as reagami]
@@ -758,7 +758,7 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
 (ns epupp.manifest-parser)  ;; EDN manifest parsing from script code
 (ns epupp.script-utils)     ;; Script normalization, ID generation, merge logic
 (ns epupp.scittle-libs)     ;; Library file collection for injection
-(ns epupp.git-dep)          ;; Git dep URL parsing, forge classification, fetch/cache
+(ns epupp.ext-dep)          ;; External dependency URL validation and fetch/cache
 
 ;; Background Modules
 (ns epupp.bg-ws)            ;; WebSocket management per tab
@@ -777,7 +777,7 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
 
 ---
 
-**Generated** April 6, 2026. Updated for git-dep feature (git:// and gist:// inject URL support). Epupp source tracking in package.json (workspace root).
+**Generated** April 6, 2026. Updated for ext-dep feature (SHA-pinned raw HTTPS inject URL support). Epupp source tracking in package.json (workspace root).
 
 **Coverage**: 100% message protocol, 95% Uniflow action/effect contracts, 90% state shapes, 85% injection/connection lifecycle, 80% UI/panel patterns. E2E test infrastructure and vendor bundles excluded.
 

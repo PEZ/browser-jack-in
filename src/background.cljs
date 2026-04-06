@@ -419,13 +419,13 @@
                  (.-id js-script) (assoc :script/id (.-id js-script))
                  (.-force js-script) (assoc :script/force? true))]
     (fs-dispatch/dispatch-fs-action! send-response [:fs/ax.save-script script]))
-  false)
+  true)
 
 (defn- handle-panel-rename-script [message send-response]
   (let [from-name (.-from message)
         to-name (.-to message)]
     (fs-dispatch/dispatch-fs-action! send-response [:fs/ax.rename-script from-name to-name]))
-  false)
+  true)
 
 (defn- handle-rename-script [message tab-id dispatch! send-response]
   (let [from-name (.-from message)
@@ -660,7 +660,7 @@
                         :script/force? true
                         :script/source script-source}]
             (fs-dispatch/dispatch-fs-action! send-response [:fs/ax.save-script script])
-            false)))
+            true)))
       (catch :default err
         (send-response #js {:success false :error (str "Parse error: " (.-message err))})
         false))))
@@ -1111,6 +1111,9 @@
                      (js/chrome.storage.local.set
                       (js-obj key value)
                       resolve))))
+        (when (= "extDepCache" key)
+          (swap! storage/!db assoc
+                 :storage/ext-dep-cache (or value {})))
         {:success true :key key :value value}
         (catch :default err
           {:success false :error (.-message err)})))

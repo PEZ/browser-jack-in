@@ -180,7 +180,7 @@
                              [])]
            (swap! !db assoc :storage/granted-origins new-origins)))
        (when-let [ext-dep-cache-change (.-extDepCache changes)]
-         (let [new-cache (or (js->clj (.-newValue ext-dep-cache-change)) {})]
+         (let [new-cache (or (.-newValue ext-dep-cache-change) {})]
            (swap! !db assoc :storage/ext-dep-cache new-cache)))
        (when-let [sponsor-change (.-sponsorStatus changes)]
          (swap! !db assoc :sponsor/status (boolean (.-newValue sponsor-change))))

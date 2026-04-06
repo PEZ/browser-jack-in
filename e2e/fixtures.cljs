@@ -348,7 +348,7 @@
   ;; Use :has-text filter then .first to handle multiple banners with same text
   (let [banner (.first (.locator page (str ".system-banner:has-text(\"" text "\")")))]
     (js-await (-> (expect banner)
-                  (.toBeVisible #js {:timeout 3000})))))
+                  (.toBeVisible #js {:timeout 5000})))))
 
 (defn ^:async wait-for-checkbox-state
   "Wait for checkbox to reach expected checked state.

@@ -4,18 +4,18 @@ Any userscript can serve as a shared library by being referenced via `epupp://sc
 
 ## Dependency Protocols
 
-Four URL protocols are supported in `:epupp/inject`:
+Four dependency styles are supported in `:epupp/inject`:
 
 | Protocol | Example | Resolves to |
 |---|---|---|
 | `scittle://` | `scittle://reagent.js` | Bundled vendor library from `scittle_libs.cljs` catalog |
 | `epupp://` | `epupp://utils/dom.cljs` | Stored userscript, looked up by normalized name |
-| `git://` | `git://github.com/user/repo@SHA/path.cljs` | Public git repo file, fetched and cached on save |
-| `gist://` | `gist://gist.github.com/user/ID@SHA/file.cljs` | GitHub gist file, fetched and cached on save |
+| `https://` | `https://raw.githubusercontent.com/user/repo/SHA/path.cljs` | External dependency from a trusted GitHub raw host, fetched and cached on save |
+| `https://` | `https://gist.githubusercontent.com/user/ID/raw/SHA/file.cljs` | GitHub gist file from a trusted raw host, fetched and cached on save |
 
 Unknown protocols are passed through without resolution (future-proofing).
 
-Git and gist dependencies require a full 40-character SHA (no branch/tag references). They are fetched when the script is saved and injected from `gitDepCache` in `chrome.storage.local` at page load. See [injection-flows.md](injection-flows.md#git-hosted-dependency-resolution) for the two-phase model.
+External dependencies require a full 40-character SHA (no branch/tag references). They are fetched when the script is saved and injected from `extDepCache` in `chrome.storage.local` at page load. See [injection-flows.md](injection-flows.md#external-dependency-resolution) for the two-phase model.
 
 ## Name Resolution
 
@@ -55,7 +55,7 @@ Built-ins also dogfood the same mechanism. `epupp/web_userscript_installer.cljs`
 Represents a single parsed dependency reference from `:epupp/inject`:
 
 ```clojure
-{:dep/kind    :scittle|:epupp|:git-dep  ; protocol classification
+{:dep/kind    :scittle|:epupp|:ext-dep  ; protocol classification
  :dep/raw     "epupp://utils/dom.cljs" ; original manifest string
  :dep/name    "utils/dom.cljs"      ; normalized lookup key
  :dep/script  {... script data ...}} ; resolved script record, or nil
@@ -67,16 +67,16 @@ The resolver produces an ordered plan of injection steps:
 
 ```clojure
 {:plan/steps
- [{:step/type :vendor-file           ; :vendor-file | :library-script | :git-dep-script | :root-script
+ [{:step/type :vendor-file           ; :vendor-file | :library-script | :ext-dep-script | :root-script
    :step/id   "scittle.reagent.js"
    :step/file "scittle.reagent.js"}
   {:step/type :library-script
    :step/id   "script-abc-123"
    :step/name "utils/dom.cljs"
    :step/code "..."}
-  {:step/type :git-dep-script
-   :step/id   "git://github.com/user/repo@SHA/helpers.cljs"
-   :step/name "git://github.com/user/repo@SHA/helpers.cljs"
+  {:step/type :ext-dep-script
+   :step/id   "https://raw.githubusercontent.com/user/repo/SHA/helpers.cljs"
+   :step/name "https://raw.githubusercontent.com/user/repo/SHA/helpers.cljs"
    :step/code "..."}
   {:step/type :root-script
    :step/id   "script-xyz-789"
@@ -87,14 +87,14 @@ The resolver produces an ordered plan of injection steps:
  :plan/errors []}
 ```
 
-Steps are ordered: vendor files first, then library scripts and git dep scripts in dependency order, then root scripts. Each file and script appears at most once (deduplicated).
+Steps are ordered: vendor files first, then library scripts and external dependency scripts in dependency order, then root scripts. Each file and script appears at most once (deduplicated).
 
 ### Runtime Error Envelope
 
 Resolution failures produce structured error envelopes:
 
 ```clojure
-{:error/type   :library/not-found|:library/cycle|:library/self-reference|:git-dep/cache-miss|:git-dep/fetch-failed|:git-dep/parse-failed|:git-dep/cycle
+{:error/type   :library/not-found|:library/cycle|:library/self-reference|:ext-dep/cache-miss|:ext-dep/fetch-failed|:ext-dep/cycle
  :error/phase  :resolve|:inject|:verify
  :error/surface :idle|:panel|:load-manifest|:early-loader
  :script/id    "script-xyz-789"
@@ -126,9 +126,9 @@ This keeps the storage model clean and avoids stale error indicators across sess
 
 ### Dependency Resolver (`dep_resolver.cljs`)
 
-The resolver is a pure function that takes a set of root scripts and a script-lookup function, and produces an ordered execution plan. It accepts an optional `git-dep-cache` map for resolving `git://`/`gist://` dependencies. It handles:
+The resolver is a pure function that takes a set of root scripts and a script-lookup function, and produces an ordered execution plan. It accepts an optional `ext-dep-cache` map for resolving supported HTTPS external dependencies. It handles:
 
-- Mixed `scittle://` + `epupp://` + `git://`/`gist://` graphs
+- Mixed `scittle://` + `epupp://` + HTTPS ext-dep graphs
 - Topological ordering (libraries before consumers)
 - Deduplication (each script and vendor file appears at most once)
 - Cycle detection with chain reporting

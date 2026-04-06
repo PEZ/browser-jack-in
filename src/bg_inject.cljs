@@ -399,7 +399,7 @@
   (let [steps (:plan/steps plan)
         vendor-namespaces (:plan/vendor-namespaces plan)
         vendor-steps (filterv #(= :vendor-file (:step/type %)) steps)
-        script-steps (filterv #(contains? #{:library-script :root-script :git-dep-script} (:step/type %))
+        script-steps (filterv #(contains? #{:library-script :root-script :ext-dep-script} (:step/type %))
                               steps)]
     (js-await (test-logger/log-event! "EXECUTE_PLAN_START"
                                       {:tab-id tab-id

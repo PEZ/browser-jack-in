@@ -13,10 +13,11 @@ Connection management includes a three-level auto-connect setting
 (off/all-pages/all-tabs), reconnect-on-navigation for previously connected
 tabs, and toolbar icon state derived from connection and injection status.
 
-Git-hosted dependencies (`git://` and `gist://` URLs in `:epupp/inject`) use
-a two-phase model: resolved and cached on script save, injected from cache at
-page load. The cache lives in `chrome.storage.local` as `gitDepCache` and is
-keyed by URL. SHA pinning makes cached content immutable (no eviction needed).
+External dependencies (raw HTTPS URLs from `raw.githubusercontent.com` and
+`gist.githubusercontent.com` in `:epupp/inject`) use a two-phase model:
+resolved and cached on script save, injected from cache at page load. The
+cache lives in `chrome.storage.local` as `extDepCache` and is keyed by URL.
+SHA pinning makes cached content immutable (no eviction needed).
 
 Detailed docs live under [architecture/](architecture/). Use the Navigate table below to jump to the relevant reference.
 
