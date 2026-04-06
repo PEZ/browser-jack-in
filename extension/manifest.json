@@ -37,7 +37,7 @@
     }
   },
   "manifest_version": 3,
-  "version": "0.0.15.7",
+  "version": "0.0.15.9",
   "web_accessible_resources": [
     {
       "resources": [
@@ -54,7 +54,8 @@
         "vendor/react.production.min.js",
         "vendor/react-dom.production.min.js",
         "ws-bridge.js",
-        "trigger-scittle.js"
+        "trigger-scittle.js",
+        "disable-scittle-auto-eval.js"
       ],
       "matches": [
         "<all_urls>"

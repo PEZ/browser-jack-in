@@ -8,6 +8,7 @@ Changes to Epupp
 
 - [Make it possible to declare dependency on other scripts in the Epupp filesystem](https://github.com/PEZ/epupp/issues/10)
   - (Supports using other scripts as libraries)
+- Fix bug with document-start scripts being run twice
 
 ## [0.0.14] - 2026-03-19
 

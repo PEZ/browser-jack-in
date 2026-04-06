@@ -224,6 +224,11 @@
                 (js-await (inject-script-and-wait! scittle-url))
                 (let [load-time (.toFixed (- (.now js/performance) scittle-start) 1)]
                   (js/console.log "[Epupp Loader] Scittle loaded in" load-time "ms"))
+                ;; Disable Scittle's built-in DOMContentLoaded auto-eval.
+                ;; Without this, Scittle re-evaluates all script tags when
+                ;; DOMContentLoaded fires, causing double execution.
+                (let [disable-url (.getURL js/chrome.runtime "disable-scittle-auto-eval.js")]
+                  (js-await (inject-script-and-wait! disable-url)))
 
                 ;; Inject vendor files sequentially (dependency order matters)
                 (when (seq vendor-steps)
