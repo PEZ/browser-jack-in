@@ -8,7 +8,6 @@
             [background-utils :as bg-utils]
             [dep-resolver :as dep-resolver]
             [git-dep :as git-dep]
-            [manifest-parser :as manifest-parser]
             [scittle-libs :as scittle-libs]
             [script-utils :as script-utils]))
 
@@ -476,12 +475,8 @@
                                                         :error (:error/message (first truly-new))
                                                         :errors (mapv :error/message truly-new)}]))})))
 
-    :git-dep/ax.resolve-for-script
-    (let [[code] args
-          manifest (try (manifest-parser/extract-manifest code)
-                        (catch :default _ nil))
-          inject-urls (if manifest (aget manifest "inject") [])
-          git-urls (git-dep/extract-git-dep-urls (or inject-urls []))
+    :git-dep/ax.resolve-uncached-urls
+    (let [[git-urls] args
           existing-cache (or (:storage/git-dep-cache state) {})
           uncached (filterv #(not (contains? existing-cache %)) git-urls)]
       (when (seq uncached)

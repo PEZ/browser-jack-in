@@ -2,8 +2,7 @@
   "Action implementations for background REPL FS operations.
    No Chrome APIs, no atoms, no side effects - just state transitions."
   (:require [script-utils :as script-utils]
-            [manifest-parser :as mp]
-            [git-dep :as git-dep]))
+            [manifest-parser :as mp]))
 
 ;; ============================================================
 ;; Helper Functions (Pure)
@@ -296,10 +295,5 @@
                                                                (some? bulk-id) (assoc :bulk-id bulk-id)
                                                                (some? bulk-index) (assoc :bulk-index bulk-index)
                                                                (some? bulk-count) (assoc :bulk-count bulk-count))
-                                                 :response-data (script->base-info timestamped-script)})
-                ;; Check for git dep URLs to trigger async resolution
-                has-git-deps? (seq (git-dep/extract-git-dep-urls
-                                    (or (:script/inject timestamped-script) [])))]
-            (if has-git-deps?
-              (assoc response :uf/dxs [[:git-dep/ax.resolve-for-script code]])
-              response)))))))
+                                                 :response-data (script->base-info timestamped-script)})]
+            response))))))

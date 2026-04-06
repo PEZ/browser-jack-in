@@ -889,8 +889,12 @@
                       ((^:async fn []
                          (js-await (ensure-initialized! dispatch!))
                          (js-await (registration/sync-registrations!))
-                         (let [all-scripts (storage/get-scripts)]
-                           (dispatch! [[:runtime/ax.re-resolve-on-change all-scripts]])))))
+                         (let [all-scripts (storage/get-scripts)
+                               all-inject-urls (mapcat :script/inject all-scripts)
+                               git-urls (git-dep/extract-git-dep-urls (vec all-inject-urls))]
+                           (dispatch! (cond-> [[:runtime/ax.re-resolve-on-change all-scripts]]
+                                        (seq git-urls)
+                                        (conj [:git-dep/ax.resolve-uncached-urls git-urls])))))))
                     (when (aget changes "gitDepCache")
                       (log/debug "Background" "Git dep cache changed, re-resolving")
                       ((^:async fn []
@@ -1227,15 +1231,13 @@
                            (some? bulk-id) (assoc :script/bulk-id bulk-id)
                            (some? bulk-index) (assoc :script/bulk-index bulk-index)
                            (some? bulk-count) (assoc :script/bulk-count bulk-count))]
-              (fs-dispatch/dispatch-fs-action! send-response [:fs/ax.save-script script]
-                                              {:dispatch-fn dispatch!}))))
+              (fs-dispatch/dispatch-fs-action! send-response [:fs/ax.save-script script]))))
         (catch :default err
           (send-response #js {:success false :error (str "Parse error: " (.-message err))}))))
 
     :fs/fx.dispatch-action
     (let [[send-response action] args]
-      (fs-dispatch/dispatch-fs-action! send-response action
-                                      {:dispatch-fn dispatch!}))
+      (fs-dispatch/dispatch-fs-action! send-response action))
 
     :banner/fx.broadcast-system
     (let [[event] args]

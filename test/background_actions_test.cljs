@@ -1558,15 +1558,11 @@
 
 (def ^:private git-dep-sha "abcdef0123456789abcdef0123456789abcdef01")
 
-(defn- test-resolve-for-script-with-git-deps-returns-fetch-effect []
+(defn- test-resolve-uncached-urls-with-uncached-returns-fetch-effect []
   (let [git-url (str "git://github.com/user/repo@" git-dep-sha "/lib.cljs")
-        code (str "{:epupp/script-name \"test.cljs\""
-                  " :epupp/inject [\"scittle://replicant.js\""
-                  " \"" git-url "\"]}"
-                  "\n(ns test)")
         state {:storage/git-dep-cache {}}
         result (bg-actions/handle-action state uf-data
-                 [:git-dep/ax.resolve-for-script code])]
+                                         [:git-dep/ax.resolve-uncached-urls [git-url]])]
     (-> (expect result) (.toBeTruthy))
     (-> (expect (:uf/fxs result)) (.toBeTruthy))
     (let [fx (first (:uf/fxs result))]
@@ -1577,37 +1573,25 @@
       (-> (expect (first dx)) (.toBe :git-dep/ax.cache-results))
       (-> (expect (second dx)) (.toBe :uf/prev-result)))))
 
-(defn- test-resolve-for-script-no-git-deps-returns-nil []
-  (let [code "{:epupp/script-name \"test.cljs\" :epupp/inject [\"scittle://replicant.js\"]}\n(ns test)"
-        state {:storage/git-dep-cache {}}
+(defn- test-resolve-uncached-urls-empty-list-returns-nil []
+  (let [state {:storage/git-dep-cache {}}
         result (bg-actions/handle-action state uf-data
-                 [:git-dep/ax.resolve-for-script code])]
+                 [:git-dep/ax.resolve-uncached-urls []])]
     (-> (expect result) (.toBeFalsy))))
 
-(defn- test-resolve-for-script-all-cached-returns-nil []
+(defn- test-resolve-uncached-urls-all-cached-returns-nil []
   (let [git-url (str "git://github.com/user/repo@" git-dep-sha "/lib.cljs")
-        code (str "{:epupp/script-name \"test.cljs\""
-                  " :epupp/inject [\"" git-url "\"]}"
-                  "\n(ns test)")
         state {:storage/git-dep-cache {git-url {:cache/code "(ns lib)" :cache/sha git-dep-sha}}}
         result (bg-actions/handle-action state uf-data
-                 [:git-dep/ax.resolve-for-script code])]
+                 [:git-dep/ax.resolve-uncached-urls [git-url]])]
     (-> (expect result) (.toBeFalsy))))
 
-(defn- test-resolve-for-script-no-manifest-returns-nil []
-  (let [code "(ns bare-script)\n(println \"no manifest\")"
-        state {:storage/git-dep-cache {}}
-        result (bg-actions/handle-action state uf-data
-                 [:git-dep/ax.resolve-for-script code])]
-    (-> (expect result) (.toBeFalsy))))
-
-(describe ":git-dep/ax.resolve-for-script"
-  (fn []
-    (test "with git dep URLs returns fetch effect and cache-results deferred action"
-      test-resolve-for-script-with-git-deps-returns-fetch-effect)
-    (test "with no git dep URLs returns nil" test-resolve-for-script-no-git-deps-returns-nil)
-    (test "with all cached git dep URLs returns nil" test-resolve-for-script-all-cached-returns-nil)
-    (test "with no manifest returns nil" test-resolve-for-script-no-manifest-returns-nil)))
+(describe ":git-dep/ax.resolve-uncached-urls"
+          (fn []
+            (test "with uncached URLs returns fetch effect and cache-results deferred action"
+                  test-resolve-uncached-urls-with-uncached-returns-fetch-effect)
+            (test "with empty URL list returns nil" test-resolve-uncached-urls-empty-list-returns-nil)
+            (test "with all cached URLs returns nil" test-resolve-uncached-urls-all-cached-returns-nil)))
 
 ;; ============================================================
 ;; Git Dep Cache Results Action Tests

@@ -478,11 +478,12 @@
      [:code (str/join ", " unknown-keys)]]))
 
 (defn- valid-require-url?
-  "Returns true if the URL is a valid scittle:// or epupp:// URL."
+  "Returns true if the URL is a valid scittle://, epupp://, or git dep URL."
   [url]
   (case (dep-resolver/classify-inject-url url)
     :scittle (some? (scittle-libs/resolve-scittle-url url))
     :epupp (some? (dep-resolver/parse-epupp-url url))
+    :git-dep true
     false))
 
 (defn- epupp-url?
