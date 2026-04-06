@@ -773,7 +773,10 @@
                                      true
                                      (recur (rest remaining))))))]
                   (when found?
-                    (js-await (bg-inject/inject-installer! dispatch! tab-id installer))
+                    (js-await (bg-inject/ensure-scittle! dispatch! tab-id :disconnected))
+                    (let [all-scripts (storage/get-scripts)
+                          plan (dep-resolver/resolve-execution-plan [installer] all-scripts)]
+                      (js-await (bg-inject/execute-plan! tab-id plan)))
                     (swap! !installer-injected-tabs conj tab-id))))))
           (log/debug "Background" "Installer scan skipped - host permission not granted for tab" tab-id))))
     (catch :default err

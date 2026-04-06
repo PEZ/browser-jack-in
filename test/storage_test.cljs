@@ -287,6 +287,10 @@
                 :is-builtin? true}))
       (.toBe true)))
 
+(defn- test-bundled-builtin-ids-include-internal-helpers []
+  (-> (expect (storage/bundled-builtin-ids))
+      (.toContain "epupp-builtin-internal-helpers")))
+
 ;; Storage schema migration tests
 
 (defn- test-migrates-unversioned-storage []
@@ -350,7 +354,8 @@
 (describe "built-in reconciliation"
           (fn []
             (test "removes stale built-ins" test-removes-stale-builtins)
-            (test "existing built-in preserves enabled state" test-existing-builtin-preserves-enabled-state)))
+            (test "existing built-in preserves enabled state" test-existing-builtin-preserves-enabled-state)
+            (test "bundled built-in ids include internal helpers" test-bundled-builtin-ids-include-internal-helpers)))
 
 (describe "storage schema migration"
   (fn []
@@ -673,6 +678,27 @@
     (-> (expect (:script/web-installer-scan result))
         (.toBe true))))
 
+  (defn- test-build-bundled-internal-helpers-library []
+    (let [bundled {:script/id "epupp-builtin-internal-helpers"
+           :path "userscripts/epupp/internal/helpers.cljs"
+           :name "epupp/internal/helpers.cljs"
+           :always-enabled? true}
+      code "{:epupp/script-name \"epupp/internal/helpers.cljs\"
+   :epupp/description \"Internal helpers for built-in Epupp scripts: bridge messaging and manifest parsing\"}
+
+  (ns epupp.internal.helpers)"
+      result (storage/build-bundled-script bundled code)]
+    (-> (expect (:script/id result))
+      (.toBe "epupp-builtin-internal-helpers"))
+    (-> (expect (:script/name result))
+      (.toBe "epupp/internal/helpers.cljs"))
+    (-> (expect (:script/description result))
+      (.toBe "Internal helpers for built-in Epupp scripts: bridge messaging and manifest parsing"))
+    (-> (expect (:script/always-enabled? result))
+      (.toBe true))
+    (-> (expect (:script/match result))
+      (.toEqual []))))
+
 (defn- test-build-bundled-without-special-flags []
   (let [bundled {:script/id "builtin-normal"
                  :path "userscripts/normal.cljs"
@@ -701,6 +727,7 @@
             (test "always-enabled? propagated from catalog" test-build-bundled-always-enabled-propagated)
             (test "without always-enabled? omits the key" test-build-bundled-without-always-enabled)
             (test "special flags propagated from catalog" test-build-bundled-special-flags-propagated)
+            (test "internal helpers library manifest builds expected built-in fields" test-build-bundled-internal-helpers-library)
             (test "without special flags omits the keys" test-build-bundled-without-special-flags)))
 
 ;; ============================================================

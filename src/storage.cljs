@@ -40,7 +40,15 @@
 
 
 (def ^:private base-builtins
-  [{:script/id "epupp-builtin-web-userscript-installer"
+  [{:script/id "epupp-builtin-internal-helpers"
+    :path "userscripts/epupp/internal/helpers.cljs"
+    :name "epupp/internal/helpers.cljs"
+    :always-enabled? true}
+   {:script/id "epupp-builtin-ui"
+    :path "userscripts/epupp/ui.cljs"
+    :name "epupp/ui.cljs"
+    :always-enabled? true}
+   {:script/id "epupp-builtin-web-userscript-installer"
     :path "userscripts/epupp/web_userscript_installer.cljs"
     :name "epupp/web_userscript_installer.cljs"
     :special? true

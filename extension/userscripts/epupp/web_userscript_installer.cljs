@@ -1,10 +1,13 @@
 {:epupp/script-name "epupp/web_userscript_installer.cljs"
  :epupp/description "Web Userscript Installer. Adds a button to install userscripts found on pages into Epupp. The script is only injected if Epupp has found userscripts on the page."
- :epupp/inject ["scittle://replicant.js"]}
+ :epupp/inject ["scittle://replicant.js"
+                "epupp://epupp/internal/helpers.cljs"
+                "epupp://epupp/ui.cljs"]}
 
 (ns epupp.web-userscript-installer
-  (:require [clojure.edn :as edn]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
+            [epupp.internal.helpers :as h]
+            [epupp.ui :as ui]
             [replicant.dom :as r]))
 
 ;; ============================================================
@@ -14,13 +17,11 @@
 (defonce !state
   (atom {:blocks []
          :install-allowed? false
-         :icon-url nil
          :modal {:visible? false
                  :mode nil  ;; :confirm or :error
                  :block-id nil
                  :error-message nil}
          :pending-retry-timeout nil
-         :request-id 0
          :button-containers {}
          :ui-container nil
          :ui-setup? false
@@ -52,15 +53,6 @@
                        b))
                    blocks)))))
 
-;; ============================================================
-;; Manifest Parsing & Normalization
-;; ============================================================
-
-(def valid-run-at-values
-  #{"document-start" "document-end" "document-idle"})
-
-(def default-run-at "document-idle")
-
 (def installer-allowed-origins
   "Matches the whitelist in background.cljs. Duplicated intentionally:
    page-side is UI-only, background-side is the security enforcement."
@@ -77,83 +69,6 @@
           origin (str (.-protocol url) "//" (.-hostname url))]
       (contains? installer-allowed-origins origin))
     (catch :default _ false)))
-
-(defn normalize-script-name
-  "Normalize a script name to a consistent format.
-   Dots become path separators to support Clojure namespace conventions."
-  [input-name]
-  (let [base-name (if (string/ends-with? input-name ".cljs")
-                    (subs input-name 0 (- (count input-name) 5))
-                    input-name)]
-    (-> base-name
-        (string/lower-case)
-        (string/replace #"[.]+" "/")
-        (string/replace #"[\s-]+" "_")
-        (string/replace #"[^a-z0-9_/]" "")
-        (str ".cljs"))))
-
-;; SYNC WARNING: This parser must stay in sync with src/manifest_parser.cljs
-;; Key behaviors that must match:
-;; - auto-run-match is OPTIONAL (nil means manual-only script)
-;; - auto-run-match preserves vector/string as-is
-;; - inject accepts string/vector and preserves all string URLs (including epupp://)
-
-(defn- get-first-form
-  "Read the first form from code text. Returns map or nil."
-  [code-text]
-  (try
-    (let [form (edn/read-string code-text)]
-      (when (map? form) form))
-    (catch :default e
-      (js/console.error "[Web Userscript Installer] Parse error:" e)
-      nil)))
-
-(defn normalize-inject
-  "Normalize :epupp/inject to vector of strings.
-   Accepts nil, string, vector, or seq. Keeps all string URLs, including epupp:// entries."
-  [inject-value]
-  (let [to-vec (fn [v]
-                 (cond
-                   (nil? v) []
-                   (string? v) [v]
-                   (vector? v) v
-                   (sequential? v) (vec v)
-                   :else []))]
-    (->> (to-vec inject-value)
-         (filter string?)
-         vec)))
-
-(defn extract-manifest
-  "Extract manifest from the first form (must be a data map)."
-  [code-text]
-  (when-let [m (get-first-form code-text)]
-    (when-let [raw-name (get m :epupp/script-name)]
-      (let [normalized-name (normalize-script-name raw-name)
-            raw-run-at (get m :epupp/run-at)
-            run-at (if (contains? valid-run-at-values raw-run-at)
-                     raw-run-at
-                     default-run-at)
-            auto-run-match (get m :epupp/auto-run-match)
-            raw-inject (get m :epupp/inject)
-            inject (normalize-inject raw-inject)]
-        {:script-name normalized-name
-         :raw-script-name raw-name
-         :name-normalized? (not= raw-name normalized-name)
-         :auto-run-match auto-run-match
-         :description (get m :epupp/description)
-         :inject inject
-         :inject-invalid? (and (contains? m :epupp/inject)
-                               (or (not (or (string? raw-inject)
-                                            (vector? raw-inject)
-                                            (sequential? raw-inject)))
-                                   (not-every? string? (if (or (vector? raw-inject)
-                                                                (sequential? raw-inject))
-                                                         raw-inject
-                                                         []))))
-         :run-at run-at
-         :raw-run-at raw-run-at
-         :run-at-invalid? (and raw-run-at
-                               (not (contains? valid-run-at-values raw-run-at)))}))))
 
 ;; ============================================================
 ;; DOM Helpers - Code Block Detection
@@ -303,56 +218,11 @@
          .-parentElement
          .-parentElement)))
 
-;; ============================================================
-;; Extension Communication
-;; ============================================================
-
-(defn- next-request-id []
-  (get (swap! !state update :request-id inc) :request-id))
-
-(defn- send-and-receive
-  "Helper: send message to bridge and return promise of response.
-   Optional timeout-ms (default 2000) controls how long to wait for a response."
-  ([msg-type payload response-type]
-   (send-and-receive msg-type payload response-type 2000))
-  ([msg-type payload response-type timeout-ms]
-   (let [req-id (next-request-id)]
-     (js/Promise.
-      (fn [resolve reject]
-        (let [timeout-id (atom nil)
-              handler (fn handler [e]
-                        (when (= (.-source e) js/window)
-                          (let [msg (.-data e)]
-                            (when (and msg
-                                       (= "epupp-bridge" (.-source msg))
-                                       (= response-type (.-type msg))
-                                       (= req-id (.-requestId msg)))
-                              (when-let [tid @timeout-id]
-                                (js/clearTimeout tid))
-                              (.removeEventListener js/window "message" handler)
-                              (resolve msg)))))]
-          (.addEventListener js/window "message" handler)
-          (reset! timeout-id
-                  (js/setTimeout
-                   (fn []
-                     (.removeEventListener js/window "message" handler)
-                     (reject (js/Error. (str "Timeout waiting for " response-type))))
-                   timeout-ms))
-          (.postMessage js/window
-                        (clj->js (assoc payload :source "epupp-page" :type msg-type :requestId req-id))
-                        "*")))))))
-
-(defn ^:async fetch-icon-url!+
-  "Fetch the Epupp icon URL from the extension. Returns promise of URL string."
-  []
-  (let [msg (await (send-and-receive "get-icon-url" {} "get-icon-url-response"))]
-    (.-url msg)))
-
 (defn- ^:async check-script-status!+ [script-name code]
-  (let [msg (await (send-and-receive "check-script-exists"
-                                     {:name script-name :code code}
-                                     "check-script-exists-response"))]
-    (if (.-success msg)
+  (let [msg (await (h/send-and-receive "check-script-exists"
+                                       "check-script-exists-response"
+                                       {:name script-name :code code}))]
+    (if (and msg (.-success msg))
       (cond
         (not (.-exists msg)) :install
         (.-identical msg) :installed
@@ -362,15 +232,6 @@
 ;; ============================================================
 ;; UI - Replicant View Functions
 ;; ============================================================
-
-(defn epupp-icon
-  "Epupp icon - renders extension icon when URL is available."
-  [icon-url]
-  (when icon-url
-    [:img.epupp-icon {:src icon-url
-                      :width 20
-                      :height 20
-                      :alt "Epupp"}]))
 
 (defn button-tooltip [{:keys [status error-message]}]
   (case status
@@ -387,7 +248,7 @@
     "document-end" "document-end"
     "document-idle (default)"))
 
-(defn install-button [{:keys [id status] :as block} icon-url]
+(defn install-button [{:keys [id status] :as block}]
   (let [clickable? (#{:install :update} status)
         status-class (str "is-" (name status))]
     [:button.epupp-install-btn
@@ -397,7 +258,7 @@
       :data-e2e-script-name (get-in block [:manifest :script-name])
       :disabled (not clickable?)
       :title (button-tooltip block)}
-     (epupp-icon icon-url)
+     [:span.epupp-icon (ui/epupp-icon :size 20)]
      (case status
        :install "Install"
        :update "Update"
@@ -408,18 +269,17 @@
 
 (defn- modal-header
   "Branded modal header with Epupp icon, title, tagline, and action title."
-  [{:keys [action-title error? icon-url]}]
+  [{:keys [action-title error?]}]
   [:div.epupp-modal__header
    [:div.epupp-modal__brand
-    (when icon-url
-      [:img.epupp-modal__icon {:src icon-url :alt "Epupp"}])
+    [:span.epupp-modal__icon (ui/epupp-icon :size 32)]
     [:span.epupp-modal__title
      "Epupp"
      [:span.epupp-modal__tagline "Live Tamper your Web"]]]
    [:h2 {:class (str "epupp-modal__action-title" (when error? " is-error"))}
     action-title]])
 
-(defn installation-modal [{:keys [id manifest code status]} icon-url install-allowed?]
+(defn installation-modal [{:keys [id manifest code status]} install-allowed?]
   (let [{:keys [script-name raw-script-name name-normalized?
                 auto-run-match description inject inject-invalid?
                 run-at run-at-invalid? raw-run-at]} manifest
@@ -432,7 +292,7 @@
      {:on {:click [:db/assoc :modal {:visible? false :mode nil :block-id nil :error-message nil}]}}
      [:div.epupp-modal
       {:on {:click [:block/modal-click]}}
-      (modal-header {:action-title modal-title :icon-url icon-url})
+      (modal-header {:action-title modal-title})
       ;; Property table
       [:table.epupp-modal__table
        [:tbody
@@ -506,13 +366,13 @@
            :on {:click [:db/assoc :modal {:visible? false :mode nil :block-id nil :error-message nil}]}}
           "OK"])]]]))
 
-(defn error-dialog [{:keys [error-message is-update? icon-url]}]
+(defn error-dialog [{:keys [error-message is-update?]}]
   (let [title (if is-update? "Update Failed" "Installation Failed")]
     [:div.epupp-modal-overlay
      {:on {:click [:db/assoc :modal {:visible? false :mode nil :block-id nil :error-message nil}]}}
      [:div.epupp-modal
       {:on {:click [:block/modal-click]}}
-      (modal-header {:action-title title :error? true :icon-url icon-url})
+      (modal-header {:action-title title :error? true})
       [:p
        (or error-message "An unknown error occurred.")]
       [:div.epupp-modal__actions
@@ -522,7 +382,7 @@
         "Close"]]]]))
 
 (defn app [state]
-  (let [{:keys [modal icon-url install-allowed?]} state
+  (let [{:keys [modal install-allowed?]} state
         {:keys [visible? mode block-id error-message]} modal]
     [:div#epupp-block-installer-ui
      (when visible?
@@ -531,12 +391,11 @@
          (let [current-block (find-block-by-id state block-id)
                is-update? (= (:status current-block) :update)]
            (error-dialog {:error-message error-message
-                                 :is-update? is-update?
-                                 :icon-url icon-url}))
+                          :is-update? is-update?}))
 
          :confirm
          (when-let [current-block (find-block-by-id state block-id)]
-           (installation-modal current-block icon-url install-allowed?))))]))
+           (installation-modal current-block install-allowed?))))]))
 
 ;; ============================================================
 ;; Action Handler (pure state transitions)
@@ -591,12 +450,18 @@
                                                                :error-message error-msg}]]))]
         ((^:async fn []
            (try
-             (let [msg (await (send-and-receive "web-installer-save-script"
-                                                {:code code}
-                                                "web-installer-save-script-response"
-                                                5000))]
-               (if (.-success msg)
+             (let [msg (await (h/send-and-receive "web-installer-save-script"
+                                                  "web-installer-save-script-response"
+                                                  {:code code}
+                                                  5000))]
+               (cond
+                 (nil? msg)
+                 (handle-save-error "Timeout waiting for extension response")
+
+                 (.-success msg)
                  (dispatch! [[:block/update-status block-id :installed]])
+
+                 :else
                  (handle-save-error (or (.-error msg) "Installation failed"))))
              (catch :default error
                (handle-save-error (or (.-message error) "Installation failed")))))))
@@ -639,13 +504,12 @@
 ;; ============================================================
 
 (defn render-ui! [state]
-  (let [icon-url (:icon-url state)]
-    (when-let [container (:ui-container state)]
-      (r/render container (app state)))
-    ;; Also update buttons in their inline containers
-    (doseq [[block-id btn-container] (:button-containers state)]
-      (when-let [block (find-block-by-id state block-id)]
-        (r/render btn-container (install-button block icon-url))))))
+  (when-let [container (:ui-container state)]
+    (r/render container (app state)))
+  ;; Also update buttons in their inline containers
+  (doseq [[block-id btn-container] (:button-containers state)]
+    (when-let [block (find-block-by-id state block-id)]
+      (r/render btn-container (install-button block)))))
 
 (defn ensure-installer-css!
   "Inject installer CSS into document.head (idempotent - no-op if already exists)."
@@ -928,7 +792,7 @@
   "Render install button into container with error handling."
   [container block-data]
   (try
-    (r/render container (install-button block-data (:icon-url @!state)))
+    (r/render container (install-button block-data))
     (catch :default e
       (js/console.error "[Web Userscript Installer] Replicant render error:" e))))
 
@@ -1020,7 +884,7 @@
     (.setAttribute element "data-epupp-processed" "true")
     (when (and (> (count trimmed-text) 10)
                (string/starts-with? trimmed-text "{"))
-      (when-let [manifest (extract-manifest code-text)]
+      (when-let [manifest (h/extract-manifest code-text)]
         (let [script-name (:script-name manifest)
               existing-id (aget element "id")
               block-id (if (and existing-id (pos? (count existing-id)))
@@ -1192,7 +1056,7 @@
         (.addEventListener js/document "DOMContentLoaded" (partial rescan! !db))
         (rescan! !db))
 
-      ;; SPA navigation listener (once) - register before async icon fetch
+      ;; SPA navigation listener (once)
       (when-not (:nav-registered? state)
         (dispatch! [[:db/assoc :nav-registered? true]])
         (when js/window.navigation
@@ -1208,13 +1072,6 @@
                                        (js/clearTimeout tid))
                                      (reset! !nav-timeout
                                              (js/setTimeout (partial rescan! !db) 500)))))))))
-
-      ;; Fetch icon URL (once)
-      (when-not (:icon-url state)
-        (try
-          (let [url (await (fetch-icon-url!+))]
-            (dispatch! [[:db/assoc :icon-url url]]))
-          (catch :default _)))
 
       (js/console.log "[Web Userscript Installer] Ready"))))
 

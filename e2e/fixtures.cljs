@@ -30,9 +30,10 @@
 ;; =============================================================================
 
 (def builtin-script-count
-  "Number of built-in scripts in test builds.
-   Test/dev builds include security-probe in addition to base built-ins."
-  3)
+  "Number of built-in scripts in test/dev builds.
+   Test/dev builds include internal helpers, ui, web installer,
+   sponsor, and security probe."
+  5)
 
 ;; =============================================================================
 ;; Browser Helpers

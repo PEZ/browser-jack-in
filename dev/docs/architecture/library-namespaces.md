@@ -37,6 +37,13 @@ The `:script/enabled` flag controls whether a script auto-runs on matching pages
 
 Scripts with `:script/builtin? true` (like `epupp/sponsor.cljs`) can be referenced via `epupp://`. Their immutability and always-enabled status are orthogonal to their use as libraries.
 
+Built-in library scripts live under the reserved `epupp/` path. For example:
+
+- `epupp://epupp/internal/helpers.cljs`
+- `epupp://epupp/ui.cljs`
+
+Built-ins also dogfood the same mechanism. `epupp/web_userscript_installer.cljs` and `epupp/sponsor.cljs` declare `:epupp/inject` dependencies on these built-in libraries via `epupp://`.
+
 ## Contracts
 
 ### Dependency Node

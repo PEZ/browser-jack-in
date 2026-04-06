@@ -4,10 +4,11 @@
    Tests that:
    1. Document-idle consumer can load user library via epupp://
    2. Transitive chains mixing scittle:// and epupp:// work
-   3. Missing library produces resolution error events
-   4. Panel recognizes epupp:// URLs in manifest inject
-   5. Missing library shows error indicator on popup script row
-   6. Adding missing library and reloading clears the error indicator"
+    3. Built-in epupp.ui is consumable via epupp:// in userscripts
+    4. Missing library produces resolution error events
+    5. Panel recognizes epupp:// URLs in manifest inject
+    6. Missing library shows error indicator on popup script row
+    7. Adding missing library and reloading clears the error indicator"
   (:require ["@playwright/test" :refer [test expect]]
             [clojure.string :as str]
             [fixtures :refer [launch-browser get-extension-id create-popup-page
@@ -170,6 +171,49 @@
                 ns-event (first (filter #(= (.-event %) "NAMESPACES_VERIFIED") events))]
             (js-await (-> (expect ns-event) (.toBeTruthy))))
 
+          (js-await (assert-no-errors! popup))
+          (js-await (.close popup)))
+        (js-await (.close page)))
+
+      (finally
+        (js-await (.close context))))))
+
+;; =============================================================================
+;; Test: Built-in epupp.ui is available via epupp://
+;; =============================================================================
+
+(defn- ^:async test_epupp_ui_library_available_to_userscripts []
+  (let [context (js-await (launch-browser))
+        ext-id (js-await (get-extension-id context))]
+    (try
+      (let [consumer-code (code-with-manifest
+                           {:name "test/ui_consumer.cljs"
+                            :match "http://localhost:18080/*"
+                            :inject ["scittle://replicant.js" "epupp://epupp/ui.cljs"]
+                            :code "(ns test.ui-consumer\n  (:require [replicant.dom :as r]\n            [epupp.ui :as ui]))\n\n(let [container (or (js/document.getElementById \"epupp-ui-consumer-root\")\n                    (doto (js/document.createElement \"div\")\n                      (set! -id \"epupp-ui-consumer-root\")\n                      (->> (.appendChild js/document.body))))]\n  (r/render container\n            [:div (ui/epupp-header :size 28)]))"})]
+        (js-await (save-script-via-panel context ext-id consumer-code)))
+
+      (js-await (enable-script-via-popup context ext-id "test/ui_consumer.cljs"))
+
+      (let [popup (js-await (create-popup-page context ext-id))]
+        (js-await (clear-test-events! popup))
+        (js-await (.close popup)))
+
+      (let [page (js-await (.newPage context))]
+        (js-await (.goto page "http://localhost:18080/basic.html" #js {:timeout 5000}))
+        (js-await (-> (expect (.locator page "#test-marker"))
+                      (.toContainText "ready")))
+
+        (let [popup (js-await (create-popup-page context ext-id))
+              event (js-await (wait-for-event popup "EXECUTE_PLAN_COMPLETE" 15000))
+              root (.locator page "#epupp-ui-consumer-root")]
+          (js-await (-> (expect (.-event event)) (.toBe "EXECUTE_PLAN_COMPLETE")))
+          (js-await (-> (expect root)
+                        (.toBeVisible #js {:timeout 5000})))
+          (js-await (-> (expect root)
+                        (.toContainText "Epupp")))
+          (js-await (-> (expect root)
+                        (.toContainText "Live Tamper your Web")))
           (js-await (assert-no-errors! popup))
           (js-await (.close popup)))
         (js-await (.close page)))
@@ -401,6 +445,9 @@
 
              (test "transitive chain: consumer -> epupp:// library -> scittle:// vendor"
                    test_transitive_scittle_and_epupp_chain)
+
+             (test "built-in epupp.ui is available to userscripts via epupp://"
+               test_epupp_ui_library_available_to_userscripts)
 
              (test "missing epupp:// library produces resolution error"
                    test_missing_library_produces_error)
