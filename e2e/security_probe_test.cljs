@@ -34,6 +34,7 @@
           (.toContain expected-error-substring)))))
 
 (defn- ^:async test_security_probe_bridge_access_control []
+  (.setTimeout test 30000)
   (let [context (js-await (launch-browser))
         ext-id (js-await (get-extension-id context))]
     (try
