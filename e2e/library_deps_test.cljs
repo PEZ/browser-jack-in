@@ -264,6 +264,9 @@
             (js-await (-> (expect (.-message data))
                           (.toContain "not found"))))
 
+          (let [consumer-ran (js-await (.evaluate page (fn [] (boolean js/window.__BAD_CONSUMER_RAN))))]
+            (js-await (-> (expect consumer-ran) (.toBe false))))
+
           ;; No uncaught errors (resolution errors are handled gracefully)
           (js-await (assert-no-errors! popup))
           (js-await (.close popup)))

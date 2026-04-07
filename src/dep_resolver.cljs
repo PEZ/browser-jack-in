@@ -82,7 +82,8 @@
   (let [errors (atom [])
         vendor-urls (atom [])
         resolved-order (atom [])
-        seen (atom #{})]
+        seen (atom #{})
+        error-count (fn [] (count @errors))]
     (letfn [(resolve-deps [inject-urls chain]
               (doseq [url inject-urls]
                 (let [kind (classify-inject-url url)]
@@ -139,14 +140,15 @@
 
                   :else
                   (if-let [entry (get ext-dep-cache url)]
-                    (do
+                    (let [errors-before (error-count)]
                       (swap! seen conj url)
                       (resolve-deps (get entry :cache/inject []) new-chain)
-                      (swap! resolved-order conj
-                             {:step/type :ext-dep-script
-                              :step/url url
-                              :step/code (:cache/code entry)
-                              :step/source :ext}))
+                      (when (= errors-before (error-count))
+                        (swap! resolved-order conj
+                               {:step/type :ext-dep-script
+                                :step/url url
+                                :step/code (:cache/code entry)
+                                :step/source :ext})))
                     (swap! errors conj
                            (make-error :ext-dep/cache-miss
                                        (first chain) url new-chain
@@ -156,9 +158,11 @@
             (walk [current-script chain]
               (let [script-name (:script/name current-script)]
                 (when-not (contains? @seen script-name)
+                  (let [errors-before (error-count)]
                   (swap! seen conj script-name)
                   (resolve-deps (get current-script :script/inject []) chain)
-                  (swap! resolved-order conj current-script))))]
+                  (when (= errors-before (error-count))
+                    (swap! resolved-order conj current-script))))))]
       (walk root-script [(:script/name root-script)])
       {:resolved @resolved-order
        :errors @errors

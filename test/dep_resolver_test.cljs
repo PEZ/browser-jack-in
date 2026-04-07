@@ -266,9 +266,12 @@
 (defn- test-missing-library-error []
   (let [all [script-missing-dep]
         plan (resolver/resolve-execution-plan [script-missing-dep] all)
+        steps (:plan/steps plan)
         errors (:plan/errors plan)]
     (-> (expect (count errors))
         (.toBe 1))
+    (-> (expect (count (filterv #(= :root-script (:step/type %)) steps)))
+        (.toBe 0))
     (let [err (first errors)]
       (-> (expect (:error/type err))
           (.toBe :library/not-found))
@@ -524,9 +527,12 @@
   (let [cache {}
         all [script-depends-on-ext]
         plan (resolver/resolve-execution-plan [script-depends-on-ext] all cache)
+        steps (:plan/steps plan)
         errors (:plan/errors plan)]
     (-> (expect (count errors))
         (.toBe 1))
+    (-> (expect (count (filterv #(= :root-script (:step/type %)) steps)))
+        (.toBe 0))
     (let [err (first errors)]
       (-> (expect (:error/type err))
           (.toBe :ext-dep/cache-miss))
@@ -536,6 +542,28 @@
           (.toBe ext-url-a))
       (-> (expect (:error/message err))
           (.toContain "External dependency not in cache")))))
+
+(defn- test-transitive-missing-library-suppresses-failing-subtree []
+  (let [leaf-script {:script/id "id-leaf-missing" :script/name "leaf.cljs"
+                     :script/code "(ns leaf)"
+                     :script/inject ["epupp://missing.cljs"]
+                     :script/enabled true}
+        root-script {:script/id "id-root-missing" :script/name "root.cljs"
+                     :script/code "(ns root)"
+                     :script/inject ["epupp://leaf.cljs"]
+                     :script/enabled true}
+        plan (resolver/resolve-execution-plan [root-script] [root-script leaf-script])
+        steps (:plan/steps plan)
+        step-names (set (keep :step/name steps))
+        errors (:plan/errors plan)]
+    (-> (expect (count errors))
+        (.toBe 1))
+    (-> (expect (:error/type (first errors)))
+        (.toBe :library/not-found))
+    (-> (expect (contains? step-names "leaf.cljs"))
+        (.toBe false))
+    (-> (expect (count (filterv #(= :root-script (:step/type %)) steps)))
+        (.toBe 0))))
 
 (defn- test-ext-dep-nil-cache-produces-error []
   (let [all [script-depends-on-ext]
@@ -692,6 +720,7 @@
                         (test "resolves mixed scittle:// + epupp:// graph" test-mixed-scittle-and-epupp)
                         (test "handles dual-role scripts (auto-run + library)" test-dual-role-script)
                         (test "produces error for missing library" test-missing-library-error)
+                        (test "suppresses failing transitive library subtree" test-transitive-missing-library-suppresses-failing-subtree)
                         (test "produces error for self-reference" test-self-reference-error)
                         (test "detects dependency cycles" test-cycle-detection-error)
                         (test "deduplicates across multiple roots" test-dedup-across-roots)
