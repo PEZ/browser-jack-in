@@ -265,7 +265,7 @@
 
 (defn- aggregate-shard-results
   "Aggregate results from all shard log files.
-   Returns {:files N :total N :passed N :failed N}."
+   Returns {:files N :total N :passed N :failed N :flaky N :skipped N}."
   [log-files]
   (let [results (for [log-file log-files
                       :let [content (slurp log-file)
@@ -279,7 +279,7 @@
         total-flaky (reduce + (map :flaky results))
         total-files (reduce + (map :files results))]
     {:files total-files
-     :total (+ total-passed total-failed)
+     :total (+ total-passed total-failed total-flaky total-skipped)
      :passed total-passed
      :failed total-failed
      :skipped total-skipped
@@ -287,23 +287,24 @@
 
 (defn- print-test-summary
   "Print a summary of test results.
-   When failed-override is provided, uses it instead of the parsed :failed count.
-   This handles cases where shards crash without producing a parseable summary."
-  [{:keys [files total passed failed skipped flaky]} & {:keys [failed-override]}]
-  (let [actual-failed (or failed-override failed)]
-    (println)
-    (println (format "Files:    %3d" files))
-    (println (format "Total:    %3d tests" total))
-    (println (format "  Passed: %3d" passed))
-    (println (format "  Failed: %3d%s" actual-failed
-                     (if (and failed-override (not= failed-override failed))
-                       (str " (" failed-override " shard(s) failed)")
-                       "")))
-    (println (format "Flaky:    %3d" flaky))
-    (println (format "Skipped:  %3d" skipped))
-    (if (zero? actual-failed)
-      (println "Status:  ALL TESTS PASSED")
-      (println "Status:  SOME TESTS FAILED"))))
+   crashed-shards: number of shards that exited non-zero without a parseable summary."
+  [{:keys [files total passed failed skipped flaky]} & {:keys [failed-shards crashed-shards]
+                                                        :or {failed-shards 0 crashed-shards 0}}]
+  (println)
+  (println (format "Files:     %3d" files))
+  (println (format "Total:     %3d tests" total))
+  (println (format "  Passed:  %3d" passed))
+  (println (format "  Failed:  %3d%s" failed
+                   (if (pos? failed-shards)
+                     (str " (in " failed-shards " shard(s))")
+                     "")))
+  (println (format "  Flaky:   %3d" flaky))
+  (println (format "  Skipped: %3d" skipped))
+  (when (pos? crashed-shards)
+    (println (format "Crashed: %3d shard(s) (test counts unavailable)" crashed-shards)))
+  (if (and (zero? failed) (zero? crashed-shards))
+    (println "Status:  ALL TESTS PASSED")
+    (println "Status:  SOME TESTS FAILED")))
 
 (defn- run-build-step!
   "Run a build command, capturing output. Returns result map.
@@ -432,16 +433,21 @@
                        {:idx idx :exit @exit-code :log-file log-file})
                      shards)
         elapsed-ms (- (System/currentTimeMillis) start-time)
-        failed (filter #(not= 0 (:exit %)) results)
+        failed-shards (filter #(not= 0 (:exit %)) results)
         log-files (map :log-file results)
         summary (aggregate-shard-results log-files)
-        failed-count (count failed)]
+        ;; Crashed = exited non-zero but no parseable test summary
+        crashed-shards (count (filter (fn [{:keys [log-file]}]
+                                        (nil? (parse-playwright-summary (slurp log-file))))
+                                      failed-shards))
+        shards-with-test-failures (- (count failed-shards) crashed-shards)]
 
     (println)
     (println (str "Completed " n-shards " shards in " (format "%.1fs" (/ elapsed-ms 1000.0))))
 
-    ;; Always print test summary - use failed shard count as override when shards crashed
-    (print-test-summary summary :failed-override (when (pos? failed-count) failed-count))
+    (print-test-summary summary
+                        :failed-shards shards-with-test-failures
+                        :crashed-shards crashed-shards)
 
     ;; Write combined shard output for tool consumption
     (spit e2e-output-file (str/join "\n" (map slurp log-files)))
@@ -449,7 +455,7 @@
     (println "Full test output:" e2e-output-file)
     (println "Shards:" shard-dir)
     (println "Previous runs:" e2e-history-dir)
-    (if (seq failed) 1 0)))
+    (if (seq failed-shards) 1 0)))
 
 ; Playwright's stupid sharding will make it vary a lot what n-shards is the best
 (def ^:private default-n-shards 12)
