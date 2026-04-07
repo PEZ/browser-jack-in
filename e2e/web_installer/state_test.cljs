@@ -15,14 +15,15 @@
 
       ;; Navigate to mock gist page
       (let [page (js-await (h/navigate-to-mock-gist context))]
-        ;; Wait for install buttons - expect 10 total:
+        ;; Wait for install buttons - expect 12 total:
         ;; 2 original pre blocks + 1 GitHub table + 1 GitLab snippet + 1 GitHub repo
         ;; + 3 from Batch C: nested code pre, syntax highlighted pre, generic textarea
         ;; + 2 Phase 6 fixtures: dep consumer + dep library
+        ;; + 2 web-installer fixture blocks: scittle dep + pinned HTTPS ext-dep
         ;; (gist edit textarea is skipped - inside .js-code-editor)
         (let [install-buttons (h/get-install-button page "install")]
           (js-await (-> (expect install-buttons)
-                        (.toHaveCount 10 #js {:timeout 2000})))
+                        (.toHaveCount 12 #js {:timeout 2000})))
           (let [initial-count (js-await (.count install-buttons))]
             (js/console.log "Initial button count:" initial-count)
 
