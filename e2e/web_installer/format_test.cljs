@@ -5,6 +5,31 @@
                                           wait-for-popup-ready assert-no-errors!]]
             ["./helpers.mjs" :as h]))
 
+(def expected-gist-library-copy-url
+  "https://gist.githubusercontent.com/PEZ/0123456789abcdef0123456789abcdef/raw/1234567890abcdef1234567890abcdef12345678/gist_library.cljs")
+
+(def expected-repo-library-copy-url
+  "https://raw.githubusercontent.com/PEZ/pez-my-epupp-hq/fedcba9876543210fedcba9876543210fedcba98/userscripts/pez/repo_library.cljs")
+
+(defn- ^:async install-clipboard-spy! [page]
+  (js-await (.evaluate page
+                       (fn []
+                         (aset js/window "__EPUPP_COPIED_TEXT" nil)
+                         (.defineProperty js/Object js/navigator "clipboard"
+                                          #js {:configurable true
+                                               :value #js {:writeText (fn [text]
+                                                                        (aset js/window "__EPUPP_COPIED_TEXT" text)
+                                                                        (js/Promise.resolve nil))}})))))
+
+(defn- ^:async wait-for-copied-text!+ [page]
+  (loop [remaining 20]
+    (let [copied-text (js-await (.evaluate page (fn [] (aget js/window "__EPUPP_COPIED_TEXT"))))]
+      (if (or copied-text (zero? remaining))
+        copied-text
+        (do
+          (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 25))))
+          (recur (dec remaining)))))))
+
 (defn- ^:async test_github_style_block []
   (let [context (js-await (launch-browser))
         ext-id (js-await (get-extension-id context))]
@@ -43,6 +68,102 @@
         (js-await (wait-for-popup-ready popup))
 
         (let [script-item (.locator popup ".script-item:has-text(\"github_test_script.cljs\")")]
+          (js-await (-> (expect script-item)
+                        (.toBeVisible #js {:timeout 1000}))))
+
+        (js-await (assert-no-errors! popup))
+        (js-await (.close popup)))
+
+      (finally
+        (js-await (.close context))))))
+
+(defn- ^:async test_gist_library_copy_action []
+  (let [context (js-await (launch-browser))
+        ext-id (js-await (get-extension-id context))]
+    (try
+      (let [popup (js-await (h/setup-installer!+ context ext-id))]
+        (js-await (.close popup)))
+
+      (let [page (js-await (h/navigate-to-mock-gist context))]
+        (js-await (install-clipboard-spy! page))
+
+        (let [copy-btn (js-await (h/wait-for-installer-action page
+                                                              "#gist-library-gist"
+                                                              {:action "copy-library-url"}
+                                                              2000))]
+          (js-await (-> (expect copy-btn)
+                        (.toHaveAttribute "title" "Copy library URL")))
+
+          (js-await (h/assert-no-installer-action page
+                                                  "#installable-gist"
+                                                  {:action "copy-library-url"}
+                                                  500))
+
+          (js-await (.click copy-btn))
+
+          (let [copied-text (js-await (wait-for-copied-text!+ page))]
+            (js-await (-> (expect copied-text)
+                          (.toBe expected-gist-library-copy-url))))
+
+          (js-await (h/click-install-and-confirm!+
+                     page
+                     "#gist-library-gist"
+                     "installed"))
+
+          (js-await (.close page))))
+
+      (let [popup (js-await (create-popup-page context ext-id))]
+        (js-await (wait-for-popup-ready popup))
+
+        (let [script-item (.locator popup ".script-item:has-text(\"gist_library.cljs\")")]
+          (js-await (-> (expect script-item)
+                        (.toBeVisible #js {:timeout 1000}))))
+
+        (js-await (assert-no-errors! popup))
+        (js-await (.close popup)))
+
+      (finally
+        (js-await (.close context))))))
+
+(defn- ^:async test_github_repo_library_copy_action []
+  (let [context (js-await (launch-browser))
+        ext-id (js-await (get-extension-id context))]
+    (try
+      (let [popup (js-await (h/setup-installer!+ context ext-id))]
+        (js-await (.close popup)))
+
+      (let [page (js-await (h/navigate-to-mock-gist context))]
+        (js-await (install-clipboard-spy! page))
+
+        (let [copy-btn (js-await (h/wait-for-installer-action page
+                                                              "#github-repo-library"
+                                                              {:action "copy-library-url"}
+                                                              2000))]
+          (js-await (-> (expect copy-btn)
+                        (.toHaveAttribute "title" "Copy library URL")))
+
+          (js-await (h/assert-no-installer-action page
+                                                  "#github-repo-installable"
+                                                  {:action "copy-library-url"}
+                                                  500))
+
+          (js-await (.click copy-btn))
+
+          (let [copied-text (js-await (wait-for-copied-text!+ page))]
+            (js-await (-> (expect copied-text)
+                          (.toBe expected-repo-library-copy-url))))
+
+          (js-await (h/click-install-and-confirm!+
+                     page
+                     "#github-repo-library"
+                     "installed"))
+
+          (js-await (.close page))))
+
+      (let [popup (js-await (create-popup-page context ext-id))]
+        (js-await (wait-for-popup-ready popup))
+
+        (let [script-item (.locator popup ".script-item:has-text(\"repo_library.cljs\")")]
           (js-await (-> (expect script-item)
                         (.toBeVisible #js {:timeout 1000}))))
 
@@ -147,6 +268,12 @@
 
 (.describe test "Web Installer: format detection"
            (fn []
+     (test "Web Installer: gist library copy action"
+       test_gist_library_copy_action)
+
+     (test "Web Installer: GitHub repo library copy action"
+       test_github_repo_library_copy_action)
+
              (test "Web Installer: detects GitHub-style table code blocks"
                    test_github_style_block)
 

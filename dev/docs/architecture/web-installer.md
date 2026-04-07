@@ -1,6 +1,6 @@
 # Web Userscript Installer
 
-The web installer detects userscript manifests on code hosting pages and adds "Install" buttons, enabling one-click script installation from GitHub gists, GitLab snippets, and other supported sites.
+The web installer detects userscript manifests on code hosting pages and adds install/update actions, enabling one-click script installation from GitHub gists, GitLab snippets, and other supported sites. On GitHub gist pages and GitHub repo file pages, blocks that declare `:epupp/library? true` can also expose `Copy library URL` when the installer can derive a valid pinned external dependency URL.
 
 ## Design Philosophy
 
@@ -18,7 +18,7 @@ flowchart LR
     subgraph Page ["Page Context (Scittle)"]
         INJ --> INIT["init!"]
         INIT --> DETECT["detect-all-code-blocks"]
-        DETECT --> BTN["Attach install buttons"]
+        DETECT --> BTN["Attach installer actions"]
         BTN --> MO["MutationObserver\n(late-arriving elements)"]
     end
 ```
@@ -127,12 +127,16 @@ Each format has a spec controlling button attachment:
 | `:pre` | `div` | `:before` the pre element | Block div above the code |
 | `:textarea` | `div` | `:before` the textarea | Block div above the textarea |
 
+Every installable block keeps the existing install/update action. On GitHub gist pages and GitHub repo file pages, blocks whose manifest declares `:epupp/library? true` may also render `Copy library URL`. The action is hidden unless the installer can produce a valid pinned external dependency URL. Install and update behavior is otherwise unchanged.
+
+Copy URL derivation follows the ext-dep contract. If the page already exposes a valid `raw.githubusercontent.com` or `gist.githubusercontent.com` URL, the installer uses it directly. For gists, it can normalize a `gist.github.com/.../raw/<SHA>/...` link into `https://gist.githubusercontent.com/<owner>/<gist-id>/raw/<SHA>/<file>`. For GitHub repo files, it derives `https://raw.githubusercontent.com/<owner>/<repo>/<SHA>/<path>` from page metadata and the commit SHA rather than copying the visible Raw href verbatim.
+
 ### Scan Pipeline
 
 1. `rescan!` - entry point, clears existing buttons and state, then scans
 2. `scan-with-retry!` - scans with retry backoff when new blocks aren't found but unprocessed blocks exist
 3. `scan-code-blocks!` - detects blocks, processes unprocessed ones in parallel, returns count of new blocks or `:done`
-4. `process-code-block!+` - marks element as processed, extracts manifest, checks script status via message to background, creates button
+4. `process-code-block!+` - marks element as processed, extracts manifest, checks script status via message to background, creates the inline action UI
 
 All code block elements are marked `data-epupp-processed` immediately on first encounter, whether or not they contain a manifest. This prevents non-manifest blocks from triggering endless retries.
 

@@ -188,6 +188,17 @@ elements on code-hosting pages.
 On non-whitelisted domains, the installer shows copy-paste instructions instead
 of an install button.
 
+On GitHub gist pages and GitHub repo file pages, installable blocks whose
+manifest declares `:epupp/library? true` can also show `Copy library URL`.
+That action copies a pinned external dependency URL suitable for
+`:epupp/inject`. The value may be normalized or derived rather than copied
+verbatim from the page, and the action is hidden when the installer cannot
+validate a pinned URL.
+
+This is a library-authoring convenience only. It does not change the broader
+dependency model: any script can still participate in dependency flows when
+another script references it via `:epupp/inject`.
+
 **Message flow**: The installer uses two dedicated messages:
 - `check-script-exists` (`:auth/none`) - checks if a script with the same name
   already exists and whether the code is identical

@@ -24,7 +24,7 @@
   <p>This page simulates GitHub Gist structure for E2E testing.</p>
   <div id="test-marker">ready</div>
 
-  <!-- Installable gist file with valid manifest -->
+  <!-- Explicit gist-style non-library case -->
   <div class="file" id="installable-gist">
     <div class="file-header">
       <span class="gist-blob-name">test_script.cljs</span>
@@ -40,6 +40,27 @@
 (ns test-installer-script)
 
 (js/console.log "Test script loaded!")</code></pre>
+    </div>
+  </div>
+
+  <!-- Explicit gist-style library case with SHA-bearing Raw link for host normalization -->
+  <div class="file" id="gist-library-gist">
+    <div class="file-header">
+      <span class="gist-blob-name">gist_library.cljs</span>
+      <div class="file-actions">
+        <a href="https://gist.github.com/PEZ/0123456789abcdef0123456789abcdef/raw/1234567890abcdef1234567890abcdef12345678/gist_library.cljs">Raw</a>
+      </div>
+    </div>
+    <div class="blob-wrapper">
+      <pre><code>{:epupp/script-name "gist_library.cljs"
+ :epupp/auto-run-match "*://gist-library.example.com/*"
+ :epupp/description "A gist-style library fixture"
+ :epupp/library? true}
+
+(ns gist-library)
+
+(defn message []
+  "gist-library-loaded")</code></pre>
     </div>
   </div>
 
@@ -366,7 +387,7 @@
        Matches real GitHub repo pages structure
        ======================================== -->
 
-  <!-- GitHub repo-style installable file - matches real GitHub structure -->
+  <!-- Explicit repo-style non-library case - matches real GitHub structure -->
   <div id="github-repo-installable" class="react-app">
     <div class="react-blob-header-edit-and-raw-actions">
       <div class="prc-ButtonGroup-ButtonGroup-testHash">
@@ -381,6 +402,29 @@
 (ns github-repo-script)
 
 (js/console.log "GitHub repo script loaded!")</div>
+  </div>
+
+  <!-- Explicit repo-style library case with pinned-raw derivation metadata -->
+  <div id="github-repo-library" class="react-app"
+       data-owner="PEZ"
+       data-repo="pez-my-epupp-hq"
+       data-commit-sha="fedcba9876543210fedcba9876543210fedcba98"
+       data-file-path="userscripts/pez/repo_library.cljs">
+    <div class="react-blob-header-edit-and-raw-actions">
+      <div class="prc-ButtonGroup-ButtonGroup-testHash">
+        <a href="https://github.com/PEZ/pez-my-epupp-hq/raw/main/userscripts/pez/repo_library.cljs" class="Button">Raw</a>
+        <a href="#" class="Button">Blame</a>
+      </div>
+    </div>
+    <div class="react-code-lines">{:epupp/script-name "repo_library.cljs"
+ :epupp/auto-run-match "*://github-repo-library.example.com/*"
+ :epupp/description "A GitHub repo-style library fixture"
+ :epupp/library? true}
+
+(ns repo-library)
+
+(defn message []
+  "repo-library-loaded")</div>
   </div>
 
 </body>

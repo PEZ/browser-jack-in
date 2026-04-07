@@ -114,6 +114,10 @@
 
 (def repo-url-a (str "https://raw.githubusercontent.com/user/repo/" valid-sha "/a.cljs"))
 (def repo-url-b (str "https://raw.githubusercontent.com/user/repo/" valid-sha "/b.cljs"))
+(def gist-github-raw-url
+  (str "https://gist.github.com/user/gistid/raw/" valid-sha "/file.cljs"))
+(def gist-content-url
+  (str "https://gist.githubusercontent.com/user/gistid/raw/" valid-sha "/file.cljs"))
 
 (defn- test-extract-filters-mixed []
   (let [urls ["scittle://replicant.js"
@@ -137,6 +141,45 @@
 (defn- test-extract-all-ext-deps []
   (let [result (ed/extract-ext-dep-urls [repo-url-a repo-url-b])]
     (-> (expect (count result)) (.toBe 2))))
+
+;; ============================================================
+;; copy-url derivation tests
+;; ============================================================
+
+(defn- test-normalize-gist-raw-url []
+  (-> (expect (ed/normalize-gist-raw-url gist-github-raw-url))
+      (.toBe gist-content-url)))
+
+(defn- test-normalize-gist-raw-url-rejects-invalid []
+  (-> (expect (ed/normalize-gist-raw-url "https://gist.github.com/user/gistid/raw/main/file.cljs"))
+      (.toBeFalsy)))
+
+(defn- test-build-pinned-repo-raw-url []
+  (-> (expect (ed/build-pinned-repo-raw-url {:owner "PEZ"
+                                             :repo "pez-my-epupp-hq"
+                                             :sha valid-sha
+                                             :path "userscripts/pez/test_lib.cljs"}))
+      (.toBe "https://raw.githubusercontent.com/PEZ/pez-my-epupp-hq/abcdef0123456789abcdef0123456789abcdef01/userscripts/pez/test_lib.cljs")))
+
+(defn- test-build-pinned-repo-raw-url-rejects-invalid-sha []
+  (-> (expect (ed/build-pinned-repo-raw-url {:owner "PEZ"
+                                             :repo "pez-my-epupp-hq"
+                                             :sha "main"
+                                             :path "userscripts/pez/test_lib.cljs"}))
+      (.toBeFalsy)))
+
+(defn- test-resolve-copy-url-prefers-valid-extracted-url []
+  (-> (expect (ed/resolve-copy-url gist-content-url repo-url-a))
+      (.toBe gist-content-url)))
+
+(defn- test-resolve-copy-url-falls-back-to-derived-url []
+  (-> (expect (ed/resolve-copy-url gist-github-raw-url
+                                   (ed/normalize-gist-raw-url gist-github-raw-url)))
+      (.toBe gist-content-url)))
+
+(defn- test-resolve-copy-url-returns-nil-when-neither-valid []
+  (-> (expect (ed/resolve-copy-url "https://github.com/user/repo/raw/main/file.cljs" nil))
+      (.toBeFalsy)))
 
 ;; ============================================================
 ;; resolve-and-fetch! tests
@@ -256,6 +299,16 @@
                         (test "returns empty for list with no ext-dep URLs" test-extract-no-ext-deps)
                         (test "returns empty for empty input" test-extract-empty-input)
                         (test "returns all when input contains only ext-dep URLs" test-extract-all-ext-deps)))
+
+            (describe "copy-url derivation"
+                      (fn []
+                        (test "normalizes gist.github raw URL to gist.githubusercontent.com" test-normalize-gist-raw-url)
+                        (test "rejects gist raw URL without pinned SHA" test-normalize-gist-raw-url-rejects-invalid)
+                        (test "builds pinned raw.githubusercontent.com URL from repo metadata" test-build-pinned-repo-raw-url)
+                        (test "rejects repo metadata with non-SHA revision" test-build-pinned-repo-raw-url-rejects-invalid-sha)
+                        (test "prefers already-valid extracted URL" test-resolve-copy-url-prefers-valid-extracted-url)
+                        (test "falls back to derived URL when extracted URL is not ext-dep valid" test-resolve-copy-url-falls-back-to-derived-url)
+                        (test "returns nil when neither extracted nor derived URL is valid" test-resolve-copy-url-returns-nil-when-neither-valid)))
 
             (describe "resolve-and-fetch!"
                       (fn []

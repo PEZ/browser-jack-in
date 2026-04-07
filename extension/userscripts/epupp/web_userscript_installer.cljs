@@ -36,6 +36,218 @@
 
 (def retry-delays [50 100 100 300 300 300 1000 1000 1000 3000 3000])
 
+(def installer-manifest-keys
+  "Fields the installer persists from h/extract-manifest.
+   Keep this contract in sync with epupp.internal.helpers/extract-manifest
+   and src/manifest_parser.cljs."
+  [:script-name :raw-script-name :name-normalized? :auto-run-match :description
+   :inject :inject-invalid? :run-at :raw-run-at :run-at-invalid? :library?])
+
+(def trusted-copy-url-hosts
+  #{"raw.githubusercontent.com"
+    "gist.githubusercontent.com"})
+
+(defn- select-installer-manifest [manifest]
+  (select-keys manifest installer-manifest-keys))
+
+(defn- valid-copy-sha? [value]
+  (boolean (and (string? value)
+                (re-matches #"^[0-9a-fA-F]{40}$" value))))
+
+(defn- parse-https-url [url]
+  (when (and (string? url)
+             (string/starts-with? url "https://"))
+    (let [without-scheme (subs url 8)
+          slash-idx (.indexOf without-scheme "/")]
+      (when (pos? slash-idx)
+        {:host (subs without-scheme 0 slash-idx)
+         :path-segments (string/split (subs without-scheme (inc slash-idx)) #"/")}))))
+
+(defn- valid-copy-url? [url]
+  (boolean
+   (when-let [{:keys [host path-segments]} (parse-https-url url)]
+     (and (contains? trusted-copy-url-hosts host)
+          (case host
+            "raw.githubusercontent.com"
+            (when (>= (count path-segments) 4)
+              (valid-copy-sha? (nth path-segments 2)))
+
+            "gist.githubusercontent.com"
+            (when (and (>= (count path-segments) 5)
+                       (= "raw" (nth path-segments 2)))
+              (valid-copy-sha? (nth path-segments 3)))
+
+            false)))))
+
+(defn- normalize-gist-raw-url [url]
+  (when-let [{:keys [host path-segments]} (parse-https-url url)]
+    (when (and (= host "gist.github.com")
+               (>= (count path-segments) 5)
+               (= "raw" (nth path-segments 2)))
+      (let [[owner gist-id _ sha & file-path] path-segments
+            candidate (str "https://gist.githubusercontent.com/"
+                           owner "/"
+                           gist-id
+                           "/raw/"
+                           sha
+                           "/"
+                           (string/join "/" file-path))]
+        (when (valid-copy-url? candidate)
+          candidate)))))
+
+(defn- build-pinned-repo-raw-url [{:keys [owner repo sha path]}]
+  (when (and (every? string? [owner repo sha path])
+             (not-any? string/blank? [owner repo sha path]))
+    (let [candidate (str "https://raw.githubusercontent.com/"
+                         owner "/"
+                         repo "/"
+                         sha "/"
+                         path)]
+      (when (valid-copy-url? candidate)
+        candidate))))
+
+(defn- resolve-copy-url [{:keys [extracted-url repo-metadata]}]
+  (let [derived-url (or (normalize-gist-raw-url extracted-url)
+                        (build-pinned-repo-raw-url repo-metadata))]
+    (cond
+      (valid-copy-url? extracted-url) extracted-url
+      (valid-copy-url? derived-url) derived-url
+      :else nil)))
+
+(defn- supported-copy-url? [url]
+  (boolean
+   (when-let [{:keys [host]} (parse-https-url url)]
+     (and (contains? trusted-copy-url-hosts host)
+          (valid-copy-url? url)))))
+
+(def github-repo-commit-link-selectors
+  ["a[data-testid='commit-hash-link'][href*='/commit/']"
+   "a[href*='/commit/']"])
+
+(defn- nonblank-string? [value]
+  (and (string? value)
+       (not (string/blank? value))))
+
+(defn- absolute-url [value]
+  (when (string? value)
+    (try
+      (str (js/URL. value js/window.location.href))
+      (catch :default _ nil))))
+
+(defn- github-repo-root-element [element]
+  (or (.closest element "[data-owner][data-repo][data-file-path]")
+      (.closest element ".react-app")
+      element))
+
+(defn- attribute-value [element attribute-name]
+  (let [value (some-> element (.getAttribute attribute-name))]
+    (when (nonblank-string? value)
+      value)))
+
+(defn- extract-explicit-repo-metadata [element]
+  (let [root (github-repo-root-element element)]
+    {:owner (attribute-value root "data-owner")
+     :repo (attribute-value root "data-repo")
+     :sha (attribute-value root "data-commit-sha")
+     :path (attribute-value root "data-file-path")}))
+
+(defn- parse-github-blob-url [url]
+  (when-let [{:keys [host path-segments]} (parse-https-url url)]
+    (when (and (= host "github.com")
+               (>= (count path-segments) 5)
+               (= "blob" (nth path-segments 2)))
+      (let [[owner repo _ _ref & file-path] path-segments]
+        (when (seq file-path)
+          {:owner owner
+           :repo repo
+           :path (string/join "/" file-path)})))))
+
+(defn- parse-github-owner-repo [url]
+  (when-let [{:keys [host path-segments]} (parse-https-url url)]
+    (when (and (= host "github.com")
+               (>= (count path-segments) 2))
+      {:owner (nth path-segments 0)
+       :repo (nth path-segments 1)})))
+
+(defn- parse-github-commit-url [url]
+  (when-let [{:keys [host path-segments]} (parse-https-url url)]
+    (when (and (= host "github.com")
+               (>= (count path-segments) 4)
+               (= "commit" (nth path-segments 2))
+               (valid-copy-sha? (nth path-segments 3)))
+      {:owner (nth path-segments 0)
+       :repo (nth path-segments 1)
+       :sha (nth path-segments 3)})))
+
+(defn- query-hrefs [root selectors]
+  (if root
+    (->> selectors
+         (mapcat (fn [selector]
+                   (->> (.querySelectorAll root selector)
+                        js/Array.from
+                        (map #(.getAttribute % "href")))))
+         (filter string?))
+    []))
+
+(defn- resolve-repo-commit-sha [element owner repo]
+  (when (and (nonblank-string? owner)
+             (nonblank-string? repo))
+    (let [root (github-repo-root-element element)]
+      (->> (concat (query-hrefs root github-repo-commit-link-selectors)
+                   (query-hrefs js/document github-repo-commit-link-selectors))
+           (map absolute-url)
+           (filter string?)
+           (keep parse-github-commit-url)
+           (filter (fn [{candidate-owner :owner
+                         candidate-repo :repo}]
+                     (and (= candidate-owner owner)
+                          (= candidate-repo repo))))
+           (map :sha)
+           first))))
+
+(defn- extract-raw-url [element]
+  (or (some-> (.closest element ".file")
+              (.querySelector ".file-actions a[href]")
+              (.getAttribute "href"))
+      (some-> (.closest element ".file-holder")
+              (.querySelector ".file-actions a[href]")
+              (.getAttribute "href"))
+      (some-> (.closest element ".react-app")
+              (.querySelector ".react-blob-header-edit-and-raw-actions a[href]")
+              (.getAttribute "href"))
+      (some-> (.closest element ".react-blob-header-edit-and-raw-actions")
+              (.querySelector "a[href]")
+              (.getAttribute "href"))))
+
+(defn- extract-repo-copy-metadata [element]
+  (let [raw-url (some-> (extract-raw-url element) absolute-url)
+        explicit-metadata (extract-explicit-repo-metadata element)
+        page-metadata (parse-github-blob-url (str js/window.location.href))
+        raw-metadata (parse-github-owner-repo raw-url)
+        owner (or (:owner explicit-metadata)
+                  (:owner page-metadata)
+                  (:owner raw-metadata))
+        repo (or (:repo explicit-metadata)
+                 (:repo page-metadata)
+                 (:repo raw-metadata))
+        path (or (:path explicit-metadata)
+                 (:path page-metadata))
+        sha (or (:sha explicit-metadata)
+                (resolve-repo-commit-sha element owner repo))]
+    (when (and (nonblank-string? owner)
+               (nonblank-string? repo)
+               (nonblank-string? path)
+               (valid-copy-sha? sha))
+      {:owner owner
+       :repo repo
+       :sha sha
+       :path path})))
+
+(defn- derive-block-copy-url [element manifest]
+  (when (:library? manifest)
+    (resolve-copy-url {:extracted-url (extract-raw-url element)
+                       :repo-metadata (extract-repo-copy-metadata element)})))
+
 (defn find-block-by-id [state block-id]
   (first (filter #(= (:id %) block-id) (:blocks state))))
 
@@ -169,20 +381,28 @@
                   :code-text (.-textContent pre)})))))
 
 (defn- get-github-repo-text
-  "Extract code text from GitHub repo file via .react-code-lines container"
-  []
-  (when-let [code-lines (.querySelector js/document ".react-code-lines")]
-    (.-textContent code-lines)))
+  "Extract code text for a single GitHub repo file block.
+   Prefer block-local code lines and only fall back to the page-global container
+   when there is exactly one repo header on the page."
+  [header-element]
+  (or (some-> (github-repo-root-element header-element)
+              (.querySelector ".react-code-lines")
+              .-textContent)
+      (when (= 1 (.-length (.querySelectorAll js/document ".react-blob-header-edit-and-raw-actions")))
+        (some-> (.querySelector js/document ".react-code-lines")
+                .-textContent))))
 
 (defn- detect-github-repo-files
-  "Find GitHub repo file via header container (React-based).
-   Returns single-element seq with :element being the header container."
+  "Find GitHub repo file blocks via each header container (React-based).
+   Returns one entry per header so fixture and real-page repo files scan independently."
   []
-  (when-let [header (.querySelector js/document ".react-blob-header-edit-and-raw-actions")]
-    (when-let [code-text (get-github-repo-text)]
-      [{:element header
-        :format :github-repo
-        :code-text code-text}])))
+  (->> (.querySelectorAll js/document ".react-blob-header-edit-and-raw-actions")
+       js/Array.from
+       (keep (fn [header]
+               (when-let [code-text (get-github-repo-text header)]
+                 {:element header
+                  :format :github-repo
+                  :code-text code-text})))))
 
 (defn- detect-all-code-blocks
   "Detect all code blocks on page. Returns seq of {:element :format :code-text}.
@@ -248,24 +468,83 @@
     "document-end" "document-end"
     "document-idle (default)"))
 
-(defn install-button [{:keys [id status] :as block}]
+(defn- copy-icon
+  [& {:keys [size] :or {size 14}}]
+  [:svg {:width size
+         :height size
+         :viewBox "0 0 16 16"
+         :fill "none"
+         :xmlns "http://www.w3.org/2000/svg"
+         :aria-hidden true}
+   [:rect {:x "5"
+           :y "2"
+           :width "8"
+           :height "10"
+           :rx "1.5"
+           :stroke "currentColor"
+           :stroke-width "1.5"}]
+   [:path {:d "M3.5 5.5V13C3.5 13.8284 4.17157 14.5 5 14.5H10.5"
+           :stroke "currentColor"
+           :stroke-width "1.5"
+           :stroke-linecap "round"}]
+   [:path {:d "M7 1.5H11"
+           :stroke "currentColor"
+           :stroke-width "1.5"
+           :stroke-linecap "round"}]])
+
+(defn- install-action-data [{:keys [id status] :as block}]
   (let [clickable? (#{:install :update} status)
-        status-class (str "is-" (name status))]
-    [:button.epupp-install-btn
-     {:class status-class
-      :on {:click [:db/assoc :modal {:visible? true :mode :confirm :block-id id}]}
-      :data-e2e-install-state (name status)
-      :data-e2e-script-name (get-in block [:manifest :script-name])
-      :disabled (not clickable?)
-      :title (button-tooltip block)}
-     [:span.epupp-icon (ui/epupp-icon :size 20)]
-     (case status
-       :install "Install"
-       :update "Update"
-       :installed "✓"
-       :installing "Installing..."
-       :error "Install Failed"
-       "Install")]))
+        label (case status
+                :install "Install"
+                :update "Update"
+                :installed "✓"
+                :installing "Installing..."
+                :error "Install Failed"
+                "Install")]
+    {:key :install
+     :class (str "epupp-action-btn epupp-install-btn is-" (name status))
+     :on-click [:db/assoc :modal {:visible? true :mode :confirm :block-id id}]
+     :label label
+     :disabled (not clickable?)
+     :title (button-tooltip block)
+     :attrs {:data-e2e-install-state (name status)
+             :data-e2e-script-name (get-in block [:manifest :script-name])}
+     :icon [:span.epupp-icon (ui/epupp-icon :size 20)]}))
+
+(defn- copy-action-data [{:keys [id copy-url manifest]}]
+  (when (and (:library? manifest)
+             (supported-copy-url? copy-url))
+    {:key :copy-library-url
+     :class "epupp-action-btn epupp-copy-btn"
+     :on-click [:block/copy-url id copy-url]
+     :label "Copy"
+     :title "Copy library URL"
+     :attrs {:data-e2e-action "copy-library-url"
+             :aria-label "Copy library URL"}
+     :icon [:span.epupp-copy-action__icons
+            [:span.epupp-icon (ui/epupp-icon :size 18)]
+            [:span.epupp-copy-icon (copy-icon :size 12)]]}))
+
+(defn- block-actions [block]
+  (let [copy-action (copy-action-data block)]
+    (cond-> [(install-action-data block)]
+      copy-action (conj copy-action))))
+
+(defn- action-button [{:keys [class on-click label disabled title attrs icon]}]
+  [:button
+   (merge {:class class
+           :on {:click on-click}
+           :disabled (boolean disabled)
+           :title title}
+          attrs)
+   icon
+   label])
+
+(defn- action-group [block]
+  [:div.epupp-action-group
+   (for [{:keys [key] :as action} (block-actions block)]
+     ^{:key key}
+     (action-button action))])
 
 (defn- modal-header
   "Branded modal header with Epupp icon, title, tagline, and action title."
@@ -407,6 +686,10 @@
   [state action]
   (let [[action-type & args] action]
     (case action-type
+      :block/copy-url
+      (let [[block-id copy-url] args]
+        {:effects [[:fx/copy-url block-id copy-url]]})
+
       :block/update-status
       (let [[block-id new-status error-msg] args]
         {:state (update-block-status state block-id new-status error-msg)})
@@ -429,6 +712,35 @@
 
       nil)))
 
+(defn- fallback-copy-text! [text]
+  (let [textarea (js/document.createElement "textarea")]
+    (set! (.-value textarea) text)
+    (set! (.. textarea -style -position) "fixed")
+    (set! (.. textarea -style -top) "0")
+    (set! (.. textarea -style -left) "-9999px")
+    (.appendChild js/document.body textarea)
+    (.focus textarea)
+    (.select textarea)
+    (try
+      (boolean (js/document.execCommand "copy"))
+      (catch :default _ false)
+      (finally
+        (.remove textarea)))))
+
+(defn- ^:async copy-text!+ [text]
+  (let [clipboard (some-> js/navigator .-clipboard)]
+    (try
+      (if (and clipboard
+               (.-writeText clipboard))
+        (do
+          (await (.writeText clipboard text))
+          true)
+        (fallback-copy-text! text))
+      (catch :default error
+        (if (fallback-copy-text! text)
+          true
+          (throw error))))))
+
 ;; ============================================================
 ;; Effect Handler & Dispatch Loop
 ;; ============================================================
@@ -439,6 +751,14 @@
   [dispatch! effect]
   (let [[effect-type & args] effect]
     (case effect-type
+      :fx/copy-url
+      (let [[_block-id copy-url] args]
+        ((^:async fn []
+           (try
+             (await (copy-text!+ copy-url))
+             (catch :default error
+               (js/console.error "[Web Userscript Installer] Copy failed:" copy-url error))))))
+
       :fx/save-script
       (let [[block-id code] args
             handle-save-error (fn [error-msg]
@@ -509,7 +829,7 @@
   ;; Also update buttons in their inline containers
   (doseq [[block-id btn-container] (:button-containers state)]
     (when-let [block (find-block-by-id state block-id)]
-      (r/render btn-container (install-button block)))))
+      (r/render btn-container (action-group block)))))
 
 (defn ensure-installer-css!
   "Inject installer CSS into document.head (idempotent - no-op if already exists)."
@@ -520,6 +840,25 @@
       (set! (.-textContent style-el)
             "
 .epupp-install-btn {
+  padding: 4px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  transition: all 150ms;
+}
+
+.epupp-action-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.epupp-action-btn {
   padding: 4px 8px;
   display: inline-flex;
   align-items: center;
@@ -565,6 +904,18 @@
   color: white;
   border-color: rgba(27,31,36,0.15);
   cursor: default;
+}
+
+.epupp-copy-btn {
+  background: #f6f8fa;
+  color: #24292f;
+  border-color: #d0d7de;
+  cursor: pointer;
+}
+
+.epupp-copy-btn:disabled {
+  cursor: default;
+  opacity: 0.7;
 }
 
 .epupp-modal-overlay {
@@ -726,9 +1077,23 @@
   right: 5px;
 }
 
-.epupp-install-btn .epupp-icon {
+.epupp-action-btn .epupp-icon {
   flex-shrink: 0;
   margin: -1px 0;
+}
+
+.epupp-copy-action__icons {
+  display: inline-flex;
+  align-items: center;
+}
+
+.epupp-copy-icon {
+  display: inline-flex;
+  align-items: center;
+  margin-left: -4px;
+  padding: 1px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.9);
 }
 
 .epupp-modal__header { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e1e4e8; color: #1a1a1a; }
@@ -789,10 +1154,10 @@
     btn-container))
 
 (defn- render-button-into-container!
-  "Render install button into container with error handling."
+  "Render installer action group into container with error handling."
   [container block-data]
   (try
-    (r/render container (install-button block-data))
+    (r/render container (action-group block-data))
     (catch :default e
       (js/console.error "[Web Userscript Installer] Replicant render error:" e))))
 
@@ -862,11 +1227,12 @@
 
 (defn- create-and-attach-block!
   "Create block-data from processing results and attach button to DOM."
-  [block-info block-id manifest code-text install-state]
+  [block-info block-id manifest code-text install-state copy-url]
   (let [block-data {:id block-id
-                    :manifest manifest
+                    :manifest (select-installer-manifest manifest)
                     :code code-text
                     :format (:format block-info)
+                    :copy-url copy-url
                     :status install-state}]
     (dispatch! [[:db/update :blocks conj block-data]])
     (attach-button-to-block! block-info block-data)))
@@ -886,6 +1252,7 @@
                (string/starts-with? trimmed-text "{"))
       (when-let [manifest (h/extract-manifest code-text)]
         (let [script-name (:script-name manifest)
+              copy-url (derive-block-copy-url element manifest)
               existing-id (aget element "id")
               block-id (if (and existing-id (pos? (count existing-id)))
                          existing-id
@@ -896,10 +1263,10 @@
             (perf-log! (str "check-status start: " script-name))
             (let [install-state (await (check-script-status!+ script-name code-text))]
               (perf-log! (str "check-status done: " script-name " -> " install-state))
-              (create-and-attach-block! block-info block-id manifest code-text install-state))
+              (create-and-attach-block! block-info block-id manifest code-text install-state copy-url))
             (catch :default e
               (js/console.error "[Web Userscript Installer] Error checking script status:" script-name e)
-              (create-and-attach-block! block-info block-id manifest code-text :install))))))))
+              (create-and-attach-block! block-info block-id manifest code-text :install copy-url))))))))
 
 (defn ^:async scan-code-blocks!
   "Scan DOM for code blocks, process unprocessed ones in parallel.

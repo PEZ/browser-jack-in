@@ -11,6 +11,12 @@
 
 (def default-run-at "document-idle")
 
+(def installer-manifest-sync-fields
+  "Installer manifest fields that must stay in sync with src/manifest_parser.cljs.
+   Update both parsers together when this contract changes."
+  [:script-name :raw-script-name :name-normalized? :auto-run-match :description
+   :inject :inject-invalid? :run-at :raw-run-at :run-at-invalid? :library?])
+
 (defn- next-request-id []
   (str "epupp-" (js/Date.now) "-" (rand-int 1000000000)))
 
@@ -109,7 +115,8 @@
                      default-run-at)
             auto-run-match (get m :epupp/auto-run-match)
             raw-inject (get m :epupp/inject)
-            inject (normalize-inject raw-inject)]
+            inject (normalize-inject raw-inject)
+            library? (boolean (get m :epupp/library?))]
         {:script-name normalized-name
          :raw-script-name raw-name
          :name-normalized? (not= raw-name normalized-name)
@@ -126,5 +133,6 @@
                                                          []))))
          :run-at run-at
          :raw-run-at raw-run-at
+         :library? library?
          :run-at-invalid? (and raw-run-at
                                (not (contains? valid-run-at-values raw-run-at)))}))))

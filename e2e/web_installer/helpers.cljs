@@ -6,8 +6,45 @@
                                                                 wait-for-popup-ready]]))
 
 ;; =============================================================================
-;; Install Button Selectors (using data-e2e attributes)
+;; Installer Action Selectors (using data-e2e and related attributes)
 ;; =============================================================================
+
+(defn action-selector
+  "Build a selector for a specific installer action.
+
+   Supports future non-install actions without coupling tests to install-state-only
+   attributes. opts may include:
+   - :install-state  => data-e2e-install-state
+   - :action         => data-e2e-action
+   - :title          => title attribute"
+  [{:keys [install-state action title]}]
+  (cond
+    install-state (str "[data-e2e-install-state=\"" install-state "\"]")
+    action (str "[data-e2e-action=\"" action "\"]")
+    title (str "[title=\"" title "\"]")
+    :else "[data-e2e-install-state], [data-e2e-action]"))
+
+(defn get-installer-action
+  "Get locator for an installer action by selector options and optional container."
+  ([page opts]
+   (.locator page (action-selector opts)))
+  ([page container-selector opts]
+   (.locator page (str container-selector " " (action-selector opts)))))
+
+(defn ^:async wait-for-installer-action
+  "Wait for an installer action to become visible within container."
+  [page container-selector opts timeout-ms]
+  (let [btn (get-installer-action page container-selector opts)]
+    (js-await (-> (expect btn)
+                  (.toBeVisible #js {:timeout timeout-ms})))
+    btn))
+
+(defn ^:async assert-no-installer-action
+  "Assert no matching installer action exists in container."
+  [page container-selector opts timeout-ms]
+  (let [btn (get-installer-action page container-selector opts)]
+    (js-await (-> (expect btn)
+                  (.toHaveCount 0 #js {:timeout timeout-ms})))))
 
 (defn get-install-button
   "Get locator for install button by state and optional container.
@@ -16,9 +53,9 @@
    state: one of \"install\", \"update\", \"installed\", \"installing\", \"error\"
    container-selector: optional CSS selector to scope the search"
   ([page state]
-   (.locator page (str "[data-e2e-install-state=\"" state "\"]")))
+   (get-installer-action page {:install-state state}))
   ([page container-selector state]
-   (.locator page (str container-selector " [data-e2e-install-state=\"" state "\"]"))))
+   (get-installer-action page container-selector {:install-state state})))
 
 (defn ^:async wait-for-install-button
   "Wait for install button with given state within container.
@@ -32,9 +69,7 @@
 (defn ^:async assert-no-install-button
   "Assert no install button with given state exists in container."
   [page container-selector state timeout-ms]
-  (let [btn (get-install-button page container-selector state)]
-    (js-await (-> (expect btn)
-                  (.toHaveCount 0 #js {:timeout timeout-ms})))))
+  (js-await (assert-no-installer-action page container-selector {:install-state state} timeout-ms)))
 
 ;; =============================================================================
 ;; Common Patterns

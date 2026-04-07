@@ -40,7 +40,7 @@ This document is a map of where the architecture lives in code.
 
 | File | Purpose |
 |------|---------|
-| `extension/userscripts/epupp/web_userscript_installer.cljs` | Detects userscripts on web pages and offers install button |
+| `extension/userscripts/epupp/web_userscript_installer.cljs` | Detects installable userscripts on web pages and offers install/update actions plus library URL copy when a valid pinned external dependency URL can be derived |
 | `extension/userscripts/epupp/sponsor.cljs` | Sponsor detection on GitHub Sponsors page ([details](sponsor-heart.md)) |
 
 ### Builtin Metadata Flags

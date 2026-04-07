@@ -154,7 +154,7 @@ As the creator of Calva, and Calva Backseat Driver I chose to desceibe how to co
 An Epupp userscript is just a text file which starts with a script manifest and some code. You can install scripts in three ways:
 
 1. Pasting/typing a script in the Epupp panel and clicking **Save Script**.
-2. The **Web Userscript Installer** script. The extension has a built-in script that will identify Epupp scripts on code-hosting pages and add an **Install** button near them. On whitelisted domains (GitHub, GitHub Gists, GitLab, Codeberg, localhost) it can install scripts into Epupp. On other sites, it shows copy-paste instructions instead. Try it on this gist: https://gist.github.com/PEZ/3b0fdc406e7593eaaef609b6fb4a687d (It's the script created in the demo video.)
+2. The **Web Userscript Installer** script. The extension has a built-in script that identifies Epupp scripts on code-hosting pages and adds an **Install** button near them. On GitHub gist pages and GitHub repo file pages, installable code blocks that declare `:epupp/library? true` can also show **Copy library URL**, which copies a pinned dependency URL you can paste into `:epupp/inject`. On whitelisted domains (GitHub, GitHub Gists, GitLab, Codeberg, localhost) it can install scripts into Epupp. On other sites, it shows copy-paste instructions instead. Try it on this gist: https://gist.github.com/PEZ/3b0fdc406e7593eaaef609b6fb4a687d (It's the script created in the demo video.)
 3. Using the REPL. There's a `epupp.fs` namespace for listing/reading/writing/renaming scripts in the Epupp extension storage.
 
 ## The Epupp UI
@@ -172,7 +172,7 @@ The popup has the following sections:
 1. **REPL Connect**. Shows how to connect the current tab's REPL to your editor and/or AI agent. Also shows which tabs are currently connected.
 2. Userscripts sections:
    * **Manual/on-demand**. Scripts that do not auto-run on any page, use the **play** button to run them.
-   * **Libraries**. Scripts marked with `:epupp/library? true` that have no auto-run pattern. These are dependency-only scripts used by other scripts via `:epupp/inject`. Collapsed by default.
+  * **Libraries**. Scripts marked with `:epupp/library? true` that have no auto-run pattern. These are explicitly marked library scripts used by other scripts via `:epupp/inject`. Collapsed by default. Other scripts can still participate in dependency flows via `:epupp/inject`.
    * **Auto-run for this page**. Scripts that has an `:epupp/auto-run-match` pattern than matches the current page.
    * *Auto-run not matching this page*. Scripts that auto-runs on some other pages, but not the current one.
    * **Special**. Built-in scripts that has some special way of being triggered to start. (Currently only the **Web Userscript Installer**)
@@ -411,6 +411,8 @@ Scripts can depend on code hosted on GitHub's raw content hosts via HTTPS URLs i
 |------|--------|
 | `raw.githubusercontent.com` | `https://raw.githubusercontent.com/owner/repo/SHA/path/to/file.cljs` |
 | `gist.githubusercontent.com` | `https://gist.githubusercontent.com/owner/GIST_ID/raw/SHA/filename.cljs` |
+
+On GitHub gist pages and GitHub repo file pages, installable code blocks marked `:epupp/library? true` can show `Copy library URL` alongside Install or Update. It copies one of the pinned URL formats above. The copied value may be normalized or derived, so it is not necessarily the page's visible Raw link. This is a library-authoring convenience, not a requirement for participating in dependency flows.
 
 External dependencies are fetched and cached when the script is saved (via panel, web installer, or FS API). At page load, they're injected from cache. Transitive dependencies are supported.
 
