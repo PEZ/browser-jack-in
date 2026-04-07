@@ -245,8 +245,9 @@
 
 (defn- derive-block-copy-url [element manifest]
   (when (:library? manifest)
-    (resolve-copy-url {:extracted-url (extract-raw-url element)
-                       :repo-metadata (extract-repo-copy-metadata element)})))
+    (let [extracted-url (some-> (extract-raw-url element) absolute-url)]
+      (resolve-copy-url {:extracted-url extracted-url
+                         :repo-metadata (extract-repo-copy-metadata element)}))))
 
 (defn find-block-by-id [state block-id]
   (first (filter #(= (:id %) block-id) (:blocks state))))
