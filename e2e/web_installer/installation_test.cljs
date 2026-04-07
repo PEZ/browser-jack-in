@@ -2,8 +2,34 @@
   "E2E tests for basic web userscript installation flows."
   (:require ["@playwright/test" :refer [test expect]]
             ["./../fixtures.mjs" :refer [launch-browser get-extension-id create-popup-page
-                                          wait-for-popup-ready wait-for-event assert-no-errors!]]
+                                          wait-for-popup-ready wait-for-event assert-no-errors!
+                                          send-runtime-message clear-test-events!]]
             ["./helpers.mjs" :as h]))
+
+(def git-raw-url
+  "https://raw.githubusercontent.com/PEZ/pez-my-epupp-hq/3dbf6393916cd4e384826b093ab6e9a96b1793f9/userscripts/pez/test_lib.cljs")
+
+(defn- ^:async poll-ext-dep-cache
+  "Poll extDepCache storage until the expected URL key exists."
+  [ext-page expected-url timeout-ms]
+  (let [start (.now js/Date)]
+    (loop []
+      (let [result (js-await (send-runtime-message ext-page "e2e/get-storage"
+                                                   #js {:key "extDepCache"}))
+            cache (when (and result (.-success result)) (.-value result))
+            entry (when cache (aget cache expected-url))]
+        (if entry
+          entry
+          (if (> (- (.now js/Date) start) timeout-ms)
+            (throw (js/Error. (str "Timeout (" timeout-ms "ms) waiting for extDepCache to contain: "
+                                   expected-url
+                                   "\nCache keys: "
+                                   (if cache
+                                     (js/JSON.stringify (.keys js/Object cache))
+                                     "null/undefined"))))
+            (do
+              (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 200))))
+              (recur))))))))
 
 (defn- ^:async test_shows_button_and_installs []
   (let [context (js-await (launch-browser))
@@ -149,6 +175,76 @@
       (finally
         (js-await (.close context))))))
 
+(defn- ^:async test_scittle_dependency_runtime_resolution []
+  (let [context (js-await (launch-browser))
+        ext-id (js-await (get-extension-id context))]
+    (try
+      ;; Setup installer
+      (let [popup (js-await (h/setup-installer!+ context ext-id))]
+        (js-await (.close popup)))
+
+      ;; Install the scittle:// consumer and verify it runs on the target page
+      (let [page (js-await (h/navigate-to-mock-gist context))
+            consumer-container "#scittle-dep-gist"]
+        (js-await (h/wait-for-install-button page consumer-container "install" 2000))
+        (js-await (h/click-install-and-confirm!+ page consumer-container "installed"))
+
+        (let [popup (js-await (create-popup-page context ext-id))]
+          (js-await (clear-test-events! popup))
+          (js-await (.close popup)))
+
+        (js-await (.goto page "http://localhost:18080/basic.html" #js {:timeout 5000}))
+        (js-await (-> (expect (.locator page "#test-marker"))
+                      (.toContainText "ready")))
+
+        (let [popup (js-await (create-popup-page context ext-id))]
+          (js-await (wait-for-event popup "EXECUTE_PLAN_COMPLETE" 10000))
+          (js-await (-> (expect (.locator page "#web-installer-scittle-marker"))
+                        (.toContainText "web-installer-scittle-ok" #js {:timeout 5000})))
+          (js-await (assert-no-errors! popup))
+          (js-await (.close popup)))
+
+        (js-await (.close page)))
+
+      (finally
+        (js-await (.close context))))))
+
+(defn- ^:async test_https_ext_dep_runtime_resolution []
+  (.setTimeout test 60000)
+  (let [context (js-await (launch-browser))
+        ext-id (js-await (get-extension-id context))]
+    (try
+      ;; Setup installer
+      (let [popup (js-await (h/setup-installer!+ context ext-id))]
+        (js-await (.close popup)))
+
+      ;; Install the HTTPS ext-dep consumer, wait for cache population, then verify runtime behavior
+      (let [page (js-await (h/navigate-to-mock-gist context))
+            consumer-container "#https-ext-dep-gist"]
+        (js-await (h/wait-for-install-button page consumer-container "install" 2000))
+        (js-await (h/click-install-and-confirm!+ page consumer-container "installed"))
+
+        (let [popup (js-await (create-popup-page context ext-id))]
+          (js-await (poll-ext-dep-cache popup git-raw-url 20000))
+          (js-await (clear-test-events! popup))
+          (js-await (.close popup)))
+
+        (js-await (.goto page "http://localhost:18080/basic.html" #js {:timeout 5000}))
+        (js-await (-> (expect (.locator page "#test-marker"))
+                      (.toContainText "ready")))
+
+        (let [popup (js-await (create-popup-page context ext-id))]
+          (js-await (wait-for-event popup "EXECUTE_PLAN_COMPLETE" 10000))
+          (js-await (-> (expect (.locator page "#web-installer-https-ext-dep-marker"))
+                        (.toHaveText "Hello from pez.test-lib, WebInstallerHttps!" #js {:timeout 5000})))
+          (js-await (assert-no-errors! popup))
+          (js-await (.close popup)))
+
+        (js-await (.close page)))
+
+      (finally
+        (js-await (.close context))))))
+
 (.describe test "Web Installer: installation"
            (fn []
              (test "Web Installer: shows Install button and installs script"
@@ -158,4 +254,10 @@
                    test_manual_only_script)
 
              (test "Web Installer: previews epupp:// dependencies and resolves after installing library"
-                   test_epupp_dependency_preview_and_runtime_resolution)))
+                   test_epupp_dependency_preview_and_runtime_resolution)
+
+             (test "Web Installer: installs scittle:// dependency consumer and executes it"
+                   test_scittle_dependency_runtime_resolution)
+
+             (test "Web Installer: installs HTTPS ext-dep consumer and executes it"
+                   test_https_ext_dep_runtime_resolution)))

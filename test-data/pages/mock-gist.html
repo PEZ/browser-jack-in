@@ -116,6 +116,58 @@
     </div>
   </div>
 
+  <!-- Installable consumer with scittle:// dependency -->
+  <div class="file" id="scittle-dep-gist">
+    <div class="file-header">
+      <span class="gist-blob-name">web_installer_scittle_dep.cljs</span>
+      <div class="file-actions">
+        <a href="http://localhost:18080/raw/web_installer_scittle_dep.cljs">Raw</a>
+      </div>
+    </div>
+    <div class="blob-wrapper">
+      <pre><code>{:epupp/script-name "web_installer/scittle_dep.cljs"
+ :epupp/auto-run-match "http://localhost:18080/basic.html"
+ :epupp/description "Consumer that depends on scittle://replicant.js"
+ :epupp/inject ["scittle://replicant.js"]}
+
+(ns web-installer.scittle-dep
+  (:require [replicant.dom :as r]))
+
+(let [container (or (js/document.getElementById "web-installer-scittle-root")
+                    (doto (js/document.createElement "div")
+                      (set! -id "web-installer-scittle-root")
+                      (->> (.appendChild js/document.body))))]
+  (r/render container
+            [:div {:id "web-installer-scittle-marker"} "web-installer-scittle-ok"]))</code></pre>
+    </div>
+  </div>
+
+  <!-- Installable consumer with pinned HTTPS ext-dep -->
+  <div class="file" id="https-ext-dep-gist">
+    <div class="file-header">
+      <span class="gist-blob-name">web_installer_https_ext_dep.cljs</span>
+      <div class="file-actions">
+        <a href="http://localhost:18080/raw/web_installer_https_ext_dep.cljs">Raw</a>
+      </div>
+    </div>
+    <div class="blob-wrapper">
+      <pre><code>{:epupp/script-name "web_installer/https_ext_dep.cljs"
+ :epupp/auto-run-match "http://localhost:18080/basic.html"
+ :epupp/description "Consumer that depends on a pinned HTTPS ext-dep"
+ :epupp/inject ["https://raw.githubusercontent.com/PEZ/pez-my-epupp-hq/3dbf6393916cd4e384826b093ab6e9a96b1793f9/userscripts/pez/test_lib.cljs"]}
+
+(ns web-installer.https-ext-dep
+  (:require [pez.test-lib :as lib]))
+
+(let [el (or (js/document.getElementById "web-installer-https-ext-dep-marker")
+             (doto (js/document.createElement "div")
+               (set! -id "web-installer-https-ext-dep-marker")
+               (->> (.appendChild js/document.body))))]
+  (set! (.-textContent el)
+        (lib/greeting "WebInstallerHttps")))</code></pre>
+    </div>
+  </div>
+
   <!-- ========================================
        GitHub Gist Style Code Blocks (table-based)
        ======================================== -->
