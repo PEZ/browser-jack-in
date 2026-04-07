@@ -471,27 +471,11 @@
 
 (defn- copy-icon
   [& {:keys [size] :or {size 14}}]
-  [:svg {:width size
-         :height size
+  [:svg {:xmlns "http://www.w3.org/2000/svg"
+         :width size :height size
          :viewBox "0 0 16 16"
-         :fill "none"
-         :xmlns "http://www.w3.org/2000/svg"
-         :aria-hidden true}
-   [:rect {:x "5"
-           :y "2"
-           :width "8"
-           :height "10"
-           :rx "1.5"
-           :stroke "currentColor"
-           :stroke-width "1.5"}]
-   [:path {:d "M3.5 5.5V13C3.5 13.8284 4.17157 14.5 5 14.5H10.5"
-           :stroke "currentColor"
-           :stroke-width "1.5"
-           :stroke-linecap "round"}]
-   [:path {:d "M7 1.5H11"
-           :stroke "currentColor"
-           :stroke-width "1.5"
-           :stroke-linecap "round"}]])
+         :fill "currentColor"}
+   [:path {:d "M4 4L4 1.5C4 1.22386 4.22386 1 4.5 1H12.5C12.7761 1 13 1.22386 13 1.5V10.5C13 10.7761 12.7761 11 12.5 11H10V12H12.5C13.3284 12 14 11.3284 14 10.5V1.5C14 0.671573 13.3284 0 12.5 0H4.5C3.67157 0 3 0.671573 3 1.5V4H4ZM1 5.5C1 4.67157 1.67157 4 2.5 4H9.5C10.3284 4 11 4.67157 11 5.5V14.5C11 15.3284 10.3284 16 9.5 16H2.5C1.67157 16 1 15.3284 1 14.5V5.5ZM2.5 5C2.22386 5 2 5.22386 2 5.5V14.5C2 14.7761 2.22386 15 2.5 15H9.5C9.77614 15 10 14.7761 10 14.5V5.5C10 5.22386 9.77614 5 9.5 5H2.5Z"}]])
 
 (defn- install-action-data [{:keys [id status] :as block}]
   (let [clickable? (#{:install :update} status)
@@ -518,13 +502,12 @@
     {:key :copy-library-url
      :class "epupp-action-btn epupp-copy-btn"
      :on-click [:block/copy-url id copy-url]
-     :label "Copy"
+     :label [:span.epupp-copy-icon (copy-icon :size 18)]
      :title "Copy library URL"
      :attrs {:data-e2e-action "copy-library-url"
              :aria-label "Copy library URL"}
-     :icon [:span.epupp-copy-action__icons
-            [:span.epupp-icon (ui/epupp-icon :size 18)]
-            [:span.epupp-copy-icon (copy-icon :size 12)]]}))
+     :icon [:span.epupp-icon
+            (ui/epupp-icon :size 20)]}))
 
 (defn- block-actions [block]
   (let [copy-action (copy-action-data block)]
@@ -1080,7 +1063,9 @@
 
 .epupp-action-btn .epupp-icon {
   flex-shrink: 0;
-  margin: -1px 0;
+  margin: 0;
+  margin-top: 2px;
+  margin-bottom: -2px;
 }
 
 .epupp-copy-action__icons {
