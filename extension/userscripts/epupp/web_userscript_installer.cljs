@@ -1268,10 +1268,36 @@
               (js/console.error "[Web Userscript Installer] Error checking script status:" script-name e)
               (create-and-attach-block! block-info block-id manifest code-text :install copy-url))))))))
 
+(defn- rederive-missing-copy-urls!
+  "Re-derive copy-url for library blocks where it was nil at scan time.
+   GitHub lazily renders DOM elements (e.g. Raw link), so copy-url
+   may not be derivable during the initial scan.
+   Returns count of blocks still needing rederivation."
+  []
+  (let [blocks (:blocks @!state)
+        needs-rederive (filterv (fn [b]
+                                  (and (get-in b [:manifest :library?])
+                                       (nil? (:copy-url b))))
+                                blocks)
+        rederived (vec (keep (fn [block]
+                               (when-let [element (js/document.getElementById (:id block))]
+                                 (when-let [url (derive-block-copy-url element (:manifest block))]
+                                   [(:id block) url])))
+                             needs-rederive))]
+    (doseq [[id url] rederived]
+      (dispatch! [[:db/update :blocks
+                   (fn [blks]
+                     (mapv (fn [b]
+                             (if (= (:id b) id) (assoc b :copy-url url) b))
+                           blks))]]))
+    (- (count needs-rederive) (count rederived))))
+
 (defn ^:async scan-code-blocks!
   "Scan DOM for code blocks, process unprocessed ones in parallel.
+   Also re-derives copy-url for library blocks where initial derivation
+   returned nil (GitHub lazily renders Raw link buttons).
    Returns the number of new blocks found, or :done when there are
-   no unprocessed blocks (retrying would be pointless)."
+   no unprocessed blocks and no pending copy-url rederivations."
   []
   (if (:scan-in-progress? @!state)
     :done
@@ -1286,18 +1312,21 @@
           (when-let [marker (js/document.getElementById "epupp-installer-debug")]
             (set! (.-textContent marker) (str "Scanning: " (count all-blocks) " code blocks, " (count unprocessed) " unprocessed")))
           (if (empty? unprocessed)
-            (do (perf-log! "processing 0 blocks - done")
-                :done)
+            ;; No new blocks to process - but check pending copy-url rederivation
+            (let [still-pending (rederive-missing-copy-urls!)]
+              (perf-log! (str "processing 0 blocks, " still-pending " pending copy-url"))
+              (if (pos? still-pending) 0 :done))
             ;; Process all unprocessed blocks concurrently
             (try
               (perf-log! (str "processing " (count unprocessed) " blocks"))
               (await (js/Promise.all
                       (to-array (map #(process-code-block!+ %) unprocessed))))
-              (let [new-found (- (count (:blocks @!state)) blocks-before)]
-                (perf-log! (str "scan complete: " new-found " new, " (count (:blocks @!state)) " total"))
+              (let [new-found (- (count (:blocks @!state)) blocks-before)
+                    still-pending (rederive-missing-copy-urls!)]
+                (perf-log! (str "scan complete: " new-found " new, " (count (:blocks @!state)) " total, " still-pending " pending copy-url"))
                 (when-let [marker (js/document.getElementById "epupp-installer-debug")]
                   (set! (.-textContent marker) (str "Scan complete: " (count (:blocks @!state)) " blocks found")))
-                new-found)
+                (if (pos? still-pending) 0 new-found))
               (catch :default error
                 (js/console.error "[Web Userscript Installer] Scan error:" error)
                 0))))
