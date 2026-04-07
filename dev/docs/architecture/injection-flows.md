@@ -47,18 +47,20 @@ See [connected-repl.md](connected-repl.md) for full details including message fl
 1. User enters code, presses Ctrl+Enter
 2. `:editor/ax.eval` action dispatched
 3. Check `:panel/scittle-status`:
-   - If `:loaded`: evaluate directly
-    - Otherwise: inject required libraries (if any), then send `ensure-scittle`
-4. `eval-in-page!` uses `chrome.devtools.inspectedWindow.eval`
-5. Wrapper calls `scittle.core.eval_string(code)`
-6. Result returned via `:editor/ax.handle-eval-result`
+    - If `:loaded`: panel still sends `inject-libs` first when `:epupp/inject` is present
+    - Otherwise: panel sends `inject-libs`, then follows with `ensure-scittle` and eval
+4. Background resolves the inject vector as a synthetic deps-only plan
+5. Background ensures Scittle for the tab, then runs `execute-plan!`
+6. `eval-in-page!` uses `chrome.devtools.inspectedWindow.eval`
+7. Wrapper calls `scittle.core.eval_string(code)`
+8. Result returned via `:editor/ax.handle-eval-result`
 
 ### Popup Quick Run ("Run" button)
 
 1. User clicks Run on a script in the popup
 2. Popup sends `evaluate-script` to background with `tabId` and script code
-3. Background ensures Scittle is loaded, injects required libraries, and
-    executes the script via userscript tag injection
+3. Background resolves the script's inject vector through `dep_resolver`
+4. Background ensures Scittle is loaded, runs `execute-plan!`, and executes the script via userscript tag injection
 
 ### Conditional Web Installer Injection (on Navigation)
 
@@ -104,6 +106,8 @@ Cache entries are keyed by the original HTTPS URL and contain:
 ### Phase 2: Inject from Cache
 
 At page load, the dependency resolver treats supported HTTPS URLs as `:ext-dep` kind. It looks up cached content and produces `:ext-dep-script` steps in the execution plan. If a URL is not in cache, a `:ext-dep/cache-miss` error is surfaced.
+
+`extDepCache` persistence is isolated from the general storage persistence path. Script saves still trigger uncached external dependency resolution, but cache writes are persisted through a dedicated cache-only effect so general script persistence cannot overwrite fresher external dependency entries.
 
 ### Error Types
 

@@ -452,8 +452,9 @@
 
 (defn- handle-load-manifest [message tab-id dispatch! send-response]
   (let [manifest (.-manifest message)
-        all-scripts (storage/get-scripts)]
-    (dispatch! [[:msg/ax.load-manifest send-response tab-id manifest all-scripts]])
+    all-scripts (storage/get-scripts)
+    ext-dep-cache (storage/get-ext-dep-cache)]
+  (dispatch! [[:msg/ax.load-manifest send-response tab-id manifest all-scripts ext-dep-cache]])
     true))
 
 (defn- handle-get-connections [dispatch! send-response]
@@ -573,8 +574,9 @@
   (let [target-tab-id (.-tabId message)
         libs (when (.-libs message)
                (vec (.-libs message)))
-        all-scripts (storage/get-scripts)]
-    (dispatch! [[:msg/ax.inject-libs send-response target-tab-id libs all-scripts]])
+    all-scripts (storage/get-scripts)
+    ext-dep-cache (storage/get-ext-dep-cache)]
+  (dispatch! [[:msg/ax.inject-libs send-response target-tab-id libs all-scripts ext-dep-cache]])
     true))
 
 (defn- handle-evaluate-script [message dispatch! send-response]
@@ -1020,6 +1022,14 @@
              (dispatch! [[:msg/ax.ensure-scittle-result send-response {:ok? false
                                                                       :error (.-message err)}]]))))))
 
+    :msg/fx.ensure-scittle-tab
+    (let [[tab-id icon-state] args]
+      (bg-inject/ensure-scittle! dispatch! tab-id icon-state))
+
+    :msg/fx.execute-plan
+    (let [[tab-id plan] args]
+      (bg-inject/execute-plan! tab-id plan))
+
     :script/fx.evaluate
     (let [[tab-id script icon-state] args]
       (when (= bg-utils/sponsor-script-id (:script/id script))
@@ -1131,6 +1141,9 @@
 
     :storage/fx.persist!
     (storage/persist!)
+
+    :storage/fx.persist-ext-dep-cache!
+    (storage/persist-ext-dep-cache!)
 
     :ext-dep/fx.fetch-deps
     (let [[uncached-urls existing-cache] args]

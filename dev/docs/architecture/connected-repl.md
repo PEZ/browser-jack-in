@@ -72,7 +72,7 @@ At connect time, Epupp injects its API namespaces from bundled Scittle source fi
 
 The injection uses the same pattern as userscripts: background fetches file content via `chrome.runtime.getURL`, sends it to the content bridge via `inject-userscript` message (creating inline `<script type="application/x-scittle">` tags), and triggers Scittle evaluation.
 
-`epupp.repl/manifest!` accepts a map with `:epupp/inject` (a vector of `scittle://` URLs) and triggers the library loading flow described below. See the [user guide](../../../docs/user-guide.md) for usage examples.
+`epupp.repl/manifest!` accepts a map with `:epupp/inject` and routes it through the same dependency resolution path used by popup quick-run, panel eval, and auto-run. The vector can contain mixed `scittle://`, `epupp://`, and supported pinned HTTPS external dependency URLs. See the [user guide](../../../docs/user-guide.md) for usage examples.
 
 ### Library Loading Flow
 
@@ -86,9 +86,9 @@ sequenceDiagram
     REPL->>Scittle: (epupp.repl/manifest! {:epupp/inject [...]})
     Scittle->>CB: postMessage (load-manifest)
     CB->>BG: sendMessage (load-manifest)
-    BG->>BG: collect-require-files
-    BG->>CB: inject-script (sequentially)
-    CB->>Scittle: script tags injected
+    BG->>BG: resolve-execution-plan (deps-only)
+    BG->>BG: ensure-scittle + execute-plan
+    CB->>Scittle: dependency script tags injected and evaluated
     BG->>CB: sendMessage (manifest-response)
     CB->>Scittle: postMessage (manifest-response)
     Scittle->>REPL: Promise resolves
@@ -96,7 +96,7 @@ sequenceDiagram
 
 ### Idempotency
 
-Library injection is idempotent - calling `manifest!` multiple times with the same libraries does not create duplicate script tags. The content bridge tracks injected URLs via `window.__epuppInjectedScripts`.
+Library injection is idempotent at the dependency-plan level. Calling `manifest!` repeatedly with the same dependencies reuses the same resolver and execution path as the other injection surfaces, while the content bridge still tracks injected URLs via `window.__epuppInjectedScripts`.
 
 ## WebSocket Bridge
 

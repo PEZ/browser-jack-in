@@ -111,9 +111,18 @@
                   #js {:schemaVersion schema-version
                        :scripts (clj->js (mapv script-utils/script->js scripts))
                        :grantedOrigins (clj->js granted-origins)
-                       :extDepCache (clj->js (:storage/ext-dep-cache db))
                        :sponsorStatus (:sponsor/status db)
                        :sponsorCheckedAt (:sponsor/checked-at db)}
+                  (fn [] (resolve nil))))))))
+
+(defn ^:async persist-ext-dep-cache!
+  "Write only the ext-dep cache to chrome.storage.local."
+  []
+  (let [cache (:storage/ext-dep-cache @!db)]
+    (js-await (js/Promise.
+               (fn [resolve]
+                 (js/chrome.storage.local.set
+                  #js {:extDepCache (clj->js cache)}
                   (fn [] (resolve nil))))))))
 
 (defn ^:async load!

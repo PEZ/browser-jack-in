@@ -1206,25 +1206,46 @@
 ;; load-manifest and inject-libs baseline tests (Phase 0)
 ;; ============================================================
 
+(defn- execute-plan-effect
+    [fxs]
+    (some #(when (= :msg/fx.execute-plan (second %)) %) fxs))
+
+(defn- effect-plan
+    [fxs]
+    (nth (execute-plan-effect fxs) 3))
+
+(defn- plan-step-count
+    [plan step-type]
+    (count (filter #(= step-type (:step/type %)) (:plan/steps plan))))
+
+(defn- vendor-step-paths
+    [plan]
+    (mapv :step/path
+                (filter #(= :vendor-file (:step/type %)) (:plan/steps plan))))
+
 (defn- test-load-manifest-with-scittle-libs-produces-inject-effects []
   (let [manifest #js {"inject" #js ["scittle://reagent.js"]}
         send-response :mock-send-response
         result (bg-actions/handle-action initial-state uf-data
-                 [:msg/ax.load-manifest send-response 42 manifest])
+                                 [:msg/ax.load-manifest send-response 42 manifest [] {}])
         fxs (:uf/fxs result)
-        lib-effects (filter #(= :msg/fx.inject-lib-file (second %)) fxs)
-        response-effect (last fxs)]
-    ;; Should inject react + react-dom + reagent (3 files)
-    (-> (expect (count lib-effects)) (.toBe 3))
-    ;; Last effect should send success response
-    (-> (expect (first response-effect)) (.toBe :uf/await))
-    (-> (expect (second response-effect)) (.toBe :msg/fx.send-response))))
+                plan (effect-plan fxs)
+                response-effect (last fxs)]
+        (-> (expect (count fxs)) (.toBe 3))
+        (-> (expect (second (first fxs))) (.toBe :msg/fx.ensure-scittle-tab))
+        (-> (expect (second (second fxs))) (.toBe :msg/fx.execute-plan))
+        (-> (expect (first response-effect)) (.toBe :msg/fx.send-response))
+        (-> (expect (vendor-step-paths plan))
+                (.toEqual ["vendor/react.production.min.js"
+                                     "vendor/react-dom.production.min.js"
+                                     "vendor/scittle.reagent.js"]))
+        (-> (expect (plan-step-count plan :root-script)) (.toBe 0))))
 
 (defn- test-load-manifest-without-libs-sends-success-immediately []
   (let [manifest #js {"inject" #js []}
         send-response :mock-send-response
         result (bg-actions/handle-action initial-state uf-data
-                 [:msg/ax.load-manifest send-response 42 manifest])
+                                 [:msg/ax.load-manifest send-response 42 manifest [] {}])
         fxs (:uf/fxs result)]
     ;; Single effect: send response
     (-> (expect (count fxs)) (.toBe 1))
@@ -1233,64 +1254,63 @@
 (defn- test-load-manifest-nil-manifest-sends-success []
   (let [send-response :mock-send-response
         result (bg-actions/handle-action initial-state uf-data
-                 [:msg/ax.load-manifest send-response 42 nil])
+                                 [:msg/ax.load-manifest send-response 42 nil [] {}])
         fxs (:uf/fxs result)]
     (-> (expect (count fxs)) (.toBe 1))
     (-> (expect (first (first fxs))) (.toBe :msg/fx.send-response))))
 
-(defn- test-load-manifest-non-scittle-libs-ignored []
-  (let [manifest #js {"inject" #js ["epupp://my_lib.cljs" "https://cdn.example.com/lib.js"]}
+(defn- test-load-manifest-unknown-urls-send-success-immediately []
+    (let [manifest #js {"inject" #js ["https://cdn.example.com/lib.js"]}
         send-response :mock-send-response
         result (bg-actions/handle-action initial-state uf-data
-                 [:msg/ax.load-manifest send-response 42 manifest])
+                                 [:msg/ax.load-manifest send-response 42 manifest [] {}])
         fxs (:uf/fxs result)]
-    ;; Non-scittle URLs produce no vendor files to inject
+        ;; Unknown URLs produce no executable dependency steps
     (-> (expect (count fxs)) (.toBe 1))
     (-> (expect (first (first fxs))) (.toBe :msg/fx.send-response))))
 
 (defn- test-inject-libs-produces-bridge-and-inject-effects []
   (let [send-response :mock-send-response
         result (bg-actions/handle-action initial-state uf-data
-                 [:msg/ax.inject-libs send-response 42 ["scittle://pprint.js"]])
+                                 [:msg/ax.inject-libs send-response 42 ["scittle://pprint.js"] [] {}])
         fxs (:uf/fxs result)
-        bridge-effect (first fxs)
-        wait-effect (second fxs)
-        lib-effects (filter #(= :msg/fx.inject-lib-file (second %)) fxs)]
-    ;; First two effects: inject bridge, wait for bridge ready
-    (-> (expect (second bridge-effect)) (.toBe :msg/fx.inject-bridge))
-    (-> (expect (second wait-effect)) (.toBe :msg/fx.wait-bridge-ready))
-    ;; One lib file for pprint
-    (-> (expect (count lib-effects)) (.toBe 1))))
+                plan (effect-plan fxs)]
+        (-> (expect (second (first fxs))) (.toBe :msg/fx.ensure-scittle-tab))
+        (-> (expect (second (second fxs))) (.toBe :msg/fx.execute-plan))
+        (-> (expect (first (last fxs))) (.toBe :msg/fx.send-response))
+        (-> (expect (vendor-step-paths plan))
+                (.toContain "vendor/scittle.pprint.js"))
+        (-> (expect (plan-step-count plan :root-script)) (.toBe 0))))
 
 (defn- test-inject-libs-empty-libs-sends-success-only []
   (let [send-response :mock-send-response
         result (bg-actions/handle-action initial-state uf-data
-                 [:msg/ax.inject-libs send-response 42 []])
+                                 [:msg/ax.inject-libs send-response 42 [] [] {}])
         fxs (:uf/fxs result)]
     (-> (expect (count fxs)) (.toBe 1))
     (-> (expect (first (first fxs))) (.toBe :msg/fx.send-response))))
 
-(defn- test-inject-libs-non-scittle-skipped []
+(defn- test-inject-libs-unknown-urls-produce-no-steps []
   (let [send-response :mock-send-response
         result (bg-actions/handle-action initial-state uf-data
-                 [:msg/ax.inject-libs send-response 42 ["epupp://utils.cljs"]])
+                                 [:msg/ax.inject-libs send-response 42 ["https://cdn.example.com/lib.js"] [] {}])
         fxs (:uf/fxs result)]
-    ;; epupp:// is not a scittle URL, so no vendor files to inject
+        ;; Unknown URLs produce no executable dependency steps
     (-> (expect (count fxs)) (.toBe 1))
     (-> (expect (first (first fxs))) (.toBe :msg/fx.send-response))))
 
 (describe "load-manifest message action"
           (fn []
-            (test "with scittle libs produces inject file effects" test-load-manifest-with-scittle-libs-produces-inject-effects)
+                        (test "with scittle libs produces ensure + execute-plan effects" test-load-manifest-with-scittle-libs-produces-inject-effects)
             (test "without libs sends success immediately" test-load-manifest-without-libs-sends-success-immediately)
             (test "nil manifest sends success" test-load-manifest-nil-manifest-sends-success)
-            (test "non-scittle libs are ignored (no vendor files)" test-load-manifest-non-scittle-libs-ignored)))
+                        (test "unknown URLs produce no executable steps" test-load-manifest-unknown-urls-send-success-immediately)))
 
 (describe "inject-libs message action"
           (fn []
-            (test "produces bridge + inject effects for scittle libs" test-inject-libs-produces-bridge-and-inject-effects)
+                        (test "produces ensure + execute-plan effects for scittle libs" test-inject-libs-produces-bridge-and-inject-effects)
             (test "empty libs sends success only" test-inject-libs-empty-libs-sends-success-only)
-            (test "non-scittle URLs produce no vendor files" test-inject-libs-non-scittle-skipped)))
+                        (test "unknown URLs produce no executable steps" test-inject-libs-unknown-urls-produce-no-steps)))
 
 ;; ============================================================
 ;; Resolver integration fixtures
@@ -1327,36 +1347,32 @@
 (defn- test-inject-libs-resolves-epupp-library-script []
   (let [all-scripts [library-script-plain]
         result (bg-actions/handle-action initial-state uf-data
-                 [:msg/ax.inject-libs :mock-send 42 ["epupp://helpers.cljs"] all-scripts])
+                 [:msg/ax.inject-libs :mock-send 42 ["epupp://helpers.cljs"] all-scripts {}])
         fxs (:uf/fxs result)
-        script-fxs (filter #(= :msg/fx.inject-script-code (second %)) fxs)]
-    ;; Bridge + wait effects first
-    (-> (expect (second (first fxs))) (.toBe :msg/fx.inject-bridge))
-    (-> (expect (second (second fxs))) (.toBe :msg/fx.wait-bridge-ready))
-    ;; Library script code injected
-    (-> (expect (count script-fxs)) (.toBe 1))
+        plan (effect-plan fxs)]
+    (-> (expect (count (filter #(= :msg/fx.execute-plan (second %)) fxs))) (.toBe 1))
+    (-> (expect (plan-step-count plan :library-script)) (.toBe 1))
+    (-> (expect (plan-step-count plan :vendor-file)) (.toBe 0))
+    (-> (expect (plan-step-count plan :root-script)) (.toBe 0))
     ;; No errors
     (-> (expect (:uf/dxs result)) (.toBeFalsy))))
 
 (defn- test-inject-libs-resolves-epupp-with-vendor-deps []
   (let [all-scripts [library-script-with-vendor]
         result (bg-actions/handle-action initial-state uf-data
-                 [:msg/ax.inject-libs :mock-send 42 ["epupp://utils.cljs"] all-scripts])
+                 [:msg/ax.inject-libs :mock-send 42 ["epupp://utils.cljs"] all-scripts {}])
         fxs (:uf/fxs result)
-        vendor-fxs (filter #(= :msg/fx.inject-lib-file (second %)) fxs)
-        script-fxs (filter #(= :msg/fx.inject-script-code (second %)) fxs)]
-    ;; Bridge effects
-    (-> (expect (second (first fxs))) (.toBe :msg/fx.inject-bridge))
-    ;; Vendor file from library's scittle:// deps
-    (-> (expect (count vendor-fxs)) (.toBeGreaterThanOrEqual 1))
-    ;; Library script code
-    (-> (expect (count script-fxs)) (.toBe 1))
+        plan (effect-plan fxs)]
+    (-> (expect (count (filter #(= :msg/fx.execute-plan (second %)) fxs))) (.toBe 1))
+    (-> (expect (plan-step-count plan :vendor-file)) (.toBeGreaterThanOrEqual 1))
+    (-> (expect (plan-step-count plan :library-script)) (.toBe 1))
+    (-> (expect (plan-step-count plan :root-script)) (.toBe 0))
     ;; No errors
     (-> (expect (:uf/dxs result)) (.toBeFalsy))))
 
 (defn- test-inject-libs-epupp-missing-library-produces-errors []
   (let [result (bg-actions/handle-action initial-state uf-data
-                 [:msg/ax.inject-libs :mock-send 42 ["epupp://nonexistent.cljs"] []])
+                 [:msg/ax.inject-libs :mock-send 42 ["epupp://nonexistent.cljs"] [] {}])
         dxs (:uf/dxs result)]
     ;; Should produce error dispatches for missing library
     (-> (expect (seq dxs)) (.toBeTruthy))
@@ -1367,13 +1383,13 @@
   (let [all-scripts [library-script-plain]
         result (bg-actions/handle-action initial-state uf-data
                  [:msg/ax.inject-libs :mock-send 42
-                  ["scittle://pprint.js" "epupp://helpers.cljs"] all-scripts])
+                  ["scittle://pprint.js" "epupp://helpers.cljs"] all-scripts {}])
         fxs (:uf/fxs result)
-        vendor-fxs (filter #(= :msg/fx.inject-lib-file (second %)) fxs)
-        script-fxs (filter #(= :msg/fx.inject-script-code (second %)) fxs)]
-    ;; Both vendor files AND library script injection
-    (-> (expect (count vendor-fxs)) (.toBeGreaterThanOrEqual 1))
-    (-> (expect (count script-fxs)) (.toBe 1))
+        plan (effect-plan fxs)]
+    (-> (expect (count (filter #(= :msg/fx.execute-plan (second %)) fxs))) (.toBe 1))
+    (-> (expect (plan-step-count plan :vendor-file)) (.toBeGreaterThanOrEqual 1))
+    (-> (expect (plan-step-count plan :library-script)) (.toBe 1))
+    (-> (expect (plan-step-count plan :root-script)) (.toBe 0))
     ;; No errors
     (-> (expect (:uf/dxs result)) (.toBeFalsy))))
 
@@ -1396,20 +1412,22 @@
   (let [manifest #js {"inject" #js ["epupp://helpers.cljs"]}
         all-scripts [library-script-plain]
         result (bg-actions/handle-action initial-state uf-data
-                 [:msg/ax.load-manifest :mock-send 42 manifest all-scripts])
+                                 [:msg/ax.load-manifest :mock-send 42 manifest all-scripts {}])
         fxs (:uf/fxs result)
-        script-fxs (filter #(= :msg/fx.inject-script-code (second %)) fxs)]
-    ;; Library script code injected
-    (-> (expect (count script-fxs)) (.toBe 1))
+                plan (effect-plan fxs)]
+        (-> (expect (count (filter #(= :msg/fx.execute-plan (second %)) fxs))) (.toBe 1))
+        (-> (expect (plan-step-count plan :library-script)) (.toBe 1))
+        (-> (expect (plan-step-count plan :vendor-file)) (.toBe 0))
+        (-> (expect (plan-step-count plan :root-script)) (.toBe 0))
     ;; Last effect is send-response
-    (-> (expect (second (last fxs))) (.toBe :msg/fx.send-response))
+        (-> (expect (first (last fxs))) (.toBe :msg/fx.send-response))
     ;; No errors
     (-> (expect (:uf/dxs result)) (.toBeFalsy))))
 
 (defn- test-load-manifest-epupp-missing-library-produces-errors []
   (let [manifest #js {"inject" #js ["epupp://missing.cljs"]}
         result (bg-actions/handle-action initial-state uf-data
-                 [:msg/ax.load-manifest :mock-send 42 manifest []])
+                                 [:msg/ax.load-manifest :mock-send 42 manifest [] {}])
         dxs (:uf/dxs result)]
     ;; Should produce error dispatches
     (-> (expect (seq dxs)) (.toBeTruthy))
@@ -1419,11 +1437,13 @@
   (let [manifest #js {"inject" #js ["epupp://advanced.cljs"]}
         all-scripts [library-script-plain library-script-transitive]
         result (bg-actions/handle-action initial-state uf-data
-                 [:msg/ax.load-manifest :mock-send 42 manifest all-scripts])
+                 [:msg/ax.load-manifest :mock-send 42 manifest all-scripts {}])
         fxs (:uf/fxs result)
-        script-fxs (filter #(= :msg/fx.inject-script-code (second %)) fxs)]
-    ;; Both helpers.cljs AND advanced.cljs injected (transitive resolution)
-    (-> (expect (count script-fxs)) (.toBe 2))
+        plan (effect-plan fxs)]
+    (-> (expect (count (filter #(= :msg/fx.execute-plan (second %)) fxs))) (.toBe 1))
+    (-> (expect (plan-step-count plan :library-script)) (.toBe 2))
+    (-> (expect (plan-step-count plan :vendor-file)) (.toBe 0))
+    (-> (expect (plan-step-count plan :root-script)) (.toBe 0))
     ;; No errors
     (-> (expect (:uf/dxs result)) (.toBeFalsy))))
 
@@ -1608,7 +1628,7 @@
         (.toBeTruthy))
     (-> (expect (:cache/code (get-in result [:uf/db :storage/ext-dep-cache url])))
         (.toBe "(ns lib)"))
-    (-> (expect (some #(= [:storage/fx.persist!] %) (:uf/fxs result)))
+    (-> (expect (some #(= [:storage/fx.persist-ext-dep-cache!] %) (:uf/fxs result)))
         (.toBeTruthy))))
 
 (defn- test-cache-results-preserves-existing-cache []
@@ -1628,7 +1648,7 @@
         state {:storage/ext-dep-cache {"existing" {:cache/code "old"}}}
         result (bg-actions/handle-action state uf-data
                  [:ext-dep/ax.cache-results fetch-result])]
-    (-> (expect (some #(= [:storage/fx.persist!] %) (:uf/fxs result)))
+    (-> (expect (some #(= [:storage/fx.persist-ext-dep-cache!] %) (:uf/fxs result)))
         (.toBeTruthy))
     (-> (expect (get-in result [:uf/db :storage/ext-dep-cache "existing"]))
         (.toBeTruthy))))
@@ -1641,7 +1661,7 @@
         result (bg-actions/handle-action state uf-data
                  [:ext-dep/ax.cache-results fetch-result])]
     (-> (expect (count (:uf/fxs result))) (.toBe 2))
-    (-> (expect (some #(= [:storage/fx.persist!] %) (:uf/fxs result)))
+    (-> (expect (some #(= [:storage/fx.persist-ext-dep-cache!] %) (:uf/fxs result)))
         (.toBeTruthy))
     (-> (expect (some #(= :banner/fx.broadcast-system (first %)) (:uf/fxs result)))
         (.toBeTruthy))))

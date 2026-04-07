@@ -146,7 +146,7 @@ Via `chrome.runtime.sendMessage`.
 | `disconnect-tab` | `{tabId}` | - | Disconnect REPL from a tab |
 | `check-status` | `{tabId}` | `{success, status}` | Check Scittle and bridge status |
 | `ensure-scittle` | `{tabId}` | `{success, error?}` | Request Scittle injection |
-| `inject-libs` | `{tabId, libs}` | `{success, error?}` | Inject Scittle libraries for eval |
+| `inject-libs` | `{tabId, libs}` | `{success, error?}` | Resolve and execute eval-time dependency plans for panel code (`scittle://`, `epupp://`, and cached HTTPS deps) |
 | `evaluate-script` | `{tabId, scriptId, code, inject}` | `{success, error?}` | Run a script in the current tab |
 | `panel-save-script` | `{script}` | `{success, error?, isUpdate?, id?}` | Save script from DevTools panel |
 | `panel-rename-script` | `{from, to}` | `{success, error?}` | Rename script from DevTools panel |
@@ -162,6 +162,11 @@ Via `chrome.runtime.sendMessage`.
 | `system-banner` | `{event-type, operation, script-name, error?, bulk-id?, bulk-index?, bulk-count?}` | System notification banner (FS operations, validation errors) |
 | `runtime-status` | `{tab-id, errors}` | Per-tab runtime error status (resolution failures, cleared on navigation) |
 | `fs-sync-status-changed` | `{fsSyncTabId}` | FS sync status changed (null when disabled) |
+
+Notes:
+- `inject-libs` is no longer limited to direct Scittle vendor files. The background resolves the provided inject vector as a synthetic dependency graph, ensures Scittle is available for the tab, then executes a deps-only plan.
+- `evaluate-script` uses the same resolver and plan executor as auto-run. Popup quick-run no longer uses a separate `scittle://`-only library path.
+- `load-manifest` from `epupp.repl/manifest!` follows the same eval-time dependency flow as `inject-libs`, including `epupp://` libraries and cached HTTPS external dependencies.
 
 ## Related
 
