@@ -1623,12 +1623,14 @@
         fetch-result {:resolved {url entry} :errors []}
         state {:storage/ext-dep-cache {}}
         result (bg-actions/handle-action state uf-data
-                 [:ext-dep/ax.cache-results fetch-result])]
+                                         [:ext-dep/ax.cache-results fetch-result])]
     (-> (expect (get-in result [:uf/db :storage/ext-dep-cache url]))
         (.toBeTruthy))
     (-> (expect (:cache/code (get-in result [:uf/db :storage/ext-dep-cache url])))
         (.toBe "(ns lib)"))
-    (-> (expect (some #(= [:storage/fx.persist-ext-dep-cache!] %) (:uf/fxs result)))
+    (-> (expect (some #(and (= :storage/fx.persist-ext-dep-cache! (first %))
+                            (= (get (second %) url) entry))
+                      (:uf/fxs result)))
         (.toBeTruthy))))
 
 (defn- test-cache-results-preserves-existing-cache []
@@ -1647,8 +1649,10 @@
   (let [fetch-result {:resolved {} :errors []}
         state {:storage/ext-dep-cache {"existing" {:cache/code "old"}}}
         result (bg-actions/handle-action state uf-data
-                 [:ext-dep/ax.cache-results fetch-result])]
-    (-> (expect (some #(= [:storage/fx.persist-ext-dep-cache!] %) (:uf/fxs result)))
+                                         [:ext-dep/ax.cache-results fetch-result])]
+    (-> (expect (some #(and (= :storage/fx.persist-ext-dep-cache! (first %))
+                            (= (second %) {"existing" {:cache/code "old"}}))
+                      (:uf/fxs result)))
         (.toBeTruthy))
     (-> (expect (get-in result [:uf/db :storage/ext-dep-cache "existing"]))
         (.toBeTruthy))))
@@ -1659,9 +1663,9 @@
                                 :error/message "Failed to fetch dep"}]}
         state {:storage/ext-dep-cache {}}
         result (bg-actions/handle-action state uf-data
-                 [:ext-dep/ax.cache-results fetch-result])]
+                                         [:ext-dep/ax.cache-results fetch-result])]
     (-> (expect (count (:uf/fxs result))) (.toBe 2))
-    (-> (expect (some #(= [:storage/fx.persist-ext-dep-cache!] %) (:uf/fxs result)))
+    (-> (expect (some #(= :storage/fx.persist-ext-dep-cache! (first %)) (:uf/fxs result)))
         (.toBeTruthy))
     (-> (expect (some #(= :banner/fx.broadcast-system (first %)) (:uf/fxs result)))
         (.toBeTruthy))))

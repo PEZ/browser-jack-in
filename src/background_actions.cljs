@@ -478,7 +478,7 @@
           existing-cache (or (:storage/ext-dep-cache state) {})
           merged-cache (merge existing-cache resolved)]
       (cond-> {:uf/db (assoc state :storage/ext-dep-cache merged-cache)
-           :uf/fxs [[:storage/fx.persist-ext-dep-cache!]]}
+           :uf/fxs [[:storage/fx.persist-ext-dep-cache! merged-cache]]}
         (seq errors)
         (update :uf/fxs conj [:banner/fx.broadcast-system
                                {:event-type "error"

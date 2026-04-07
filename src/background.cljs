@@ -886,12 +886,17 @@
   (.addListener js/chrome.storage.onChanged
                 (fn [changes area]
                   (when (= area "local")
-                    (when (.-scripts changes)
+                    (when-let [scripts-change (.-scripts changes)]
                       (log/debug "Background" "Scripts changed, syncing registrations")
                       ((^:async fn []
                          (js-await (ensure-initialized! dispatch!))
                          (js-await (registration/sync-registrations!))
-                         (let [all-scripts (storage/get-scripts)
+                         ;; Read scripts from the change payload, not the mirror.
+                         ;; This listener is registered before storage/init!, so the
+                         ;; mirror may not be updated yet when we fire.
+                         (let [all-scripts (script-utils/parse-scripts
+                                           (.-newValue scripts-change)
+                                           {:extract-manifest manifest-parser/extract-manifest})
                                all-inject-urls (mapcat :script/inject all-scripts)
                                ext-urls (ext-dep/extract-ext-dep-urls (vec all-inject-urls))]
                            ;; Resolve uncached ext-deps FIRST so the cache is populated
@@ -1143,7 +1148,11 @@
     (storage/persist!)
 
     :storage/fx.persist-ext-dep-cache!
-    (storage/persist-ext-dep-cache!)
+    (let [[cache] args]
+      ;; Sync the storage mirror before persisting — the action updated
+      ;; background/!state, but persist-ext-dep-cache! reads storage/!db.
+      (swap! storage/!db assoc :storage/ext-dep-cache cache)
+      (storage/persist-ext-dep-cache!))
 
     :ext-dep/fx.fetch-deps
     (let [[uncached-urls existing-cache] args]
