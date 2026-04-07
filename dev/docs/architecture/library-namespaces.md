@@ -10,12 +10,12 @@ Four dependency styles are supported in `:epupp/inject`:
 |---|---|---|
 | `scittle://` | `scittle://reagent.js` | Bundled vendor library from `scittle_libs.cljs` catalog |
 | `epupp://` | `epupp://utils/dom.cljs` | Stored userscript, looked up by normalized name |
-| `https://` | `https://raw.githubusercontent.com/user/repo/SHA/path.cljs` | External dependency from a trusted GitHub raw host, fetched and cached on save |
-| `https://` | `https://gist.githubusercontent.com/user/ID/raw/SHA/file.cljs` | GitHub gist file from a trusted raw host, fetched and cached on save |
+| `https://` | `https://raw.githubusercontent.com/user/repo/SHA/path.cljs` | External dependency from a trusted GitHub raw host, resolved from `extDepCache` |
+| `https://` | `https://gist.githubusercontent.com/user/ID/raw/SHA/file.cljs` | GitHub gist file from a trusted raw host, resolved from `extDepCache` |
 
 Unknown protocols are passed through without resolution (future-proofing).
 
-External dependencies require a full 40-character SHA (no branch/tag references). They are fetched when the script is saved and injected from `extDepCache` in `chrome.storage.local` at page load. See [injection-flows.md](injection-flows.md#external-dependency-resolution) for the two-phase model.
+External dependencies require a full 40-character SHA (no branch/tag references). Saved scripts still prefetch uncached external dependencies. Manual library-loading entry points are cache-first: they reuse cached URLs immediately and fetch only missing supported HTTPS URLs before continuing. Auto-run and page-load injection resolve from `extDepCache` only. See [injection-flows.md](injection-flows.md#external-dependency-resolution) for the full flow.
 
 ## Name Resolution
 
@@ -121,6 +121,8 @@ Runtime failure status is **ephemeral and tab-scoped**. It lives in the backgrou
 ```
 
 This keeps the storage model clean and avoids stale error indicators across sessions.
+
+Repeated re-resolution with the same error envelope is treated as unchanged, so runtime banners track new failures instead of replaying identical ones.
 
 ## Implementation
 

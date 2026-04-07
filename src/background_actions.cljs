@@ -8,8 +8,101 @@
             [background-utils :as bg-utils]
             [dep-resolver :as dep-resolver]
             [ext-dep :as ext-dep]
-            [scittle-libs :as scittle-libs]
             [script-utils :as script-utils]))
+
+(defn- deps-only-plan
+  [plan]
+  (assoc plan :plan/steps
+         (filterv #(not= :root-script (:step/type %))
+                  (:plan/steps plan))))
+
+(defn- resolution-error-dxs
+  [errors]
+  (when (seq errors)
+    (vec (cons [:banner/ax.broadcast-resolution-errors errors]
+               (map (fn [error] [:msg/ax.log-resolution-error error]) errors)))))
+
+(defn- resolution-error-response
+  [errors]
+  (let [messages (mapv :error/message errors)]
+    {:success false
+     :error (first messages)
+     :errors messages}))
+
+(defn- known-runtime-errors
+  [errors-by-tab]
+  (->> errors-by-tab
+       vals
+       (mapcat vals)
+       set))
+
+(defn- uncached-ext-dep-urls
+  [libs ext-dep-cache]
+  (let [passed-cache (or ext-dep-cache {})]
+    (->> (ext-dep/extract-ext-dep-urls (or libs []))
+         distinct
+         (remove #(contains? passed-cache %))
+         vec)))
+
+(defn- dedupe-fetch-cache-miss-errors
+  [fetch-errors plan-errors]
+  (let [failed-urls (->> fetch-errors
+                         (filter #(= :ext-dep/fetch-failed (:error/type %)))
+                         (keep :error/dep-raw)
+                         set)]
+    (filterv (fn [error]
+               (not (and (= :ext-dep/cache-miss (:error/type error))
+                         (contains? failed-urls (:error/dep-raw error)))))
+             plan-errors)))
+
+(defn- combined-resolution-errors
+  [fetch-errors plan-errors]
+  (into (vec fetch-errors)
+        (dedupe-fetch-cache-miss-errors fetch-errors plan-errors)))
+
+(defn- manual-dep-ready
+  [state {:keys [send-response tab-id synthetic-script all-scripts fetch-result]}]
+  (let [icon-state (get-in state [:icon/states tab-id] :disconnected)
+        existing-cache (or (:storage/ext-dep-cache state) {})
+        fetched-cache (or (:resolved fetch-result) {})
+        merged-cache (merge existing-cache fetched-cache)
+        plan (dep-resolver/resolve-execution-plan [synthetic-script]
+                                                  (or all-scripts [])
+                                                  merged-cache)
+        errors (combined-resolution-errors (or (:errors fetch-result) [])
+                                           (:plan/errors plan))
+        deps-plan (deps-only-plan plan)
+        response (if (seq errors)
+                   (resolution-error-response errors)
+                   {:success true})
+        base-fxs (cond-> []
+                   (seq fetched-cache) (conj [:storage/fx.persist-ext-dep-cache! merged-cache]))
+        fxs (cond
+              (seq errors)
+              (conj base-fxs [:msg/fx.send-response send-response response])
+
+              (seq (:plan/steps deps-plan))
+              (into base-fxs [[:uf/await :msg/fx.ensure-scittle-tab tab-id icon-state]
+                              [:uf/await :msg/fx.execute-plan tab-id deps-plan]
+                              [:msg/fx.send-response send-response response]])
+
+              :else
+              (conj base-fxs [:msg/fx.send-response send-response response]))]
+    (cond-> {:uf/fxs fxs}
+      (seq fetched-cache) (assoc :uf/db (assoc state :storage/ext-dep-cache merged-cache))
+      (seq errors) (assoc :uf/dxs (resolution-error-dxs errors)))))
+
+(defn- manual-dep-fetch-or-ready
+  [state {:keys [send-response tab-id libs all-scripts synthetic-script ready-dispatch]}]
+  (let [existing-cache (or (:storage/ext-dep-cache state) {})
+        uncached (uncached-ext-dep-urls libs existing-cache)]
+    (if (seq uncached)
+      {:uf/fxs [[:uf/await :ext-dep/fx.fetch-deps uncached existing-cache]]
+       :uf/dxs [(conj ready-dispatch :uf/prev-result)]}
+      (manual-dep-ready state {:send-response send-response
+                               :tab-id tab-id
+                               :synthetic-script synthetic-script
+                               :all-scripts all-scripts}))))
 
 (defn handle-action
   "Pure function - no side effects allowed."
@@ -196,6 +289,10 @@
     :init/ax.clear-promise
     {:uf/db (assoc state :init/promise nil)}
 
+    :storage/ax.set-ext-dep-cache
+    (let [[cache] args]
+      {:uf/db (assoc state :storage/ext-dep-cache (or cache {}))})
+
     :msg/ax.connect-tab
     (let [[send-response tab-id ws-port] args
           icon-state (get-in state [:icon/states tab-id] :disconnected)]
@@ -221,11 +318,12 @@
     :msg/ax.evaluate-script
     (let [[send-response tab-id code libs script-id] args
           icon-state (get-in state [:icon/states tab-id] :disconnected)
+          ext-dep-cache (or (:storage/ext-dep-cache state) {})
           script (cond-> {:script/id script-id
                           :script/name "popup-eval"
                           :script/code code}
                    libs (assoc :script/inject libs))]
-      {:uf/fxs [[:uf/await :script/fx.evaluate tab-id script icon-state]
+      {:uf/fxs [[:uf/await :script/fx.evaluate tab-id script icon-state ext-dep-cache]
                 [:msg/fx.send-response send-response :uf/prev-result]]})
 
     :msg/ax.e2e-get-storage
@@ -245,28 +343,37 @@
                                                         :error "Missing key"}]]}))
 
     :msg/ax.inject-libs
-        (let [[send-response tab-id libs all-scripts ext-dep-cache] args
-          icon-state (get-in state [:icon/states tab-id] :disconnected)
-          ;; Build a synthetic script with the inject list and resolve via dep-resolver
-          synthetic-script {:script/id "panel-inject" :script/name "panel-inject"
-                            :script/code "" :script/inject (or libs [])}
-          plan (dep-resolver/resolve-execution-plan [synthetic-script]
-                        (or all-scripts [])
-                        (or ext-dep-cache {}))
-          errors (:plan/errors plan)
-          deps-only-plan (assoc plan :plan/steps
-                                (filterv #(not= :root-script (:step/type %))
-                                         (:plan/steps plan)))
-          has-steps? (seq (:plan/steps deps-only-plan))]
-      (cond-> {}
-        (seq errors) (assoc :uf/dxs (vec (cons [:banner/ax.broadcast-resolution-errors errors]
-                                               (map (fn [e] [:msg/ax.log-resolution-error e]) errors))))
-        has-steps?
-        (assoc :uf/fxs [[:uf/await :msg/fx.ensure-scittle-tab tab-id icon-state]
-                        [:uf/await :msg/fx.execute-plan tab-id deps-only-plan]
-                        [:msg/fx.send-response send-response {:success true}]])
-        (not has-steps?)
-        (assoc :uf/fxs [[:msg/fx.send-response send-response {:success true}]])))
+    (let [[send-response tab-id libs all-scripts] args
+          requested-libs (or libs [])
+          scripts (or all-scripts [])
+          synthetic-script {:script/id "panel-inject"
+                            :script/name "panel-inject"
+                            :script/code ""
+                            :script/inject requested-libs}]
+      (manual-dep-fetch-or-ready
+       state
+       {:send-response send-response
+        :tab-id tab-id
+        :libs requested-libs
+        :all-scripts scripts
+        :synthetic-script synthetic-script
+        :ready-dispatch [:msg/ax.inject-libs-ready
+                         send-response
+                         tab-id
+                         requested-libs
+             scripts]}))
+
+    :msg/ax.inject-libs-ready
+        (let [[send-response tab-id libs all-scripts fetch-result] args
+          synthetic-script {:script/id "panel-inject"
+                            :script/name "panel-inject"
+                            :script/code ""
+                            :script/inject (or libs [])}]
+      (manual-dep-ready state {:send-response send-response
+                               :tab-id tab-id
+                               :synthetic-script synthetic-script
+                               :all-scripts (or all-scripts [])
+                               :fetch-result fetch-result}))
 
     :msg/ax.list-scripts-result
     (let [[send-response {:keys [include-hidden? scripts]}] args
@@ -291,29 +398,37 @@
       {:uf/fxs [[:msg/fx.get-script send-response script-name]]})
 
     :msg/ax.load-manifest
-        (let [[send-response tab-id manifest all-scripts ext-dep-cache] args
-          icon-state (get-in state [:icon/states tab-id] :disconnected)
-          libs (when manifest (vec (aget manifest "inject")))
-          ;; Use resolver for mixed scittle:// + epupp:// deps
-          synthetic-script {:script/id "repl-manifest" :script/name "repl-manifest"
-                            :script/code "" :script/inject (or libs [])}
-          plan (dep-resolver/resolve-execution-plan [synthetic-script]
-                        (or all-scripts [])
-                        (or ext-dep-cache {}))
-          errors (:plan/errors plan)
-          deps-only-plan (assoc plan :plan/steps
-                                (filterv #(not= :root-script (:step/type %))
-                                         (:plan/steps plan)))
-          has-steps? (seq (:plan/steps deps-only-plan))]
-      (cond-> {}
-        (seq errors) (assoc :uf/dxs (vec (cons [:banner/ax.broadcast-resolution-errors errors]
-                                               (map (fn [e] [:msg/ax.log-resolution-error e]) errors))))
-        has-steps?
-        (assoc :uf/fxs [[:uf/await :msg/fx.ensure-scittle-tab tab-id icon-state]
-                        [:uf/await :msg/fx.execute-plan tab-id deps-only-plan]
-                        [:msg/fx.send-response send-response {:success true}]])
-        (not has-steps?)
-        (assoc :uf/fxs [[:msg/fx.send-response send-response {:success true}]])))
+    (let [[send-response tab-id manifest all-scripts] args
+          requested-libs (or (when manifest (vec (aget manifest "inject"))) [])
+          scripts (or all-scripts [])
+          synthetic-script {:script/id "repl-manifest"
+                            :script/name "repl-manifest"
+                            :script/code ""
+                            :script/inject requested-libs}]
+      (manual-dep-fetch-or-ready
+       state
+       {:send-response send-response
+        :tab-id tab-id
+        :libs requested-libs
+        :all-scripts scripts
+        :synthetic-script synthetic-script
+        :ready-dispatch [:msg/ax.load-manifest-ready
+                         send-response
+                         tab-id
+                         manifest
+             scripts]}))
+
+    :msg/ax.load-manifest-ready
+        (let [[send-response tab-id manifest all-scripts fetch-result] args
+          synthetic-script {:script/id "repl-manifest"
+                            :script/name "repl-manifest"
+                            :script/code ""
+                            :script/inject (or (when manifest (vec (aget manifest "inject"))) [])}]
+      (manual-dep-ready state {:send-response send-response
+                               :tab-id tab-id
+                               :synthetic-script synthetic-script
+                               :all-scripts (or all-scripts [])
+                               :fetch-result fetch-result}))
 
     :msg/ax.get-connections
     (let [[send-response] args
@@ -450,9 +565,9 @@
                      (dep-resolver/resolve-execution-plan scripts-with-deps all-scripts
                                                          (or (:storage/ext-dep-cache state) {})))
               new-errors (if plan (:plan/errors plan) [])
-              all-known-errors (reduce into #{} (vals errors-by-tab))
-              truly-new (filterv (fn [e] (not (some #(= (:error/script-name %) (:error/script-name e))
-                                                    all-known-errors)))
+              all-known-errors (known-runtime-errors errors-by-tab)
+              truly-new (filterv (fn [error]
+                                   (not (contains? all-known-errors error)))
                                  new-errors)]
           {:uf/fxs (cond-> (vec (map (fn [tab-id]
                                        [:runtime/fx.set-tab-errors tab-id new-errors])
@@ -464,21 +579,27 @@
                                                         :errors (mapv :error/message truly-new)}]))})))
 
     :ext-dep/ax.resolve-uncached-urls
-    (let [[ext-urls] args
+    (let [[ext-urls follow-up-actions] args
           existing-cache (or (:storage/ext-dep-cache state) {})
           uncached (filterv #(not (contains? existing-cache %)) ext-urls)]
-      (when (seq uncached)
+      (cond
+        (seq uncached)
         {:uf/fxs [[:uf/await :ext-dep/fx.fetch-deps uncached existing-cache]]
-         :uf/dxs [[:ext-dep/ax.cache-results :uf/prev-result]]}))
+         :uf/dxs [[:ext-dep/ax.cache-results :uf/prev-result follow-up-actions]]}
+
+        (seq follow-up-actions)
+        {:uf/dxs follow-up-actions}))
 
     :ext-dep/ax.cache-results
-    (let [[fetch-result] args
+    (let [[fetch-result follow-up-actions] args
           resolved (or (:resolved fetch-result) {})
           errors (or (:errors fetch-result) [])
           existing-cache (or (:storage/ext-dep-cache state) {})
           merged-cache (merge existing-cache resolved)]
       (cond-> {:uf/db (assoc state :storage/ext-dep-cache merged-cache)
-           :uf/fxs [[:storage/fx.persist-ext-dep-cache! merged-cache]]}
+               :uf/fxs [[:storage/fx.persist-ext-dep-cache! merged-cache]]}
+        (seq follow-up-actions)
+        (assoc :uf/dxs follow-up-actions)
         (seq errors)
         (update :uf/fxs conj [:banner/fx.broadcast-system
                                {:event-type "error"

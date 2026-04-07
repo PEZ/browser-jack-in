@@ -72,7 +72,7 @@ At connect time, Epupp injects its API namespaces from bundled Scittle source fi
 
 The injection uses the same pattern as userscripts: background fetches file content via `chrome.runtime.getURL`, sends it to the content bridge via `inject-userscript` message (creating inline `<script type="application/x-scittle">` tags), and triggers Scittle evaluation.
 
-`epupp.repl/manifest!` accepts a map with `:epupp/inject` and routes it through the same dependency resolution path used by popup quick-run, panel eval, and auto-run. The vector can contain mixed `scittle://`, `epupp://`, and supported pinned HTTPS external dependency URLs. See the [user guide](../../../docs/user-guide.md) for usage examples.
+`epupp.repl/manifest!` accepts a map with `:epupp/inject` and routes it through the same dependency resolution path used by popup quick-run, panel eval, and auto-run. The vector can contain mixed `scittle://`, `epupp://`, and supported pinned HTTPS external dependency URLs. For supported HTTPS URLs this manual path is cache-first: cached entries are reused immediately, missing URLs are fetched and persisted, and resolution only continues after that stage succeeds. See the [user guide](../../../docs/user-guide.md) for usage examples.
 
 ### Library Loading Flow
 

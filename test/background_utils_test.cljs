@@ -509,6 +509,16 @@
   (-> (expect (bg/should-scan-for-installer? "https://github.com/user/repo" #{1} 2))
       (.toBe true)))
 
+(defn- test-should-scan-returns-false-when-tab-is-in-flight []
+  (-> (expect (bg/should-scan-for-installer? "https://github.com/user/repo" #{} #{1} 1))
+      (.toBe false)))
+
+(defn- test-should-scan-three-arity-preserves-existing-behavior []
+  (-> (expect (bg/should-scan-for-installer? "https://github.com/user/repo" #{} 1))
+      (.toBe true))
+  (-> (expect (bg/should-scan-for-installer? "https://github.com/user/repo" #{1} 1))
+      (.toBe false)))
+
 ;; Tab tracking lifecycle (simulating navigation/removal clearing)
 
 (defn- test-should-scan-returns-true-after-tab-cleared-from-tracking []
@@ -550,6 +560,10 @@
                   test-should-scan-returns-false-when-tab-already-injected)
             (test "returns true for different tab not in injected set"
                   test-should-scan-returns-true-for-different-tab-not-injected)
+            (test "returns false when tab is already being scanned"
+              test-should-scan-returns-false-when-tab-is-in-flight)
+            (test "preserves existing 3-arity behavior"
+              test-should-scan-three-arity-preserves-existing-behavior)
             (test "returns true after tab cleared from tracking (simulates navigation/removal)"
                   test-should-scan-returns-true-after-tab-cleared-from-tracking)
             (test "returns false before clear, true after (full lifecycle)"

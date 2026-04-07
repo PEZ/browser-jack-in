@@ -81,9 +81,9 @@ flowchart TD
 
 ## External Dependency Resolution
 
-External dependencies use a two-phase model that separates fetching from injection.
+External dependencies use a cache-centered model. Save-time flows prefetch and persist uncached URLs, manual eval-time flows are cache-first and fetch on miss, and auto-run/page-load injection still executes from cache only.
 
-### Phase 1: Resolve on Save
+### Path 1: Resolve on Save
 
 When a script is saved (via panel or FS API) and its `:epupp/inject` contains supported HTTPS external dependency URLs:
 
@@ -103,17 +103,27 @@ Cache entries are keyed by the original HTTPS URL and contain:
  :cache/schema-version 1}
 ```
 
-### Phase 2: Inject from Cache
+### Path 2: Manual Eval-Time Fetch on Miss
+
+Manual dependency-loading entry points such as panel `inject-libs` and REPL `manifest!` first resolve against the current cache view.
+
+1. If every needed supported HTTPS dependency is already cached, dependency resolution continues immediately with no network work.
+2. If some supported HTTPS dependencies are missing, only those missing URLs are passed to `:ext-dep/fx.fetch-deps`.
+3. Fetched results are persisted before dependency resolution resumes.
+4. Resolution and injection continue only after the fetch/persist stage succeeds.
+5. If the fetch or follow-up resolution fails, the eval-time flow returns an error instead of partially executing the consumer script.
+
+### Path 3: Inject from Cache
 
 At page load, the dependency resolver treats supported HTTPS URLs as `:ext-dep` kind. It looks up cached content and produces `:ext-dep-script` steps in the execution plan. If a URL is not in cache, a `:ext-dep/cache-miss` error is surfaced.
 
-`extDepCache` persistence is isolated from the general storage persistence path. Script saves still trigger uncached external dependency resolution, but cache writes are persisted through a dedicated cache-only effect so general script persistence cannot overwrite fresher external dependency entries.
+`extDepCache` persistence is isolated from the general storage persistence path. Script saves still trigger uncached external dependency resolution, but cache writes are persisted through a dedicated cache-only effect so general script persistence cannot overwrite fresher external dependency entries. Background startup hydrates the runtime cache view from persisted storage, storage-change handling updates that runtime state before re-resolution runs, and eval effects receive the cache they should use explicitly. That keeps save-time fetch, runtime re-resolution, and actual execution on the same cache view.
 
 ### Error Types
 
 | Error | Cause |
 |-------|-------|
-| `:ext-dep/cache-miss` | External dependency not in cache at injection time (save the script to trigger fetch) |
+| `:ext-dep/cache-miss` | A cache-only path needed an external dependency that was not cached yet |
 | `:ext-dep/fetch-failed` | Network error fetching raw content |
 | `:ext-dep/cycle` | Circular dependency chain detected |
 

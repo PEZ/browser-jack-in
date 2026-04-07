@@ -194,7 +194,7 @@
             (js-await (-> (expect (.-message data))
                           (.toContain "not in cache"))))
 
-          (let [consumer-ran (js-await (.evaluate page (fn [] (boolean js/window.__EXT_DEP_MISSING_RAN))))]
+          (let [consumer-ran (js-await (.evaluate page (fn [] (js/Boolean (.-__EXT_DEP_MISSING_RAN js/window)))))]
             (js-await (-> (expect consumer-ran) (.toBe false))))
 
           (js-await (assert-no-errors! popup))

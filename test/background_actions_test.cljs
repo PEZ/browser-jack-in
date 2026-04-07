@@ -1,8 +1,9 @@
 (ns background-actions-test
-  "Tests for background FS action handlers - pure decision logic"
-  (:require ["vitest" :refer [describe test expect]]
-            [background-actions :as bg-actions]
-            [background-actions.repl-fs-actions :as repl-fs-actions]))
+    "Tests for background FS action handlers - pure decision logic"
+    (:require ["vitest" :refer [describe test expect vi]]
+                        [background-actions :as bg-actions]
+                        [dep-resolver :as dep-resolver]
+                        [background-actions.repl-fs-actions :as repl-fs-actions]))
 
 ;; ============================================================
 ;; Test Fixtures
@@ -28,7 +29,8 @@
 
 (def initial-state
   {:storage/scripts [base-script]
-   :storage/granted-origins []})
+    :storage/granted-origins []
+    :storage/ext-dep-cache {}})
 
 (def uf-data {:system/now 1737100000000})
 
@@ -1223,12 +1225,37 @@
     (mapv :step/path
                 (filter #(= :vendor-file (:step/type %)) (:plan/steps plan))))
 
+(defn- response-effect
+    [fxs]
+    (some #(when (= :msg/fx.send-response (first %)) %) fxs))
+
+(defn- response-payload
+    [fxs]
+    (nth (response-effect fxs) 2))
+
+(defn- await-effect
+    [fxs effect-name]
+    (some #(when (and (= :uf/await (first %))
+                                        (= effect-name (second %)))
+                     %)
+                fxs))
+
+(def ^:private ext-dep-sha "abcdef0123456789abcdef0123456789abcdef01")
+
+(defn- sample-ext-cache-entry
+    [url fetched-at]
+    {:cache/code (str ";; cached " url)
+     :cache/url url
+     :cache/inject []
+     :cache/fetched-at fetched-at
+     :cache/schema-version 1})
+
 (defn- test-load-manifest-with-scittle-libs-produces-inject-effects []
-  (let [manifest #js {"inject" #js ["scittle://reagent.js"]}
-        send-response :mock-send-response
-        result (bg-actions/handle-action initial-state uf-data
-                                 [:msg/ax.load-manifest send-response 42 manifest [] {}])
-        fxs (:uf/fxs result)
+    (let [manifest #js {"inject" #js ["scittle://reagent.js"]}
+                send-response :mock-send-response
+                result (bg-actions/handle-action initial-state uf-data
+                                                                                 [:msg/ax.load-manifest send-response 42 manifest []])
+                fxs (:uf/fxs result)
                 plan (effect-plan fxs)
                 response-effect (last fxs)]
         (-> (expect (count fxs)) (.toBe 3))
@@ -1242,38 +1269,36 @@
         (-> (expect (plan-step-count plan :root-script)) (.toBe 0))))
 
 (defn- test-load-manifest-without-libs-sends-success-immediately []
-  (let [manifest #js {"inject" #js []}
-        send-response :mock-send-response
-        result (bg-actions/handle-action initial-state uf-data
-                                 [:msg/ax.load-manifest send-response 42 manifest [] {}])
-        fxs (:uf/fxs result)]
-    ;; Single effect: send response
-    (-> (expect (count fxs)) (.toBe 1))
-    (-> (expect (first (first fxs))) (.toBe :msg/fx.send-response))))
+    (let [manifest #js {"inject" #js []}
+                send-response :mock-send-response
+                result (bg-actions/handle-action initial-state uf-data
+                                                                                 [:msg/ax.load-manifest send-response 42 manifest []])
+                fxs (:uf/fxs result)]
+        (-> (expect (count fxs)) (.toBe 1))
+        (-> (expect (first (first fxs))) (.toBe :msg/fx.send-response))))
 
 (defn- test-load-manifest-nil-manifest-sends-success []
-  (let [send-response :mock-send-response
-        result (bg-actions/handle-action initial-state uf-data
-                                 [:msg/ax.load-manifest send-response 42 nil [] {}])
-        fxs (:uf/fxs result)]
-    (-> (expect (count fxs)) (.toBe 1))
-    (-> (expect (first (first fxs))) (.toBe :msg/fx.send-response))))
+    (let [send-response :mock-send-response
+                result (bg-actions/handle-action initial-state uf-data
+                                                                                 [:msg/ax.load-manifest send-response 42 nil []])
+                fxs (:uf/fxs result)]
+        (-> (expect (count fxs)) (.toBe 1))
+        (-> (expect (first (first fxs))) (.toBe :msg/fx.send-response))))
 
 (defn- test-load-manifest-unknown-urls-send-success-immediately []
     (let [manifest #js {"inject" #js ["https://cdn.example.com/lib.js"]}
-        send-response :mock-send-response
-        result (bg-actions/handle-action initial-state uf-data
-                                 [:msg/ax.load-manifest send-response 42 manifest [] {}])
-        fxs (:uf/fxs result)]
-        ;; Unknown URLs produce no executable dependency steps
-    (-> (expect (count fxs)) (.toBe 1))
-    (-> (expect (first (first fxs))) (.toBe :msg/fx.send-response))))
+                send-response :mock-send-response
+                result (bg-actions/handle-action initial-state uf-data
+                                                                                 [:msg/ax.load-manifest send-response 42 manifest []])
+                fxs (:uf/fxs result)]
+        (-> (expect (count fxs)) (.toBe 1))
+        (-> (expect (first (first fxs))) (.toBe :msg/fx.send-response))))
 
 (defn- test-inject-libs-produces-bridge-and-inject-effects []
-  (let [send-response :mock-send-response
-        result (bg-actions/handle-action initial-state uf-data
-                                 [:msg/ax.inject-libs send-response 42 ["scittle://pprint.js"] [] {}])
-        fxs (:uf/fxs result)
+    (let [send-response :mock-send-response
+                result (bg-actions/handle-action initial-state uf-data
+                                                                                 [:msg/ax.inject-libs send-response 42 ["scittle://pprint.js"] []])
+                fxs (:uf/fxs result)
                 plan (effect-plan fxs)]
         (-> (expect (second (first fxs))) (.toBe :msg/fx.ensure-scittle-tab))
         (-> (expect (second (second fxs))) (.toBe :msg/fx.execute-plan))
@@ -1283,34 +1308,75 @@
         (-> (expect (plan-step-count plan :root-script)) (.toBe 0))))
 
 (defn- test-inject-libs-empty-libs-sends-success-only []
-  (let [send-response :mock-send-response
-        result (bg-actions/handle-action initial-state uf-data
-                                 [:msg/ax.inject-libs send-response 42 [] [] {}])
-        fxs (:uf/fxs result)]
-    (-> (expect (count fxs)) (.toBe 1))
-    (-> (expect (first (first fxs))) (.toBe :msg/fx.send-response))))
+    (let [send-response :mock-send-response
+                result (bg-actions/handle-action initial-state uf-data
+                                                                                 [:msg/ax.inject-libs send-response 42 [] []])
+                fxs (:uf/fxs result)]
+        (-> (expect (count fxs)) (.toBe 1))
+        (-> (expect (first (first fxs))) (.toBe :msg/fx.send-response))))
 
 (defn- test-inject-libs-unknown-urls-produce-no-steps []
-  (let [send-response :mock-send-response
-        result (bg-actions/handle-action initial-state uf-data
-                                 [:msg/ax.inject-libs send-response 42 ["https://cdn.example.com/lib.js"] [] {}])
-        fxs (:uf/fxs result)]
-        ;; Unknown URLs produce no executable dependency steps
-    (-> (expect (count fxs)) (.toBe 1))
-    (-> (expect (first (first fxs))) (.toBe :msg/fx.send-response))))
+    (let [send-response :mock-send-response
+                result (bg-actions/handle-action initial-state uf-data
+                                                                                 [:msg/ax.inject-libs send-response 42 ["https://cdn.example.com/lib.js"] []])
+                fxs (:uf/fxs result)]
+        (-> (expect (count fxs)) (.toBe 1))
+        (-> (expect (first (first fxs))) (.toBe :msg/fx.send-response))))
+
+(defn- test-inject-libs-with-uncached-ext-dep-defers-ready-action []
+    (let [ext-url (str "https://raw.githubusercontent.com/user/repo/" ext-dep-sha "/lib.cljs")
+                send-response :mock-send-response
+                result (bg-actions/handle-action initial-state uf-data
+                                                                                 [:msg/ax.inject-libs send-response 42 [ext-url] []])
+                fetch-fx (await-effect (:uf/fxs result) :ext-dep/fx.fetch-deps)
+                ready-dx (first (:uf/dxs result))]
+        (-> (expect fetch-fx) (.toBeTruthy))
+        (-> (expect (nth fetch-fx 2)) (.toEqual [ext-url]))
+        (-> (expect (nth fetch-fx 3)) (.toEqual {}))
+        (-> (expect (first ready-dx)) (.toBe :msg/ax.inject-libs-ready))
+        (-> (expect (nth ready-dx 1)) (.toBe send-response))
+        (-> (expect (nth ready-dx 2)) (.toBe 42))
+        (-> (expect (nth ready-dx 3)) (.toEqual [ext-url]))
+        (-> (expect (nth ready-dx 4)) (.toEqual []))
+        (-> (expect (nth ready-dx 5)) (.toBe :uf/prev-result))))
+
+(defn- test-storage-set-ext-dep-cache-hydrates-background-state []
+    (let [ext-url "https://example.com/lib.cljs"
+                cache {ext-url (sample-ext-cache-entry ext-url 1700000000000)}
+                result (bg-actions/handle-action initial-state uf-data
+                                                                                 [:storage/ax.set-ext-dep-cache cache])]
+        (-> (expect (:uf/db result)) (.toBeTruthy))
+        (-> (expect (get-in result [:uf/db :storage/ext-dep-cache])) (.toEqual cache))
+        (-> (expect (:uf/fxs result)) (.toBeFalsy))))
+
+(defn- test-evaluate-script-passes-state-cache-into-effect []
+    (let [ext-url (str "https://raw.githubusercontent.com/user/repo/" ext-dep-sha "/lib.cljs")
+                cache-entry (sample-ext-cache-entry ext-url 1700000000000)
+                state (assoc initial-state :storage/ext-dep-cache {ext-url cache-entry})
+                result (bg-actions/handle-action state uf-data
+                                                                                 [:msg/ax.evaluate-script :mock-send 42 "(println \"hi\")" [ext-url] "eval-script"])
+                evaluate-fx (await-effect (:uf/fxs result) :script/fx.evaluate)]
+        (-> (expect evaluate-fx) (.toBeTruthy))
+        (-> (expect (nth evaluate-fx 2)) (.toBe 42))
+        (-> (expect (nth evaluate-fx 4)) (.toBe :disconnected))
+        (-> (expect (nth evaluate-fx 5)) (.toEqual {ext-url cache-entry}))
+        (-> (expect (:script/inject (nth evaluate-fx 3))) (.toEqual [ext-url]))))
 
 (describe "load-manifest message action"
-          (fn []
-                        (test "with scittle libs produces ensure + execute-plan effects" test-load-manifest-with-scittle-libs-produces-inject-effects)
-            (test "without libs sends success immediately" test-load-manifest-without-libs-sends-success-immediately)
-            (test "nil manifest sends success" test-load-manifest-nil-manifest-sends-success)
-                        (test "unknown URLs produce no executable steps" test-load-manifest-unknown-urls-send-success-immediately)))
+    (fn []
+        (test "with scittle libs produces ensure + execute-plan effects" test-load-manifest-with-scittle-libs-produces-inject-effects)
+        (test "without libs sends success immediately" test-load-manifest-without-libs-sends-success-immediately)
+        (test "nil manifest sends success" test-load-manifest-nil-manifest-sends-success)
+        (test "unknown URLs produce no executable steps" test-load-manifest-unknown-urls-send-success-immediately)))
 
 (describe "inject-libs message action"
-          (fn []
-                        (test "produces ensure + execute-plan effects for scittle libs" test-inject-libs-produces-bridge-and-inject-effects)
-            (test "empty libs sends success only" test-inject-libs-empty-libs-sends-success-only)
-                        (test "unknown URLs produce no executable steps" test-inject-libs-unknown-urls-produce-no-steps)))
+    (fn []
+        (test "produces ensure + execute-plan effects for scittle libs" test-inject-libs-produces-bridge-and-inject-effects)
+        (test "empty libs sends success only" test-inject-libs-empty-libs-sends-success-only)
+        (test "with uncached ext deps fetches first and defers ready action" test-inject-libs-with-uncached-ext-dep-defers-ready-action)
+        (test "unknown URLs produce no executable steps" test-inject-libs-unknown-urls-produce-no-steps)
+        (test "storage cache hydrate action sets ext-dep cache in state" test-storage-set-ext-dep-cache-hydrates-background-state)
+        (test "evaluate-script passes the state cache into the effect" test-evaluate-script-passes-state-cache-into-effect)))
 
 ;; ============================================================
 ;; Resolver integration fixtures
@@ -1347,7 +1413,7 @@
 (defn- test-inject-libs-resolves-epupp-library-script []
   (let [all-scripts [library-script-plain]
         result (bg-actions/handle-action initial-state uf-data
-                 [:msg/ax.inject-libs :mock-send 42 ["epupp://helpers.cljs"] all-scripts {}])
+                                 [:msg/ax.inject-libs :mock-send 42 ["epupp://helpers.cljs"] all-scripts])
         fxs (:uf/fxs result)
         plan (effect-plan fxs)]
     (-> (expect (count (filter #(= :msg/fx.execute-plan (second %)) fxs))) (.toBe 1))
@@ -1360,7 +1426,7 @@
 (defn- test-inject-libs-resolves-epupp-with-vendor-deps []
   (let [all-scripts [library-script-with-vendor]
         result (bg-actions/handle-action initial-state uf-data
-                 [:msg/ax.inject-libs :mock-send 42 ["epupp://utils.cljs"] all-scripts {}])
+                                 [:msg/ax.inject-libs :mock-send 42 ["epupp://utils.cljs"] all-scripts])
         fxs (:uf/fxs result)
         plan (effect-plan fxs)]
     (-> (expect (count (filter #(= :msg/fx.execute-plan (second %)) fxs))) (.toBe 1))
@@ -1372,18 +1438,22 @@
 
 (defn- test-inject-libs-epupp-missing-library-produces-errors []
   (let [result (bg-actions/handle-action initial-state uf-data
-                 [:msg/ax.inject-libs :mock-send 42 ["epupp://nonexistent.cljs"] [] {}])
-        dxs (:uf/dxs result)]
+                                 [:msg/ax.inject-libs :mock-send 42 ["epupp://nonexistent.cljs"] []])
+        dxs (:uf/dxs result)
+        fxs (:uf/fxs result)
+        response (response-payload fxs)]
     ;; Should produce error dispatches for missing library
     (-> (expect (seq dxs)) (.toBeTruthy))
     ;; First dxs should be broadcast-resolution-errors
-    (-> (expect (first (first dxs))) (.toBe :banner/ax.broadcast-resolution-errors))))
+    (-> (expect (first (first dxs))) (.toBe :banner/ax.broadcast-resolution-errors))
+    (-> (expect (execute-plan-effect fxs)) (.toBeFalsy))
+    (-> (expect (:success response)) (.toBe false))))
 
 (defn- test-inject-libs-mixed-scittle-and-epupp []
   (let [all-scripts [library-script-plain]
         result (bg-actions/handle-action initial-state uf-data
                  [:msg/ax.inject-libs :mock-send 42
-                  ["scittle://pprint.js" "epupp://helpers.cljs"] all-scripts {}])
+                                    ["scittle://pprint.js" "epupp://helpers.cljs"] all-scripts])
         fxs (:uf/fxs result)
         plan (effect-plan fxs)]
     (-> (expect (count (filter #(= :msg/fx.execute-plan (second %)) fxs))) (.toBe 1))
@@ -1412,7 +1482,7 @@
   (let [manifest #js {"inject" #js ["epupp://helpers.cljs"]}
         all-scripts [library-script-plain]
         result (bg-actions/handle-action initial-state uf-data
-                                 [:msg/ax.load-manifest :mock-send 42 manifest all-scripts {}])
+                                                                 [:msg/ax.load-manifest :mock-send 42 manifest all-scripts])
         fxs (:uf/fxs result)
                 plan (effect-plan fxs)]
         (-> (expect (count (filter #(= :msg/fx.execute-plan (second %)) fxs))) (.toBe 1))
@@ -1427,17 +1497,21 @@
 (defn- test-load-manifest-epupp-missing-library-produces-errors []
   (let [manifest #js {"inject" #js ["epupp://missing.cljs"]}
         result (bg-actions/handle-action initial-state uf-data
-                                 [:msg/ax.load-manifest :mock-send 42 manifest [] {}])
-        dxs (:uf/dxs result)]
+                                                                 [:msg/ax.load-manifest :mock-send 42 manifest []])
+        dxs (:uf/dxs result)
+        fxs (:uf/fxs result)
+        response (response-payload fxs)]
     ;; Should produce error dispatches
     (-> (expect (seq dxs)) (.toBeTruthy))
-    (-> (expect (first (first dxs))) (.toBe :banner/ax.broadcast-resolution-errors))))
+    (-> (expect (first (first dxs))) (.toBe :banner/ax.broadcast-resolution-errors))
+    (-> (expect (execute-plan-effect fxs)) (.toBeFalsy))
+    (-> (expect (:success response)) (.toBe false))))
 
 (defn- test-load-manifest-transitive-epupp-deps []
   (let [manifest #js {"inject" #js ["epupp://advanced.cljs"]}
         all-scripts [library-script-plain library-script-transitive]
         result (bg-actions/handle-action initial-state uf-data
-                 [:msg/ax.load-manifest :mock-send 42 manifest all-scripts {}])
+                                 [:msg/ax.load-manifest :mock-send 42 manifest all-scripts])
         fxs (:uf/fxs result)
         plan (effect-plan fxs)]
     (-> (expect (count (filter #(= :msg/fx.execute-plan (second %)) fxs))) (.toBe 1))
@@ -1457,6 +1531,97 @@
                   test-load-manifest-transitive-epupp-deps)))
 
 ;; ============================================================
+;; Manual ext-dep ready action tests
+;; ============================================================
+
+(defn- test-inject-libs-ready-success-persists-cache-executes-plan-and-sends-success []
+  (let [ext-url (str "https://raw.githubusercontent.com/user/repo/" ext-dep-sha "/lib.cljs")
+                fetched-entry (sample-ext-cache-entry ext-url 1700000000000)
+        fetch-result {:resolved {ext-url fetched-entry}
+                      :errors []}
+        result (bg-actions/handle-action initial-state uf-data
+                                 [:msg/ax.inject-libs-ready :mock-send 42 [ext-url] [] fetch-result])
+        fxs (:uf/fxs result)
+        plan (effect-plan fxs)
+        response (response-payload fxs)]
+    (-> (expect (get-in result [:uf/db :storage/ext-dep-cache ext-url]))
+        (.toEqual fetched-entry))
+    (-> (expect (some #(and (= :storage/fx.persist-ext-dep-cache! (first %))
+                            (= (second %) {ext-url fetched-entry}))
+                      fxs))
+        (.toBeTruthy))
+    (-> (expect (await-effect fxs :msg/fx.ensure-scittle-tab))
+        (.toBeTruthy))
+    (-> (expect (execute-plan-effect fxs))
+        (.toBeTruthy))
+    (-> (expect (plan-step-count plan :ext-dep-script))
+        (.toBe 1))
+    (-> (expect (plan-step-count plan :root-script))
+        (.toBe 0))
+    (-> (expect response)
+        (.toEqual {:success true}))))
+
+(defn- test-inject-libs-ready-merges-fetched-cache-with-existing-state-cache []
+    (let [existing-url "https://example.com/existing.cljs"
+                fetched-url (str "https://raw.githubusercontent.com/user/repo/" ext-dep-sha "/lib.cljs")
+                existing-entry (sample-ext-cache-entry existing-url 1699999999000)
+                fetched-entry (sample-ext-cache-entry fetched-url 1700000000000)
+                state (assoc initial-state :storage/ext-dep-cache {existing-url existing-entry})
+                fetch-result {:resolved {fetched-url fetched-entry}
+                                            :errors []}
+                result (bg-actions/handle-action state uf-data
+                                 [:msg/ax.inject-libs-ready :mock-send 42 [fetched-url] [] fetch-result])
+                merged-cache {existing-url existing-entry
+                                            fetched-url fetched-entry}
+                fxs (:uf/fxs result)]
+        (-> (expect (get-in result [:uf/db :storage/ext-dep-cache])) (.toEqual merged-cache))
+        (-> (expect (some #(and (= :storage/fx.persist-ext-dep-cache! (first %))
+                                                        (= (second %) merged-cache))
+                                            fxs))
+                (.toBeTruthy))))
+
+(defn- test-load-manifest-ready-fetch-failure-sends-failure-and-broadcasts-errors []
+  (let [ext-url (str "https://raw.githubusercontent.com/user/repo/" ext-dep-sha "/lib.cljs")
+        manifest #js {"inject" #js [ext-url]}
+        fetch-error {:error/type :ext-dep/fetch-failed
+                     :error/phase :resolve
+                     :error/dep-raw ext-url
+                     :error/message (str "Failed to fetch " ext-url ": boom")}
+        result (bg-actions/handle-action initial-state uf-data
+                 [:msg/ax.load-manifest-ready :mock-send 42 manifest []
+                  {:resolved {} :errors [fetch-error]}])
+        fxs (:uf/fxs result)
+        dxs (:uf/dxs result)
+        response (response-payload fxs)]
+    (-> (expect (execute-plan-effect fxs))
+        (.toBeFalsy))
+    (-> (expect (some #(= :storage/fx.persist-ext-dep-cache! (first %)) fxs))
+        (.toBeFalsy))
+    (-> (expect (:success response))
+        (.toBe false))
+    (-> (expect (:error response))
+        (.toContain "Failed to fetch"))
+    (-> (expect (:errors response))
+        (.toEqual [(:error/message fetch-error)]))
+    (-> (expect (count dxs))
+        (.toBe 2))
+    (-> (expect (first (first dxs)))
+        (.toBe :banner/ax.broadcast-resolution-errors))
+    (-> (expect (count (second (first dxs))))
+        (.toBe 1))
+    (-> (expect (-> dxs second first))
+        (.toBe :msg/ax.log-resolution-error))))
+
+(describe "manual ext-dep ready actions"
+          (fn []
+            (test "inject-libs-ready success persists cache and executes deps-only plan"
+                  test-inject-libs-ready-success-persists-cache-executes-plan-and-sends-success)
+        (test "inject-libs-ready merges fetched entries with existing state cache"
+            test-inject-libs-ready-merges-fetched-cache-with-existing-state-cache)
+            (test "load-manifest-ready fetch failure sends failure and broadcasts resolution errors"
+                  test-load-manifest-ready-fetch-failure-sends-failure-and-broadcasts-errors)))
+
+;; ============================================================
 ;; Runtime Error Actions Tests
 ;; ============================================================
 
@@ -1474,6 +1639,11 @@
     :error/script-name "my/other.cljs"
     :error/dep-raw "epupp://gone.js"
     :error/message "Library not found: gone.js"}])
+
+(defn- find-banner-broadcast-effect
+    [result]
+    (some #(when (= :banner/fx.broadcast-system (first %)) %)
+                (:uf/fxs result)))
 
 (defn- test-set-tab-errors-stores-errors-by-script-name []
   (let [result (bg-actions/handle-action runtime-state uf-data
@@ -1553,6 +1723,62 @@
         new-state (:uf/db result)]
     (-> (expect (get (:runtime/errors new-state) 42)) (.toBeUndefined))))
 
+(defn- test-re-resolve-on-change-does-not-broadcast-unchanged-runtime-error []
+    (let [script-with-deps (assoc base-script
+                                                                :script/name "my/tweaks.cljs"
+                                                                :script/inject ["epupp://missing.js"])
+                existing-error (first sample-errors)
+                state (assoc runtime-state
+                                         :runtime/errors {42 {"my/tweaks.cljs" existing-error}})
+                original-resolve dep-resolver/resolve-execution-plan
+                resolver-spy (.spyOn vi dep-resolver "resolve_execution_plan")]
+        (try
+            (.mockImplementation resolver-spy
+                                                     (fn [_scripts-with-deps _all-scripts _cache]
+                                                         {:plan/errors [existing-error]}))
+            (let [result (bg-actions/handle-action state uf-data
+                                         [:runtime/ax.re-resolve-on-change [script-with-deps]])
+                  set-tab-errors-fx (some #(when (= :runtime/fx.set-tab-errors (first %)) %)
+                                          (:uf/fxs result))]
+                (-> (expect (find-banner-broadcast-effect result)) (.toBeFalsy))
+                (-> (expect set-tab-errors-fx) (.toBeTruthy))
+                (-> (expect (nth set-tab-errors-fx 1)) (.toBe "42"))
+                (-> (expect (nth set-tab-errors-fx 2)) (.toEqual [existing-error])))
+            (finally
+                (.mockImplementation resolver-spy original-resolve)
+                (.mockRestore resolver-spy)))))
+
+(defn- test-re-resolve-on-change-broadcasts-new-runtime-error []
+    (let [script-with-deps (assoc base-script
+                                                                :script/name "my/tweaks.cljs"
+                                                                :script/inject ["epupp://missing.js" "epupp://other.js"])
+                existing-error (first sample-errors)
+                new-error {:error/type "library/not-found"
+                                     :error/phase "resolve"
+                                     :error/script-name "my/tweaks.cljs"
+                                     :error/dep-raw "epupp://other.js"
+                                     :error/message "Library not found: other.js"}
+                state (assoc runtime-state
+                                         :runtime/errors {42 {"my/tweaks.cljs" existing-error}})
+                original-resolve dep-resolver/resolve-execution-plan
+                resolver-spy (.spyOn vi dep-resolver "resolve_execution_plan")]
+        (try
+            (.mockImplementation resolver-spy
+                                                     (fn [_scripts-with-deps _all-scripts _cache]
+                                                         {:plan/errors [new-error]}))
+            (let [result (bg-actions/handle-action state uf-data
+                                         [:runtime/ax.re-resolve-on-change [script-with-deps]])
+                        banner-fx (find-banner-broadcast-effect result)]
+                (-> (expect banner-fx) (.toBeTruthy))
+                (-> (expect (second banner-fx))
+                        (.toEqual {:event-type "error"
+                                             :operation "library-resolution"
+                                             :error "Library not found: other.js"
+                                             :errors ["Library not found: other.js"]})))
+            (finally
+                (.mockImplementation resolver-spy original-resolve)
+                (.mockRestore resolver-spy)))))
+
 (describe "runtime error actions"
           (fn []
             (test "set-tab-errors stores errors keyed by script name"
@@ -1570,19 +1796,22 @@
             (test "navigation clears tab runtime errors"
                   test-nav-handle-navigation-clears-tab-errors)
             (test "tab removed clears tab runtime errors"
-                  test-tab-handle-removed-clears-tab-errors)))
+                test-tab-handle-removed-clears-tab-errors)
+            (test "re-resolve skips banner for unchanged runtime error"
+                test-re-resolve-on-change-does-not-broadcast-unchanged-runtime-error)
+            (test "re-resolve broadcasts banner for new runtime error"
+                test-re-resolve-on-change-broadcasts-new-runtime-error)))
 
 ;; ============================================================
 ;; External Dep Action Tests
 ;; ============================================================
 
-(def ^:private ext-dep-sha "abcdef0123456789abcdef0123456789abcdef01")
-
 (defn- test-resolve-uncached-urls-with-uncached-returns-fetch-effect []
   (let [ext-url (str "https://raw.githubusercontent.com/user/repo/" ext-dep-sha "/lib.cljs")
+                follow-up-actions [[:runtime/ax.re-resolve-on-change [base-script]]]
         state {:storage/ext-dep-cache {}}
         result (bg-actions/handle-action state uf-data
-                                         [:ext-dep/ax.resolve-uncached-urls [ext-url]])]
+                                                                                 [:ext-dep/ax.resolve-uncached-urls [ext-url] follow-up-actions])]
     (-> (expect result) (.toBeTruthy))
     (-> (expect (:uf/fxs result)) (.toBeTruthy))
     (let [fx (first (:uf/fxs result))]
@@ -1591,7 +1820,8 @@
     (-> (expect (:uf/dxs result)) (.toBeTruthy))
     (let [dx (first (:uf/dxs result))]
       (-> (expect (first dx)) (.toBe :ext-dep/ax.cache-results))
-      (-> (expect (second dx)) (.toBe :uf/prev-result)))))
+            (-> (expect (second dx)) (.toBe :uf/prev-result))
+            (-> (expect (nth dx 2)) (.toEqual follow-up-actions)))))
 
 (defn- test-resolve-uncached-urls-empty-list-returns-nil []
   (let [state {:storage/ext-dep-cache {}}
@@ -1606,12 +1836,24 @@
                  [:ext-dep/ax.resolve-uncached-urls [ext-url]])]
     (-> (expect result) (.toBeFalsy))))
 
+(defn- test-resolve-uncached-urls-all-cached-returns-follow-up-actions []
+  (let [ext-url (str "https://raw.githubusercontent.com/user/repo/" ext-dep-sha "/lib.cljs")
+      follow-up-actions [[:runtime/ax.re-resolve-on-change [base-script]]]
+      state {:storage/ext-dep-cache {ext-url {:cache/code "(ns lib)" :cache/url ext-url}}}
+      result (bg-actions/handle-action state uf-data
+                             [:ext-dep/ax.resolve-uncached-urls [ext-url] follow-up-actions])]
+    (-> (expect result) (.toBeTruthy))
+    (-> (expect (:uf/fxs result)) (.toBeFalsy))
+    (-> (expect (:uf/dxs result)) (.toEqual follow-up-actions))))
+
 (describe ":ext-dep/ax.resolve-uncached-urls"
           (fn []
             (test "with uncached URLs returns fetch effect and cache-results deferred action"
                   test-resolve-uncached-urls-with-uncached-returns-fetch-effect)
             (test "with empty URL list returns nil" test-resolve-uncached-urls-empty-list-returns-nil)
-            (test "with all cached URLs returns nil" test-resolve-uncached-urls-all-cached-returns-nil)))
+        (test "with all cached URLs returns nil" test-resolve-uncached-urls-all-cached-returns-nil)
+        (test "with all cached URLs and follow-up actions returns those actions immediately"
+            test-resolve-uncached-urls-all-cached-returns-follow-up-actions)))
 
 ;; ============================================================
 ;; External Dep Cache Results Action Tests
@@ -1670,9 +1912,27 @@
     (-> (expect (some #(= :banner/fx.broadcast-system (first %)) (:uf/fxs result)))
         (.toBeTruthy))))
 
+(defn- test-cache-results-returns-follow-up-actions-after-persist []
+    (let [url (str "https://raw.githubusercontent.com/user/repo/" ext-dep-sha "/lib.cljs")
+                entry {:cache/code "(ns lib)" :cache/url url :cache/schema-version 1}
+                fetch-result {:resolved {url entry} :errors []}
+                follow-up-actions [[:runtime/ax.re-resolve-on-change [base-script]]]
+                state {:storage/ext-dep-cache {}}
+                result (bg-actions/handle-action state uf-data
+                                                                                 [:ext-dep/ax.cache-results fetch-result follow-up-actions])]
+        (-> (expect (get-in result [:uf/db :storage/ext-dep-cache url]))
+                (.toEqual entry))
+        (-> (expect (some #(and (= :storage/fx.persist-ext-dep-cache! (first %))
+                                                        (= (get (second %) url) entry))
+                                            (:uf/fxs result)))
+                (.toBeTruthy))
+        (-> (expect (:uf/dxs result))
+                (.toEqual follow-up-actions))))
+
 (describe ":ext-dep/ax.cache-results"
   (fn []
     (test "merges resolved entries into cache and persists" test-cache-results-merges-into-cache-and-persists)
     (test "preserves existing cache entries" test-cache-results-preserves-existing-cache)
     (test "empty resolved still triggers persist" test-cache-results-empty-resolved-still-persists)
-    (test "with errors broadcasts banner" test-cache-results-with-errors-broadcasts-banner)))
+        (test "with errors broadcasts banner" test-cache-results-with-errors-broadcasts-banner)
+        (test "returns follow-up actions after merging and persisting" test-cache-results-returns-follow-up-actions-after-persist)))

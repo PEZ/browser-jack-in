@@ -164,9 +164,9 @@ Via `chrome.runtime.sendMessage`.
 | `fs-sync-status-changed` | `{fsSyncTabId}` | FS sync status changed (null when disabled) |
 
 Notes:
-- `inject-libs` is no longer limited to direct Scittle vendor files. The background resolves the provided inject vector as a synthetic dependency graph, ensures Scittle is available for the tab, then executes a deps-only plan.
+- `inject-libs` is no longer limited to direct Scittle vendor files. The background resolves the provided inject vector as a synthetic dependency graph, ensures Scittle is available for the tab, and executes a deps-only plan. For supported pinned HTTPS URLs this path is cache-first: only missing URLs are fetched, cached, and re-resolved before execution continues.
 - `evaluate-script` uses the same resolver and plan executor as auto-run. Popup quick-run no longer uses a separate `scittle://`-only library path.
-- `load-manifest` from `epupp.repl/manifest!` follows the same eval-time dependency flow as `inject-libs`, including `epupp://` libraries and cached HTTPS external dependencies.
+- `load-manifest` from `epupp.repl/manifest!` follows the same eval-time dependency flow as `inject-libs`, including `epupp://` libraries and supported pinned HTTPS external dependencies. Fetch or resolution failure aborts the eval-time flow instead of partially executing the consumer.
 
 ## Related
 

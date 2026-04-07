@@ -26,6 +26,7 @@
 ;; WebSocket connections don't survive script termination anyway.
 
 (def !state (atom {:init/promise nil
+                   :storage/ext-dep-cache {}
                    :ws/connections {}
                    :icon/states {}
                    :connected-tabs/history {}
@@ -34,7 +35,12 @@
 
 ;; Ephemeral tracking - NOT Uniflow state. Tracks which tabs have had the
 ;; web installer injected to avoid redundant re-injection.
-(def ^:private !installer-injected-tabs (atom #{}))
+(def ^:private installer-injected-tabs* (atom #{}))
+
+;; Ephemeral tracking - NOT Uniflow state. Tracks scans that have started but
+;; have not yet reached the injected-tab mark, preventing overlapping events
+;; from entering the installer scan concurrently for the same tab.
+(def ^:private installer-in-flight-tabs* (atom #{}))
 
 ;; ============================================================
 ;; Initialization Promise - single source of truth for readiness
@@ -452,9 +458,8 @@
 
 (defn- handle-load-manifest [message tab-id dispatch! send-response]
   (let [manifest (.-manifest message)
-    all-scripts (storage/get-scripts)
-    ext-dep-cache (storage/get-ext-dep-cache)]
-  (dispatch! [[:msg/ax.load-manifest send-response tab-id manifest all-scripts ext-dep-cache]])
+        all-scripts (storage/get-scripts)]
+    (dispatch! [[:msg/ax.load-manifest send-response tab-id manifest all-scripts]])
     true))
 
 (defn- handle-get-connections [dispatch! send-response]
@@ -574,9 +579,8 @@
   (let [target-tab-id (.-tabId message)
         libs (when (.-libs message)
                (vec (.-libs message)))
-    all-scripts (storage/get-scripts)
-    ext-dep-cache (storage/get-ext-dep-cache)]
-  (dispatch! [[:msg/ax.inject-libs send-response target-tab-id libs all-scripts ext-dep-cache]])
+        all-scripts (storage/get-scripts)]
+    (dispatch! [[:msg/ax.inject-libs send-response target-tab-id libs all-scripts]])
     true))
 
 (defn- handle-evaluate-script [message dispatch! send-response]
@@ -760,10 +764,16 @@
    Checks host permission before injection (Firefox treats these as revocable)."
   [dispatch! tab-id url]
   (try
-    (when (bg-utils/should-scan-for-installer? url @!installer-injected-tabs tab-id)
-      (let [has-perm? (js-await (permissions/check-tab-permission tab-id))]
-        (if has-perm?
-          (do
+    (when (bg-utils/should-scan-for-installer? url
+                                               (deref installer-injected-tabs*)
+                                               (deref installer-in-flight-tabs*)
+                                               tab-id)
+      (swap! installer-in-flight-tabs* conj tab-id)
+      (try
+        (let [has-perm? (js-await (permissions/check-tab-permission tab-id))]
+          (when-not has-perm?
+            (log/debug "Background" "Installer scan skipped - host permission not granted for tab" tab-id))
+          (when has-perm?
             (js-await (ensure-initialized! dispatch!))
             (let [installer (storage/get-script-by-name "epupp/web_userscript_installer.cljs")]
               (when (and installer (:script/enabled installer))
@@ -782,8 +792,9 @@
                           plan (dep-resolver/resolve-execution-plan [installer] all-scripts
                                                                    (storage/get-ext-dep-cache))]
                       (js-await (bg-inject/execute-plan! tab-id plan)))
-                    (swap! !installer-injected-tabs conj tab-id))))))
-          (log/debug "Background" "Installer scan skipped - host permission not granted for tab" tab-id))))
+                    (swap! installer-injected-tabs* conj tab-id)))))))
+        (finally
+          (swap! installer-in-flight-tabs* disj tab-id))))
     (catch :default err
       (log/warn "Background" "Installer scan failed for tab" tab-id ":" (.-message err)))))
 
@@ -808,7 +819,7 @@
   (.addListener js/chrome.tabs.onRemoved
                 (fn [tab-id _remove-info]
                   (log/debug "Background" "Tab closed, cleaning up:" tab-id)
-                  (swap! !installer-injected-tabs disj tab-id)
+                  (swap! installer-injected-tabs* disj tab-id)
                   (dispatch! [[:tab/ax.handle-removed tab-id]])))
 
   (.addListener js/chrome.tabs.onActivated
@@ -830,7 +841,7 @@
                 (fn [details]
                   (when (zero? (.-frameId details))
                     (let [tab-id (.-tabId details)]
-                      (swap! !installer-injected-tabs disj tab-id)
+                      (swap! installer-injected-tabs* disj tab-id)
                       (dispatch! [[:nav/ax.handle-before-navigate tab-id]])))))
 
   (.addListener js/chrome.webNavigation.onCompleted
@@ -899,19 +910,20 @@
                                            {:extract-manifest manifest-parser/extract-manifest})
                                all-inject-urls (mapcat :script/inject all-scripts)
                                ext-urls (ext-dep/extract-ext-dep-urls (vec all-inject-urls))]
-                           ;; Resolve uncached ext-deps FIRST so the cache is populated
-                           ;; before re-resolve runs (Uniflow processes actions sequentially)
-                           (dispatch! (cond-> []
-                                        (seq ext-urls)
-                                        (conj [:ext-dep/ax.resolve-uncached-urls ext-urls])
-                                        true
-                                        (conj [:runtime/ax.re-resolve-on-change all-scripts])))))))
+                           (dispatch! (if (seq ext-urls)
+                                        [[:ext-dep/ax.resolve-uncached-urls
+                                          ext-urls
+                                          [[:runtime/ax.re-resolve-on-change all-scripts]]]]
+                                        [[:runtime/ax.re-resolve-on-change all-scripts]]))))))
                     (when (aget changes "extDepCache")
                       (log/debug "Background" "Ext dep cache changed, re-resolving")
                       ((^:async fn []
                          (js-await (ensure-initialized! dispatch!))
-                         (let [all-scripts (storage/get-scripts)]
-                           (dispatch! [[:runtime/ax.re-resolve-on-change all-scripts]])))))
+                         (let [change (aget changes "extDepCache")
+                               new-cache (or (.-newValue change) {})
+                               all-scripts (storage/get-scripts)]
+                           (dispatch! [[:storage/ax.set-ext-dep-cache new-cache]
+                                       [:runtime/ax.re-resolve-on-change all-scripts]])))))
                     (when (aget changes "settings/debug-logging")
                       (let [change (aget changes "settings/debug-logging")
                             enabled (boolean (.-newValue change))]
@@ -976,6 +988,7 @@
          (try
            (js-await (test-logger/init-test-mode!))
            (js-await (storage/init!))
+           (js-await (dispatch! [[:storage/ax.set-ext-dep-cache (storage/get-ext-dep-cache)]]))
            ;; Load debug logging setting and apply it
            (js-await (js/Promise.
                       (fn [res]
@@ -1036,12 +1049,11 @@
       (bg-inject/execute-plan! tab-id plan))
 
     :script/fx.evaluate
-    (let [[tab-id script icon-state] args]
+    (let [[tab-id script icon-state ext-dep-cache] args]
       (when (= bg-utils/sponsor-script-id (:script/id script))
         (dispatch! [[:sponsor/ax.set-pending tab-id]]))
       (try
         (let [all-scripts (storage/get-scripts)
-              ext-dep-cache (storage/get-ext-dep-cache)
               plan (dep-resolver/resolve-execution-plan [script] all-scripts ext-dep-cache)
               errors (:plan/errors plan)]
           (when (seq errors)
@@ -1149,10 +1161,7 @@
 
     :storage/fx.persist-ext-dep-cache!
     (let [[cache] args]
-      ;; Sync the storage mirror before persisting — the action updated
-      ;; background/!state, but persist-ext-dep-cache! reads storage/!db.
-      (swap! storage/!db assoc :storage/ext-dep-cache cache)
-      (storage/persist-ext-dep-cache!))
+      (storage/persist-ext-dep-cache! cache))
 
     :ext-dep/fx.fetch-deps
     (let [[uncached-urls existing-cache] args]

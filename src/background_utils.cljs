@@ -158,13 +158,16 @@
   "Decide whether to scan a tab for userscript blocks.
    Returns true when the URL's origin is whitelisted AND the tab has not
    already had the installer injected."
-  [url injected-tabs tab-id]
-  (try
-    (let [url-obj (js/URL. url)
-          origin (str (.-protocol url-obj) "//" (.-hostname url-obj))]
-      (and (contains? web-installer-allowed-origins origin)
-           (not (contains? injected-tabs tab-id))))
-    (catch :default _ false)))
+  ([url injected-tabs tab-id]
+   (should-scan-for-installer? url injected-tabs #{} tab-id))
+  ([url injected-tabs in-flight-tabs tab-id]
+   (try
+     (let [url-obj (js/URL. url)
+           origin (str (.-protocol url-obj) "//" (.-hostname url-obj))]
+       (and (contains? web-installer-allowed-origins origin)
+            (not (contains? injected-tabs tab-id))
+            (not (contains? in-flight-tabs tab-id))))
+     (catch :default _ false))))
 
 (def installer-scan-delays
   "Bounded retry schedule for scanning tabs for userscript blocks.

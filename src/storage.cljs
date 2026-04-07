@@ -116,14 +116,13 @@
                   (fn [] (resolve nil))))))))
 
 (defn ^:async persist-ext-dep-cache!
-  "Write only the ext-dep cache to chrome.storage.local."
-  []
-  (let [cache (:storage/ext-dep-cache @!db)]
-    (js-await (js/Promise.
-               (fn [resolve]
-                 (js/chrome.storage.local.set
-                  #js {:extDepCache (clj->js cache)}
-                  (fn [] (resolve nil))))))))
+  "Write only the given ext-dep cache to chrome.storage.local."
+  [cache]
+  (js-await (js/Promise.
+             (fn [resolve]
+               (js/chrome.storage.local.set
+                #js {:extDepCache (clj->js cache)}
+                (fn [] (resolve nil)))))))
 
 (defn ^:async load!
   "Load scripts from chrome.storage.local into !db atom.

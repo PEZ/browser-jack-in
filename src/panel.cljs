@@ -142,6 +142,30 @@
          (callback nil)
          (callback {:error (or (and response (.-error response)) "Failed to inject Scittle")}))))))
 
+(defn- inject-libs-error
+  [response]
+  (or (when js/chrome.runtime.lastError
+        (.-message js/chrome.runtime.lastError))
+      (and response (.-error response))
+      (when-let [errors (and response (.-errors response))]
+        (aget errors 0))
+      "Failed to inject libs"))
+
+(defn- request-lib-injection!
+  [libs on-success on-failure]
+  (if (seq libs)
+    (js/chrome.runtime.sendMessage
+     #js {:type "inject-libs"
+          :tabId js/chrome.devtools.inspectedWindow.tabId
+          :libs (clj->js libs)}
+     (fn [response]
+      (if (and (not js/chrome.runtime.lastError)
+         response
+         (.-success response))
+         (on-success)
+         (on-failure {:error (inject-libs-error response)}))))
+    (on-success)))
+
 (defn perform-effect! [dispatch [effect & args]]
   (case effect
     :editor/fx.restore-panel-state
@@ -151,23 +175,15 @@
 
     :editor/fx.eval-in-page
     (let [[code libs] args]
-      (if (seq libs)
-        ;; Inject libs before eval (even if Scittle already loaded - libs might not be)
-        (js/chrome.runtime.sendMessage
-         #js {:type "inject-libs"
-              :tabId js/chrome.devtools.inspectedWindow.tabId
-              :libs (clj->js libs)}
-         (fn [_response]
-           ;; Proceed with eval regardless (best effort)
-           (eval-in-page!
-            code
-            (fn [result]
-              (dispatch [[:editor/ax.handle-eval-result result]])))))
-        ;; No libs - eval directly
-        (eval-in-page!
-         code
-         (fn [result]
-           (dispatch [[:editor/ax.handle-eval-result result]])))))
+      (request-lib-injection!
+       libs
+       (fn []
+         (eval-in-page!
+          code
+          (fn [result]
+            (dispatch [[:editor/ax.handle-eval-result result]]))))
+       (fn [err]
+         (dispatch [[:editor/ax.handle-eval-result err]]))))
 
     :editor/fx.check-scittle
     (check-scittle-status!
@@ -176,33 +192,19 @@
 
     :editor/fx.inject-and-eval
     (let [[code libs] args]
-      ;; If libs exist, inject them first via background worker
-      (if (seq libs)
-        (js/chrome.runtime.sendMessage
-         #js {:type "inject-libs"
-              :tabId js/chrome.devtools.inspectedWindow.tabId
-              :libs (clj->js libs)}
-         (fn [response]
-           (if (and response (.-success response))
-             ;; Libs injected - now inject Scittle and eval
-             (ensure-scittle!
-              (fn [err]
-                (if err
-                  (dispatch [[:editor/ax.update-scittle-status "error"]
-                             [:editor/ax.handle-eval-result err]])
-                  (dispatch [[:editor/ax.update-scittle-status "loaded"]
-                             [:editor/ax.do-eval code]]))))
-             ;; Lib injection failed
-             (dispatch [[:editor/ax.update-scittle-status "error"]
-                        [:editor/ax.handle-eval-result {:error (or (.-error response) "Failed to inject libs")}]]))))
-        ;; No libs - proceed as before
-        (ensure-scittle!
-         (fn [err]
-           (if err
-             (dispatch [[:editor/ax.update-scittle-status "error"]
-                        [:editor/ax.handle-eval-result err]])
-             (dispatch [[:editor/ax.update-scittle-status "loaded"]
-                        [:editor/ax.do-eval code]]))))))
+      (request-lib-injection!
+       libs
+       (fn []
+         (ensure-scittle!
+          (fn [err]
+            (if err
+              (dispatch [[:editor/ax.update-scittle-status "error"]
+                         [:editor/ax.handle-eval-result err]])
+              (dispatch [[:editor/ax.update-scittle-status "loaded"]
+                         [:editor/ax.do-eval code]])))))
+       (fn [err]
+         (dispatch [[:editor/ax.update-scittle-status "error"]
+                    [:editor/ax.handle-eval-result err]]))))
 
     :editor/fx.save-script
     (let [[script normalized-name action-text] args]

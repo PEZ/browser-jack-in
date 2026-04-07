@@ -268,6 +268,70 @@
         (js-await (.close context))))))
 
 ;; =============================================================================
+;; Test: Full cycle - panel eval fetches ext dep on demand
+;; =============================================================================
+
+(defn- ^:async test_full_cycle_panel_eval_fetches_ext_dep_on_demand []
+  (.setTimeout test 60000)
+  (let [context (js-await (launch-browser))
+        ext-id (js-await (get-extension-id context))]
+    (try
+      (let [test-page (js-await (.newPage context))]
+        (js-await (.goto test-page (str "http://localhost:" http-port "/basic.html")
+                         #js {:timeout 5000}))
+        (js-await (-> (expect (.locator test-page "#test-marker"))
+                      (.toContainText "ready")))
+
+        (let [popup (js-await (create-popup-page context ext-id))]
+          (js-await (wait-for-popup-ready popup))
+          (let [clear-cache-result (js-await (send-runtime-message popup "e2e/set-storage"
+                                                                   #js {:key "extDepCache"
+                                                                        :value #js {}}))]
+            (js-await (-> (expect (.-success clear-cache-result))
+                          (.toBe true))))
+          (let [tab-id (js-await (find-tab-id popup (str "http://localhost:" http-port "/*")))]
+            (js-await (.close popup))
+
+            (let [panel (js-await (create-panel-page-for-tab context ext-id tab-id))
+                  consumer-code (str "{:epupp/script-name \"test/panel_fetch_on_demand.cljs\"\n"
+                                     " :epupp/inject [\"" git-raw-url "\"]}\n\n"
+                                     "(ns test.panel-fetch-on-demand\n"
+                                     "  (:require [pez.test-lib :as lib]))\n\n"
+                                     "(set! (.-__EPUPP_PANEL_FETCH_ON_DEMAND_RESULT js/window)\n"
+                                     "      (lib/greeting \"PanelFetchOnDemand\"))")]
+              (js-await (.fill (.locator panel "#code-area") consumer-code))
+              (js-await (.click (.locator panel "button.btn-eval")))
+
+              (let [start (.now js/Date)]
+                (loop []
+                  (let [result (js-await (.evaluate test-page
+                                                    (fn []
+                                                      (try
+                                                        (js/scittle.core.eval_string "(pez.test-lib/greeting \"test\")")
+                                                        (catch :default _e nil)))))]
+                    (if (some? result)
+                      (js-await (-> (expect result)
+                                    (.toBe "Hello from pez.test-lib, test!")))
+                      (do
+                        (when (> (- (.now js/Date) start) 5000)
+                          (throw (js/Error. "Timeout: pez.test-lib namespace not available on page")))
+                        (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 100))))
+                        (recur))))))
+
+              (let [cache-result (js-await (send-runtime-message panel "e2e/get-storage"
+                                                                 #js {:key "extDepCache"}))
+                    cache (when (and cache-result (.-success cache-result)) (.-value cache-result))]
+                (js-await (-> (expect (aget cache git-raw-url))
+                              (.toBeTruthy))))
+
+              (js-await (assert-no-errors! panel))
+              (js-await (.close panel)))))
+        (js-await (.close test-page)))
+
+      (finally
+        (js-await (.close context))))))
+
+;; =============================================================================
 ;; Test Registration
 ;; =============================================================================
 
@@ -280,4 +344,7 @@
                    test_full_cycle_gist_auto_run)
 
              (test "Full cycle git URL: save triggers fetch, popup play injects and executes"
-                   test_full_cycle_git_popup_play)))
+               test_full_cycle_git_popup_play)
+
+             (test "Full cycle git URL: panel eval fetches uncached ext dep on demand"
+               test_full_cycle_panel_eval_fetches_ext_dep_on_demand)))

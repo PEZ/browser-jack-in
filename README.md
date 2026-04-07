@@ -412,9 +412,9 @@ Scripts can depend on code hosted on GitHub's raw content hosts via HTTPS URLs i
 | `raw.githubusercontent.com` | `https://raw.githubusercontent.com/owner/repo/SHA/path/to/file.cljs` |
 | `gist.githubusercontent.com` | `https://gist.githubusercontent.com/owner/GIST_ID/raw/SHA/filename.cljs` |
 
-External dependencies are fetched and cached when the script is saved (via panel or FS API). At page load, they're injected from cache - no network requests during injection. Transitive dependencies are supported: a cached external dependency can itself reference other dependencies via `:epupp/inject` in its manifest.
+External dependencies are fetched and cached when the script is saved (via panel, web installer, or FS API). At page load, they're injected from cache. Transitive dependencies are supported.
 
-Only public GitHub content is supported (no authentication in v1). Branch or tag references are not allowed - use a full commit SHA.
+Only public GitHub content is supported (no authentication). Branch or tag references are not allowed - use a full commit SHA.
 
 ## Epupp Userscript Gallery
 
