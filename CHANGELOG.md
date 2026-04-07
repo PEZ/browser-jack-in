@@ -6,13 +6,15 @@ Changes to Epupp
 
 ## [Unreleased]
 
-- [Make it possible to declare dependency on other scripts in the Epupp filesystem](https://github.com/PEZ/epupp/issues/10)
+- Add support for Epupp dependencies (Epupp `.cljs` code as libraries)
+  - Building on the existing `:epupp/inject` manifest functionality
+  - [Make it possible to declare dependency on other scripts in the Epupp filesystem](https://github.com/PEZ/epupp/issues/10)
+    - Local libraries injected via `epupp://SCRIPT-NAME` scheme
   - Transitive dependencies supported
-  - Supports using other scripts as libraries using `epupp://SCRIPT-NAME`
-  - External dependencies: inject code from GitHub raw content hosts via HTTPS URLs in `:epupp/inject`
+  - External dependencies: inject code from GitHub raw content hosts, including gists, via HTTPS URLs
+    - Supported hosts: `raw.githubusercontent.com`, `gist.githubusercontent.com`
     - SHA-pinned for immutable, reproducible dependency resolution
     - Fetched and cached on script save, injected from cache at page load
-    - Supported hosts: `raw.githubusercontent.com`, `gist.githubusercontent.com`
 - Fix bug with document-start scripts being run twice
 
 ## [0.0.14] - 2026-03-19
