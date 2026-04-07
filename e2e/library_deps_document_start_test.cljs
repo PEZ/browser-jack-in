@@ -84,6 +84,23 @@
     (when (str/includes? bg-text "Sync failed")
       (throw (js/Error. (str "Registration failed! Logs:\n" bg-text))))))
 
+(defn- ^:async probe-document-start-readiness
+  "Probe document-start injection readiness after registration completes.
+   Waits for the expected probe event after navigation."
+  [context ext-id expected-probe-event]
+  (let [page (js-await (.newPage context))
+        popup (js-await (create-popup-page context ext-id))]
+    (try
+      ;; Probe navigation converts registration completion into an observable readiness check.
+      (js-await (clear-test-events! popup))
+      (js-await (.goto page "http://localhost:18080/basic.html" #js {:timeout 5000}))
+      (js-await (-> (expect (.locator page "#test-marker"))
+                    (.toContainText "ready")))
+      (js-await (wait-for-event popup expected-probe-event 5000))
+      (finally
+        (js-await (.close popup))
+        (js-await (.close page))))))
+
 ;; =============================================================================
 ;; Test: Document-start consumer loads library via epupp://
 ;; =============================================================================
@@ -110,6 +127,7 @@
       ;; === PHASE 2: Enable consumer and wait for registration ===
       (js-await (enable-script-via-popup context ext-id "test/ds_consumer.cljs"))
       (js-await (wait-for-registration bg-logs))
+      (js-await (probe-document-start-readiness context ext-id "LOADER_RUN"))
 
       ;; Clear test events before navigation
       (let [popup (js-await (create-popup-page context ext-id))]
@@ -180,6 +198,7 @@
       ;; === PHASE 2: Enable consumer and wait for registration ===
       (js-await (enable-script-via-popup context ext-id "test/ds_chain_consumer.cljs"))
       (js-await (wait-for-registration bg-logs))
+      (js-await (probe-document-start-readiness context ext-id "LOADER_RUN"))
 
       (let [popup (js-await (create-popup-page context ext-id))]
         (js-await (clear-test-events! popup))
@@ -240,6 +259,7 @@
       ;; === PHASE 2: Enable and wait for registration ===
       (js-await (enable-script-via-popup context ext-id "test/ds_bad_consumer.cljs"))
       (js-await (wait-for-registration bg-logs))
+      (js-await (probe-document-start-readiness context ext-id "LOADER_RESOLUTION_ERROR"))
 
       (let [popup (js-await (create-popup-page context ext-id))]
         (js-await (clear-test-events! popup))
