@@ -1025,9 +1025,16 @@
       (when (= bg-utils/sponsor-script-id (:script/id script))
         (dispatch! [[:sponsor/ax.set-pending tab-id]]))
       (try
-        (js-await (bg-inject/ensure-scittle! dispatch! tab-id icon-state))
-        (js-await (bg-inject/execute-scripts! tab-id [script]))
-        {:success true}
+        (let [all-scripts (storage/get-scripts)
+              ext-dep-cache (storage/get-ext-dep-cache)
+              plan (dep-resolver/resolve-execution-plan [script] all-scripts ext-dep-cache)
+              errors (:plan/errors plan)]
+          (when (seq errors)
+            (dispatch! [[:banner/ax.broadcast-resolution-errors errors]
+                        [:runtime/ax.set-tab-errors tab-id errors]]))
+          (js-await (bg-inject/ensure-scittle! dispatch! tab-id icon-state))
+          (js-await (bg-inject/execute-plan! tab-id plan))
+          {:success true})
         (catch :default err
           {:success false :error (.-message err)})))
 
@@ -1054,6 +1061,10 @@
       (bg-inject/send-tab-message tab-id {:type "inject-userscript"
                                           :id (str "userscript-" script-id)
                                           :code code}))
+
+    :msg/fx.trigger-scittle
+    (let [[tab-id] args]
+      (bg-inject/execute-in-page tab-id bg-inject/trigger-scittle-fn))
 
     :msg/fx.log-resolution-error
     (let [[error-envelope] args]

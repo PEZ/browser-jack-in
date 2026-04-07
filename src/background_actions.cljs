@@ -272,6 +272,7 @@
                              [:uf/await :msg/fx.wait-bridge-ready tab-id]]
                             (into vendor-fxs)
                             (into lib-script-fxs)
+                            (conj [:uf/await :msg/fx.trigger-scittle tab-id])
                             (conj [:uf/await :msg/fx.send-response send-response {:success true}])))
         (and (empty? vendor-files) (empty? lib-steps))
         (assoc :uf/fxs [[:msg/fx.send-response send-response {:success true}]])))
@@ -321,8 +322,11 @@
         (seq errors) (assoc :uf/dxs (vec (cons [:banner/ax.broadcast-resolution-errors errors]
                                                (map (fn [e] [:msg/ax.log-resolution-error e]) errors))))
         (or (seq vendor-files) (seq lib-steps))
-        (assoc :uf/fxs (-> (vec vendor-fxs)
+        (assoc :uf/fxs (-> [[:uf/await :msg/fx.inject-bridge tab-id]
+                            [:uf/await :msg/fx.wait-bridge-ready tab-id]]
+                            (into vendor-fxs)
                             (into lib-script-fxs)
+                            (conj [:uf/await :msg/fx.trigger-scittle tab-id])
                             (conj [:uf/await :msg/fx.send-response send-response {:success true}])))
         (and (empty? vendor-files) (empty? lib-steps))
         (assoc :uf/fxs [[:msg/fx.send-response send-response {:success true}]])))
