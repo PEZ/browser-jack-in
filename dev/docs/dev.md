@@ -55,6 +55,10 @@ For experimenting with Scittle code (the runtime used in browser pages), the pro
 
 The Scittle REPL runs in a VS Code webview, providing a browser-like environment for testing Scittle code before deploying to actual web pages.
 
+### Documentation Maintenance
+
+For architecture and behavior drift sweeps, use the [Documentation Ground Truth Sweep Checklist](doc-ground-truth-sweep-checklist.md).
+
 ### Testing
 
 #### Unit Tests
