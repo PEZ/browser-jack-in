@@ -57,11 +57,11 @@ flowchart TB
     Relay["Babashka browser-nrepl<br/>(relay server)"]
     Editor["Editor / AI Agent<br/>(nREPL client)"]
 
-    BG <-->|"ws://localhost:12346"| Relay
-    Editor -->|"nrepl://localhost:12345"| Relay
+    BG <-->|"ws://localhost:<configured-websocket-port>"| Relay
+    Editor -->|"nrepl://localhost:<configured-nrepl-port>"| Relay
 ```
 
-**Note:** Panel evaluates code directly in page context via `chrome.devtools.inspectedWindow.eval` (dotted line), but requests Scittle injection and library requires via the background worker.
+**Note:** Panel evaluates code directly in page context via `chrome.devtools.inspectedWindow.eval` (dotted line), but requests Scittle injection and library requires via the background worker. Relay ports are user-configured, so the diagram uses placeholders instead of one fixed port pair.
 
 ## Navigate
 

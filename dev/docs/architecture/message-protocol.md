@@ -20,8 +20,8 @@ Via `window.postMessage` with source identifiers.
 | `save-script` | `{code, enabled, force, requestId, bulk-id?, bulk-index?, bulk-count?}` | Save script (REPL FS write) |
 | `check-script-exists` | `{name, code}` | Check if script exists (web installer) |
 | `web-installer-save-script` | `{code}` | Save script from whitelisted domain (web installer) |
-| `rename-script` | `{from, to, force, requestId}` | Rename script (REPL FS write) |
-| `delete-script` | `{name, force, requestId, bulk-id?, bulk-index?, bulk-count?}` | Delete script (REPL FS write) |
+| `rename-script` | `{from, to, force?, requestId}` | Rename script (REPL FS write) |
+| `delete-script` | `{name, requestId, bulk-id?, bulk-index?, bulk-count?}` | Delete script (REPL FS write) |
 | `get-sponsored-username` | - | Get configured sponsor username |
 | `get-icon-url` | `{requestId}` | Get extension icon URL (handled locally by bridge) |
 | `log` | `{level, subsystem, messages}` | Log from page context (handled locally by bridge) |
@@ -43,9 +43,9 @@ Via `window.postMessage` with source identifiers.
 | `manifest-response` | `{success, error?}` | Library injection result |
 | `list-scripts-response` | `{success, scripts, requestId}` | Response for `list-scripts` |
 | `get-script-response` | `{success, code?, error?, requestId}` | Response for `get-script` |
-| `save-script-response` | `{success, name?, error?, requestId}` | Response for `save-script` |
-| `rename-script-response` | `{success, error?, requestId}` | Response for `rename-script` |
-| `delete-script-response` | `{success, error?, requestId}` | Response for `delete-script` |
+| `save-script-response` | `{success, requestId, error?, fs/name?, fs/modified?, fs/created?, fs/auto-run-match?, fs/enabled?, fs/description?, fs/run-at?, fs/inject?, fs/unchanged?}` | Response for `save-script` |
+| `rename-script-response` | `{success, requestId, error?, fs/name?, fs/modified?, fs/created?, fs/auto-run-match?, fs/enabled?, fs/description?, fs/run-at?, fs/inject?, fs/from-name?, fs/to-name?}` | Response for `rename-script` |
+| `delete-script-response` | `{success, requestId, error?, fs/name?, fs/modified?, fs/created?, fs/auto-run-match?, fs/enabled?, fs/description?, fs/run-at?, fs/inject?}` | Response for `delete-script` |
 | `get-icon-url-response` | `{url, requestId}` | Response for `get-icon-url` |
 
 ## Content Bridge ↔ Background
@@ -105,8 +105,8 @@ flowchart LR
 | `list-scripts` | `{lsHidden, requestId}` | List scripts (read-only) |
 | `get-script` | `{name, requestId}` | Get script code by name (read-only) |
 | `save-script` | `{code, enabled, force, requestId}` | Save script code (write) |
-| `rename-script` | `{from, to, force, requestId}` | Rename script (write) |
-| `delete-script` | `{name, force, requestId}` | Delete script (write) |
+| `rename-script` | `{from, to, force?, requestId}` | Rename script (write) |
+| `delete-script` | `{name, requestId, bulk-id?, bulk-index?, bulk-count?}` | Delete script (write) |
 
 ### Content Bridge → Page (source: "epupp-bridge")
 
@@ -114,9 +114,9 @@ flowchart LR
 |------|---------|---------|
 | `list-scripts-response` | `{success, scripts, requestId}` | Response for `list-scripts` |
 | `get-script-response` | `{success, code?, error?, requestId}` | Response for `get-script` |
-| `save-script-response` | `{success, name?, error?, requestId}` | Response for `save-script` |
-| `rename-script-response` | `{success, error?, requestId}` | Response for `rename-script` |
-| `delete-script-response` | `{success, error?, requestId}` | Response for `delete-script` |
+| `save-script-response` | `{success, requestId, error?, fs/name?, fs/modified?, fs/created?, fs/auto-run-match?, fs/enabled?, fs/description?, fs/run-at?, fs/inject?, fs/unchanged?}` | Response for `save-script` |
+| `rename-script-response` | `{success, requestId, error?, fs/name?, fs/modified?, fs/created?, fs/auto-run-match?, fs/enabled?, fs/description?, fs/run-at?, fs/inject?, fs/from-name?, fs/to-name?}` | Response for `rename-script` |
+| `delete-script-response` | `{success, requestId, error?, fs/name?, fs/modified?, fs/created?, fs/auto-run-match?, fs/enabled?, fs/description?, fs/run-at?, fs/inject?}` | Response for `delete-script` |
 
 ### Content Bridge → Background
 
@@ -125,16 +125,19 @@ flowchart LR
 | `list-scripts` | `{lsHidden}` | Request list of scripts |
 | `get-script` | `{name}` | Request script code by name |
 | `save-script` | `{code, enabled, force}` | Save script code |
-| `rename-script` | `{from, to, force}` | Rename script |
-| `delete-script` | `{name, force}` | Delete script |
+| `rename-script` | `{from, to, force?}` | Rename script |
+| `delete-script` | `{name, bulk-id?, bulk-index?, bulk-count?}` | Delete script |
 
 ### Background Responses
 
 The background worker replies via `sendResponse` with `{success, ...}` data. Errors
-use `success: false` and an `error` string. All FS operations (reads and writes)
-return an error when FS REPL Sync is not enabled for the requesting tab or the
-tab has no active WebSocket connection. Only one tab can have FS sync enabled at
-a time.
+use `success: false` and an `error` string. Successful write responses forward the
+background's `fs/*` payload unchanged, including `fs/from-name` and `fs/to-name`
+for rename, and `fs/unchanged?` for no-op saves. `rename-script` requests still
+carry a `force` field from `epupp.fs/mv!`, but the background currently ignores it.
+All FS operations (reads and writes) return an error when FS REPL Sync is not
+enabled for the requesting tab or the tab has no active WebSocket connection.
+Only one tab can have FS sync enabled at a time.
 
 ## Popup/Panel → Background
 

@@ -9,6 +9,10 @@ Use this when the docs have started to drift from the code and you want a repeat
 - After changing runtime behavior that the docs describe as current architecture
 - When you find one stale claim and suspect it is not isolated
 
+## Parallelisation
+
+Strive for an audit pass using five parallel subagents. Then follow up with an edit pass with five more parallel subagents.
+
 ## Preparation
 
 1. Start from one concrete stale claim.

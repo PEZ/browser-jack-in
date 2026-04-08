@@ -24,7 +24,7 @@ When either condition is not met, operations return an error:
 
 ```clojure
 (epupp.fs/save! new-code)
-;; => {:fs/success false :fs/error "FS Sync requires an active REPL connection and FS Sync enabled for this tab"}
+;; => {:fs/success false :fs/error "FS Sync requires an active REPL connection and FS Sync enabled in settings"}
 ```
 
 For REPL connection setup, see [REPL](../README.md#repl) in the README.

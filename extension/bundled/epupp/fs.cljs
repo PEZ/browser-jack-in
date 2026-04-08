@@ -1,12 +1,13 @@
 (ns epupp.fs
   "File system operations for managing userscripts from the REPL.
 
-   Write operations (save!, mv!, rm!) require FS REPL Sync to be enabled in settings.
-   Read operations (ls, show) always work.
+   All fs operations require an active REPL connection and FS REPL Sync
+   to be enabled in settings.
 
-   The :fs/force? option enables overwrite behavior (like Unix -f flag):
-   - save! with :fs/force? overwrites existing script with same name
-   - mv! with :fs/force? overwrites target if it exists")
+   The :fs/force? option currently affects save! overwrite behavior:
+   - save! with :fs/force? overwrites an existing script with the same name
+   - mv! forwards :fs/force? in the request payload, but the background rename
+     path still rejects an existing target name")
 
 (defonce ^:private !request-id (atom 0))
 
@@ -109,7 +110,8 @@
   "Save code to Epupp. Parses manifest from code.
    Requires FS REPL Sync to be enabled in settings.
 
-   Returns promise of base script info plus :fs/newly-created? boolean.
+   Returns promise of base script info; no-op saves may also include
+   :fs/unchanged? true.
    Throws on failure.
 
    Opts:
@@ -129,18 +131,18 @@
        ;; Bulk mode - use map-indexed (realized by to-array for Promise.all)
        (let [bulk-id (str (.now js/Date) "-" (.random js/Math))
              results (await (js/Promise.all
-                              (to-array
-                                (map-indexed (^:async fn [idx code]
-                                               (let [msg (await (send-and-receive "save-script" {:code code
-                                                                                                  :enabled enabled
-                                                                                                  :force force?
-                                                                                                  :bulk-id bulk-id
-                                                                                                  :bulk-index idx
-                                                                                                  :bulk-count (count code-or-codes)}
-                                                                                  "save-script-response"))]
-                                                 (ensure-success! msg)
-                                                 [idx (msg->fs-response msg fs-save-keys)]))
-                                            code-or-codes))))]
+                             (to-array
+                              (map-indexed (^:async fn [idx code]
+                                             (let [msg (await (send-and-receive "save-script" {:code code
+                                                                                               :enabled enabled
+                                                                                               :force force?
+                                                                                               :bulk-id bulk-id
+                                                                                               :bulk-index idx
+                                                                                               :bulk-count (count code-or-codes)}
+                                                                                "save-script-response"))]
+                                               (ensure-success! msg)
+                                               [idx (msg->fs-response msg fs-save-keys)]))
+                                           code-or-codes))))]
          (into {} results))
        ;; Single mode
        (let [msg (await (send-and-receive "save-script" {:code code-or-codes :enabled enabled :force force?} "save-script-response"))]
@@ -154,11 +156,13 @@
    Throws on failure.
 
    Opts:
-   - :fs/force? bool - overwrite target if it exists (default: false)
+   - :fs/force? bool - forwarded in the request payload, but the current
+     background rename path ignores it and still rejects an existing target
+     name
 
    Examples:
    (epupp.fs/mv! \"old.cljs\" \"new.cljs\")
-   (epupp.fs/mv! \"old.cljs\" \"existing.cljs\" {:fs/force? true})  ; overwrites"
+   (epupp.fs/mv! \"old.cljs\" \"existing.cljs\" {:fs/force? true})  ; still rejects if target exists"
   ([from-name to-name] (mv! from-name to-name {}))
   ([from-name to-name opts]
    (let [force? (get opts :fs/force?)

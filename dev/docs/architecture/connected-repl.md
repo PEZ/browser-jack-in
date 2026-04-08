@@ -37,7 +37,7 @@ When the user clicks "Connect" in the popup:
     - Inject `vendor/scittle.nrepl.js` or reconnect existing client
    - Poll until WebSocket reaches OPEN state
    - **Inject Epupp API** (`bundled/epupp/*.cljs` via fetch+inject)
-3. **WebSocket Bridge** intercepts `new WebSocket('ws://localhost:PORT/_nrepl')`
+3. **WebSocket Bridge** intercepts WebSocket creations whose URL includes `/_nrepl` (for example `ws://localhost:PORT/_nrepl`)
 4. Messages flow bidirectionally through the relay chain
 
 ## Message Flow: Evaluation

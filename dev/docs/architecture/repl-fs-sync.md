@@ -1,15 +1,4 @@
----
-post_title: "REPL FS Sync Architecture"
-author1: "GitHub Copilot"
-post_slug: "repl-fs-sync-architecture"
-microsoft_alias: "na"
-featured_image: "docs/epupp-screenshot.png"
-categories: ["architecture"]
-tags: ["repl", "fs-sync", "userscripts", "architecture"]
-ai_note: "Written with AI assistance."
-summary: "Architecture and data flow for REPL FS Sync across page API, content bridge, and background worker."
-post_date: "2026-01-18"
----
+# REPL FS Sync Dev Docs
 
 ## Overview
 
@@ -123,7 +112,7 @@ All FS operations (reads and writes) go through the same access gate:
 2. Background checks `fs-access-allowed?` which requires both:
    - FS REPL Sync enabled for the requesting tab (`:fs/sync-tab-id` matches)
    - Active WebSocket connection for the requesting tab
-3. If access denied, return `{success false, error "FS Sync requires an active REPL connection and FS Sync enabled for this tab"}` with the same `requestId`.
+3. If access denied, return `{success false, error "FS Sync requires an active REPL connection and FS Sync enabled in settings"}` with the same `requestId`.
 4. If allowed, execute the operation and return `{success true, ...}`.
 
 UI save operations from panel or popup bypass the gate because they are
