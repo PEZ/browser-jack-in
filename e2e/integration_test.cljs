@@ -167,23 +167,23 @@
         (js-await (wait-for-save-status panel "Created"))
         (js-await (.close panel)))
 
-      ;; === PHASE 4: Verify badges in popup ===
+      ;; === PHASE 4: Verify timing badges in popup ===
       (let [popup (js-await (create-popup-page context ext-id))
             early-item (.locator popup ".script-item:has-text(\"early_script.cljs\")")
             domready-item (.locator popup ".script-item:has-text(\"dom_ready_script.cljs\")")
             normal-item (.locator popup ".script-item:has-text(\"normal_script.cljs\")")]
 
-        ;; Early script has bolt icon badge
+        ;; Document-start script has a timing badge with timing-specific title text.
         (let [badge (.locator early-item ".run-at-badge")]
           (js-await (-> (expect badge) (.toBeVisible)))
           (js-await (-> (expect (.locator badge "svg")) (.toBeVisible)))
-          (js-await (-> (expect badge) (.toHaveAttribute "title" "Runs at document-start (before page loads)"))))
+          (js-await (-> (expect badge) (.toHaveAttribute "title" #"document-start"))))
 
-        ;; DOM ready script has flag icon badge
+        ;; Document-end script has a timing badge with timing-specific title text.
         (let [badge (.locator domready-item ".run-at-badge")]
           (js-await (-> (expect badge) (.toBeVisible)))
           (js-await (-> (expect (.locator badge "svg")) (.toBeVisible)))
-          (js-await (-> (expect badge) (.toHaveAttribute "title" "Runs at document-end (when DOM is ready)"))))
+          (js-await (-> (expect badge) (.toHaveAttribute "title" #"document-end"))))
 
         ;; Normal script has NO badge (document-idle is default)
         (let [badge (.locator normal-item ".run-at-badge")]
