@@ -6,7 +6,10 @@ Changes to Epupp
 
 ## [Unreleased]
 
+## [0.0.16] - 2026-04-08
+
 - Fix: Honor `:force true` with `fs/mv!`
+
 
 ## [0.0.15] - 2026-04-07
 
