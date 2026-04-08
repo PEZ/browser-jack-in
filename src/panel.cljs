@@ -423,7 +423,7 @@
   (case run-at
     "document-start" [:span.run-at-badge {:title "Runs at document-start (before page loads)"}
                       [icons/rocket]]
-    "document-end" [:span.run-at-badge {:title "Runs at document-end (when DOM is ready)"}
+    "document-end" [:span.run-at-badge {:title "Runs with document-end timing (wait explicitly if you need DOM-ready behavior)"}
                     [icons/flag]]
     ;; document-idle (default) - no badge
     nil))
