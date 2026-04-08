@@ -643,24 +643,22 @@
         false)
     (try
       (let [code (.-code message)
-            manifest (manifest-parser/extract-manifest code)
-            raw-name (or (when manifest (aget manifest "raw-script-name"))
-                         (when manifest (aget manifest "script-name")))]
+            {:keys [raw-script-name script-name auto-run-match inject run-at]}
+            (manifest-parser/extract-manifest code)
+            raw-name (or raw-script-name script-name)]
         (if-not raw-name
           (do (send-response #js {:success false :error "No script name in manifest"})
               false)
-          (let [auto-run-match (when manifest (aget manifest "auto-run-match"))
-                injects (when manifest (aget manifest "inject"))
-                run-at (when manifest (aget manifest "run-at"))
-                script-source (.. sender -tab -url)
+          (let [script-source (.. sender -tab -url)
                 script-id (str (.now js/Date))
                 script {:script/id script-id
                         :script/name raw-name
                         :script/code code
-                        :script/match (if (vector? auto-run-match)
-                                        auto-run-match
-                                        [auto-run-match])
-                        :script/inject (or injects [])
+                        :script/match (cond
+                                        (nil? auto-run-match) []
+                                        (vector? auto-run-match) auto-run-match
+                                        :else [auto-run-match])
+                        :script/inject (or inject [])
                         :script/enabled true
                         :script/run-at (or run-at "document-idle")
                         :script/force? true
@@ -1258,13 +1256,11 @@
     (let [[send-response raw-data] args
           {:keys [code enabled force? bulk-id bulk-index bulk-count script-source]} raw-data]
       (try
-        (let [manifest (manifest-parser/extract-manifest code)
-              raw-name (or (when manifest (aget manifest "raw-script-name"))
-                           (when manifest (aget manifest "script-name")))
+        (let [{:keys [raw-script-name script-name auto-run-match inject run-at]}
+              (manifest-parser/extract-manifest code)
+              raw-name (or raw-script-name script-name)
               name-error (script-utils/validate-script-name raw-name)
-              auto-run-match (when manifest (aget manifest "auto-run-match"))
-              injects (when manifest (aget manifest "inject"))
-              run-at (script-utils/normalize-run-at (when manifest (aget manifest "run-at")))]
+              run-at (script-utils/normalize-run-at run-at)]
           (cond
             (nil? raw-name)
             (send-response #js {:success false :error "Missing :epupp/script-name in manifest"})
@@ -1280,8 +1276,11 @@
                   script (cond-> {:script/id script-id
                                   :script/name raw-name
                                   :script/code code
-                                  :script/match (if (vector? auto-run-match) auto-run-match [auto-run-match])
-                                  :script/inject (or injects [])
+                                  :script/match (cond
+                                                  (nil? auto-run-match) []
+                                                  (vector? auto-run-match) auto-run-match
+                                                  :else [auto-run-match])
+                                  :script/inject (or inject [])
                                   :script/enabled enabled
                                   :script/run-at run-at
                                   :script/force? force?}

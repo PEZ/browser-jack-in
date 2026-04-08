@@ -83,18 +83,18 @@
             unknown-keys (->> found-keys
                               (remove #(contains? known-epupp-keys %))
                               vec)]
-        {"script-name" script-name
-         "raw-script-name" raw-script-name
-         "name-normalized?" name-normalized?
-         "auto-run-match" auto-run-match
-         "description" description
-         "run-at" run-at
-         "raw-run-at" raw-run-at
-         "run-at-invalid?" run-at-invalid?
-         "inject" inject-urls
-         "library?" library?
-         "found-keys" found-keys
-         "unknown-keys" unknown-keys}))))
+        {:script-name script-name
+         :raw-script-name raw-script-name
+         :name-normalized? name-normalized?
+         :auto-run-match auto-run-match
+         :description description
+         :run-at run-at
+         :raw-run-at raw-run-at
+         :run-at-invalid? run-at-invalid?
+         :inject inject-urls
+         :library? library?
+         :found-keys found-keys
+         :unknown-keys unknown-keys}))))
 
 (defn update-manifest-script-name
   "Update :epupp/script-name in the manifest section of code, if present.
