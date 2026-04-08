@@ -29,18 +29,6 @@
   [dispatch! tab-id state]
   (js-await (dispatch! [[:icon/ax.set-state tab-id state]])))
 
-(defn get-icon-state
-  "Get current icon state for a tab from icon-states data."
-  [icon-states tab-id]
-  (get icon-states tab-id :disconnected))
-
-(defn clear-icon-state!
-  "Clear icon state for a tab (when tab closes).
-   Does NOT update the toolbar icon - that's handled by onActivated when
-   the user switches to another tab."
-  [dispatch! tab-id]
-  (dispatch! [[:icon/ax.clear tab-id]]))
-
 (defn ^:async prune-icon-states!
   "Remove icon states for tabs that no longer exist.
    Called on service worker wake to prevent memory leaks from orphaned entries

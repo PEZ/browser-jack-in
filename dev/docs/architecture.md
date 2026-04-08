@@ -14,10 +14,11 @@ Connection management includes a three-level auto-connect setting
 tabs, and toolbar icon state derived from connection and injection status.
 
 External dependencies (raw HTTPS URLs from `raw.githubusercontent.com` and
-`gist.githubusercontent.com` in `:epupp/inject`) use a two-phase model:
-resolved and cached on script save, injected from cache at page load. The
-cache lives in `chrome.storage.local` as `extDepCache` and is keyed by URL.
-SHA pinning makes cached content immutable (no eviction needed).
+`gist.githubusercontent.com` in `:epupp/inject`) use a three-path model:
+save flows resolve and cache uncached URLs, manual eval flows are cache-first
+and fetch only on miss, and auto-run/page-load injection executes from cache
+only. The cache lives in `chrome.storage.local` as `extDepCache` and is keyed
+by URL. SHA pinning makes cached content immutable (no eviction needed).
 
 Detailed docs live under [architecture/](architecture/). Use the Navigate table below to jump to the relevant reference.
 

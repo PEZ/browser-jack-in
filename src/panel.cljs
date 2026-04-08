@@ -620,7 +620,7 @@
                  raw-run-at)]
     [:div.save-script-section {:data-e2e-scripts-count (count scripts-list)
                                :data-e2e-editing (boolean original-name)
-                               :data-e2e-conflict (boolean has-name-conflict?)}
+                               :data-e2e-conflict has-name-conflict?}
      [:div.save-script-header
       [:span.header-title (if original-name "Edit Userscript" "Save as Userscript")]
       [new-script-button _state]]

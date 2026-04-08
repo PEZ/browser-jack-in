@@ -19,7 +19,9 @@ operations (reads and writes) require both FS REPL Sync enabled for the
 requesting tab AND an active WebSocket connection for that tab. Enabling FS
 sync on a new tab automatically revokes it from any previously enabled tab.
 UI save operations from the panel or popup bypass the gate because they are
-already trusted UI flows.
+already trusted UI flows. When a save flow includes supported HTTPS external
+dependencies, the background only fetches URLs missing from `extDepCache` and
+reuses cached entries for the rest.
 
 FS sync state is ephemeral - stored in memory as `:fs/sync-tab-id`, not
 persisted to `chrome.storage`. Service worker restarts reset it. WebSocket
@@ -144,9 +146,10 @@ Flow summary:
 5. `bg-fs-dispatch` executes effects in order, persists storage, and sends the
    response back to the content bridge.
 
-This keeps validation deterministic and testable. The Uniflow pattern is
-currently scoped to FS operations in the background worker. Other background
-paths still use direct imperative flows.
+This keeps validation deterministic and testable. The same background
+Uniflow machinery also handles navigation decisions, connection and
+WebSocket lifecycle, icon/runtime status, and external dependency cache
+orchestration.
 
 ## UI Reactivity and Badge Updates
 

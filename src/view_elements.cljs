@@ -171,32 +171,6 @@
             :disabled disabled?}
    [icon {:size 16}]])
 
-(defn status-indicator
-  "Status indicator with left border accent.
-   Options (namespaced under :status/):
-   - :type - :success, :error, :warning, :info (determines border color)
-   - :class - additional CSS classes
-
-   Note: In Squint, keywords are strings so :success becomes \"success\""
-  [{:status/keys [type class]} & children]
-  ;; In Squint, keywords are strings, so (str \"status-bar--\" :success) works
-  (let [type-class (when type (str "status-bar--" type))]
-    (into [:div {:class (str "status-bar " type-class (when class (str " " class)))}]
-          children)))
-
-(defn status-text
-  "Inline status text with semantic coloring.
-   Options (namespaced under :status/):
-   - :type - :success, :error (determines text color)
-   - :class - additional CSS classes
-
-   Note: In Squint, keywords are strings so :success becomes \"success\""
-  [{:status/keys [type class]} text]
-  ;; In Squint, keywords are strings, so (str \"status-text--\" :success) works
-  (let [type-class (when type (str "status-text--" type))]
-    [:span {:class (str "status-text " type-class (when class (str " " class)))}
-     text]))
-
 (defn empty-state
   "Empty state placeholder with centered content.
    Options (namespaced under :empty/):

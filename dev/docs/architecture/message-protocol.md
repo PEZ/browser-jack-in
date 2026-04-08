@@ -58,7 +58,7 @@ Via `chrome.runtime.sendMessage` / `chrome.tabs.sendMessage`.
 |------|---------|---------|
 | `ws-connect` | `{port}` | Create WebSocket for tab |
 | `ws-send` | `{data}` | Send through tab's WebSocket |
-| `ping` | - | Keepalive (every 5s) |
+| `ping` | - | Keepalive (every 25s) |
 | `load-manifest` | `{manifest}` | Forward library injection request |
 | `check-script-exists` | `{name, code}` | Check script existence (web installer) |
 | `web-installer-save-script` | `{code}` | Save script from whitelisted domain |

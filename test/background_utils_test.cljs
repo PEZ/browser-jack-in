@@ -6,28 +6,6 @@
 ;; Test Functions
 ;; ============================================================
 
-;; any-tab-connected?
-
-(defn- test-any-tab-connected-returns-false-for-empty-state []
-  (-> (expect (bg/any-tab-connected? {}))
-      (.toBe false)))
-
-(defn- test-any-tab-connected-returns-false-when-no-tabs-connected []
-  (-> (expect (bg/any-tab-connected? {1 "disconnected" 2 "disconnected"}))
-      (.toBe false)))
-
-(defn- test-any-tab-connected-returns-true-when-one-tab-connected []
-  (-> (expect (bg/any-tab-connected? {1 "disconnected" 2 "connected"}))
-      (.toBe true)))
-
-(defn- test-any-tab-connected-returns-true-when-multiple-tabs-connected []
-  (-> (expect (bg/any-tab-connected? {1 "connected" 2 "connected"}))
-      (.toBe true)))
-
-(defn- test-any-tab-connected-returns-true-when-only-tab-connected []
-  (-> (expect (bg/any-tab-connected? {1 "connected"}))
-      (.toBe true)))
-
 ;; compute-display-icon-state - no tabs connected
 
 (defn- test-compute-display-icon-returns-disconnected-for-empty-state []
@@ -89,36 +67,6 @@
 (defn- test-get-icon-paths-returns-disconnected-paths-for-unknown-state []
   (let [paths (bg/get-icon-paths "unknown")]
     (-> (expect (aget paths "16")) (.toBe "icons/icon-disconnected-16.png"))))
-
-;; url-origin-allowed?
-
-(defn- test-url-origin-allowed-returns-true-for-url-starting-with-allowed-origin []
-  (let [allowed ["https://gist.githubusercontent.com/"
-                 "https://raw.githubusercontent.com/"]]
-    (-> (expect (bg/url-origin-allowed? "https://gist.githubusercontent.com/foo/bar" allowed))
-        (.toBe true))))
-
-(defn- test-url-origin-allowed-returns-true-for-another-allowed-origin []
-  (let [allowed ["https://gist.githubusercontent.com/"
-                 "https://raw.githubusercontent.com/"]]
-    (-> (expect (bg/url-origin-allowed? "https://raw.githubusercontent.com/user/repo/main/script.cljs" allowed))
-        (.toBe true))))
-
-(defn- test-url-origin-allowed-returns-false-for-url-not-starting-with-allowed-origin []
-  (let [allowed ["https://gist.githubusercontent.com/"
-                 "https://raw.githubusercontent.com/"]]
-    (-> (expect (bg/url-origin-allowed? "https://example.com/script.cljs" allowed))
-        (.toBe false))))
-
-(defn- test-url-origin-allowed-returns-false-for-similar-but-not-matching-origin []
-  (let [allowed ["https://gist.githubusercontent.com/"
-                 "https://raw.githubusercontent.com/"]]
-    (-> (expect (bg/url-origin-allowed? "https://gist.github.com/foo" allowed))
-        (.toBe false))))
-
-(defn- test-url-origin-allowed-returns-false-for-empty-allowed-list []
-  (-> (expect (bg/url-origin-allowed? "https://gist.githubusercontent.com/foo" []))
-      (.toBe false)))
 
 ;; find-tab-on-port
 
@@ -240,14 +188,6 @@
 ;; Test Registration
 ;; ============================================================
 
-(describe "any-tab-connected?"
-          (fn []
-            (test "returns false for empty state" test-any-tab-connected-returns-false-for-empty-state)
-            (test "returns false when no tabs are connected" test-any-tab-connected-returns-false-when-no-tabs-connected)
-            (test "returns true when one tab is connected" test-any-tab-connected-returns-true-when-one-tab-connected)
-            (test "returns true when multiple tabs are connected" test-any-tab-connected-returns-true-when-multiple-tabs-connected)
-            (test "returns true when only tab is connected" test-any-tab-connected-returns-true-when-only-tab-connected)))
-
 (describe "compute-display-icon-state - no tabs connected"
           (fn []
             (test "returns disconnected for empty state" test-compute-display-icon-returns-disconnected-for-empty-state)
@@ -270,14 +210,6 @@
             (test "returns disconnected paths for 'disconnected' string" test-get-icon-paths-returns-disconnected-paths-for-disconnected-string)
             (test "returns disconnected paths for nil" test-get-icon-paths-returns-disconnected-paths-for-nil)
             (test "returns disconnected paths for unknown state" test-get-icon-paths-returns-disconnected-paths-for-unknown-state)))
-
-(describe "url-origin-allowed?"
-          (fn []
-            (test "returns true for URL starting with allowed origin" test-url-origin-allowed-returns-true-for-url-starting-with-allowed-origin)
-            (test "returns true for another allowed origin" test-url-origin-allowed-returns-true-for-another-allowed-origin)
-            (test "returns false for URL not starting with any allowed origin" test-url-origin-allowed-returns-false-for-url-not-starting-with-allowed-origin)
-            (test "returns false for similar but not matching origin" test-url-origin-allowed-returns-false-for-similar-but-not-matching-origin)
-            (test "returns false for empty allowed list" test-url-origin-allowed-returns-false-for-empty-allowed-list)))
 
 (describe "find-tab-on-port"
           (fn []

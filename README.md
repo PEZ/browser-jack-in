@@ -13,7 +13,7 @@ A web browser extension that lets you tamper with web pages, live and/or with us
 Epupp has two modes of operation:
 
 1. **Live REPL connection from your editor to the web page**, letting you inspect and modify the page on the fly, with or without the assistance of an AI agent.
-2. **Userscripts**: [Tampermonkey](https://www.tampermonkey.net) style. Target all websites, or any subset of the web's pages, with prepared scripts that modify or query information from the page. Userscripts can be configured to start before the page loads (`document-start`), when the DOM is ready but resources are still loading (`document-end`), or after everything has settled (`document-idle`).
+2. **Userscripts**: [Tampermonkey](https://www.tampermonkey.net) style. Target all websites, or any subset of the web's pages, with prepared scripts that modify or query information from the page. Userscripts can be configured to start before the page loads (`document-start`), through the early loader (`document-end` - wait explicitly if your script needs DOM-ready behavior), or after everything has settled (`document-idle`).
 
 The two form a powerful pair. The live REPL connection, while happily supporting one-off changes or data extractions, is also a very efficient and fun means to interactively develop userscripts.
 
@@ -176,7 +176,7 @@ The popup has the following sections:
    * **Auto-run for this page**. Scripts that has an `:epupp/auto-run-match` pattern than matches the current page.
    * *Auto-run not matching this page*. Scripts that auto-runs on some other pages, but not the current one.
    * **Special**. Built-in scripts that has some special way of being triggered to start. (Currently only the **Web Userscript Installer**)
-3. **Settings**. Click the gear icon.
+3. **Settings**. Open the **Settings** section in the popup.
 
 #### Script Management
 
@@ -201,7 +201,7 @@ Built-in scripts are readable but not editable in place. Inspect one, copy it, r
 
 **Diagnostics logging** adds noisy logs for when things are weird.
 
-**Export / Import** is for backups and moving scripts/settings between browser profiles or machines.
+**Export / Import** is for backups and moving scripts between browser profiles or machines. It does not include general extension settings.
 
 ### Panel
 
@@ -294,10 +294,10 @@ Scripts can also be managed programmatically via the [FS API](docs/repl-fs-sync.
 Scripts can run at different points during page load:
 
 - `"document-idle"` (default) - After the page has fully loaded.
-- `"document-end"` - At DOMContentLoaded. DOM exists but images/iframes may still be loading.
+- `"document-end"` - Routed through the early loader at `document-start`. If your script needs DOM-ready behavior, wait explicitly.
 - `"document-start"` - Before any page JavaScript. `document.body` does not exist yet.
 
-If your script is using `document-start`, you need to wait for the DOM if your code needs it:
+If your script is using `document-start` or `document-end`, you need to wait for the DOM if your code needs it:
 
 ```clojure
 {:epupp/script-name "early_intercept.cljs"
@@ -392,7 +392,7 @@ From a live REPL session, you can load libraries at runtime with `epupp.repl/man
 (pprint/pprint {:some "data"})
 ```
 
-Safe to call multiple times - already-loaded libraries are skipped.
+Safe to call multiple times with the same dependency set.
 
 ### External Dependencies
 

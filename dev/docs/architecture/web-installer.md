@@ -13,7 +13,7 @@ flowchart LR
     subgraph Background ["Background Worker"]
         NAV["Navigation event"] --> GATE["should-scan-for-installer?"]
         GATE --> SCAN["scan-for-userscripts-fn\n(ISOLATED world)"]
-        SCAN --> INJ["inject-installer!\n(Scittle + script)"]
+        SCAN --> INJ["maybe-inject-installer!\n(ensure Scittle + execute plan)"]
     end
     subgraph Page ["Page Context (Scittle)"]
         INJ --> INIT["init!"]
@@ -57,8 +57,8 @@ A plain JavaScript function executed via `chrome.scripting.executeScript` in the
 1. GitHub gist tables (`table.js-file-line-container`)
 2. GitHub repo file view (`.react-code-lines`)
 3. GitLab snippets (`.file-holder pre`)
-4. Generic `<pre>` (excluding `.file-holder`, `.CodeMirror`)
-5. `<textarea>` (excluding `.js-code-editor`)
+4. Generic `<pre>`
+5. `<textarea>`
 
 Returns `true` on first match, or `false` after checking all formats.
 
@@ -68,7 +68,7 @@ The background scanner retries with bounded delays. This handles lazy-loaded DOM
 
 ### Injection
 
-When manifests are found, `inject-installer!` in `bg_inject.cljs` ensures Scittle is loaded and then injects the installer script via the standard `execute-scripts!` pipeline. The installer depends on Replicant (`scittle://replicant.js`) for UI rendering.
+When manifests are found, `maybe-inject-installer!` in `background.cljs` ensures Scittle is loaded, resolves an execution plan for the installer script, and runs it via `bg-inject/execute-plan!`. That orchestration uses `bg-inject/ensure-scittle!` and `dep-resolver/resolve-execution-plan`. The installer depends on Replicant (`scittle://replicant.js`) for UI rendering.
 
 ### Tab Tracking
 
@@ -238,7 +238,7 @@ See [security.md](security.md) for the full trust boundary model.
 |------|------|
 | `src/background.cljs` | `maybe-inject-installer!`, navigation handlers |
 | `src/background_utils.cljs` | `should-scan-for-installer?`, origin whitelist, scan delays |
-| `src/bg_inject.cljs` | `scan-for-userscripts-fn`, `inject-installer!` |
+| `src/bg_inject.cljs` | Installer scan and injection primitives: `scan-for-userscripts-fn`, `execute-in-isolated`, `ensure-scittle!`, `execute-plan!` |
 | `extension/userscripts/epupp/web_userscript_installer.cljs` | Page-side installer (Scittle) |
 | `src/storage.cljs` | Builtin registration, `base-builtins` |
 | `src/popup.cljs` | Special script checkbox rendering |

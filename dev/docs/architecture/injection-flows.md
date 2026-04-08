@@ -26,12 +26,14 @@ See [connected-repl.md](connected-repl.md) for full details including message fl
 ### Userscript Auto-Injection (on Navigation)
 
 1. `webNavigation.onCompleted` fires (main frame only)
-2. `handle-navigation!` waits for storage initialization
-3. `process-navigation!` gets matching enabled scripts
-4. Filters to `document-idle` scripts only
-5. Resolve dependencies via `dep_resolver` (handles mixed `scittle://` + `epupp://` + HTTPS ext-dep graphs, topological ordering, dedup, cycle detection)
-6. `ensure-scittle!` → `execute-plan!`
-7. `execute-plan!` flow:
+2. The listener dispatches `:nav/ax.handle-navigation` with `tabId` and URL
+3. `:nav/ax.handle-navigation` clears tab runtime state, refreshes icon/status, and gathers auto-connect context
+4. `:nav/ax.decide-connection` optionally reconnects, then queues `process-navigation!`
+5. `process-navigation!` gets matching enabled scripts
+6. Filters to `document-idle` scripts only
+7. Resolve dependencies via `dep_resolver` (handles mixed `scittle://` + `epupp://` + HTTPS ext-dep graphs, topological ordering, dedup, cycle detection)
+8. `ensure-scittle!` → `execute-plan!`
+9. `execute-plan!` flow:
    - Inject content bridge
    - Wait for bridge ready (ping/pong)
    - Send `clear-userscripts` message
@@ -39,8 +41,8 @@ See [connected-repl.md](connected-repl.md) for full details including message fl
    - Inject `epupp://` library scripts (in dependency order)
     - Inject HTTPS external dependency scripts from cache (in dependency order)
    - Send `inject-userscript` for each root script
-   - Send `inject-script` for `trigger-scittle.js`
-8. Surface any resolution errors (missing libraries, cycles) in console, system banner, and per-script warning indicator
+    - Call `execute-in-page` with `trigger-scittle-fn`
+10. Surface any resolution errors (missing libraries, cycles) in console, system banner, and per-script warning indicator
 
 ### Panel Evaluation (from DevTools)
 
@@ -136,14 +138,14 @@ At page load, the dependency resolver treats supported HTTPS URLs as `:ext-dep` 
 
 ## Content Script Registration
 
-Scripts with early timing (`document-start` or `document-end`) use a different injection path than the default `document-idle` scripts. This enables userscripts to run before page scripts execute.
+Scripts with early timing (`document-start` or `document-end`) use a different injection path than the default `document-idle` scripts. Both timings currently share the registered early loader at `document_start`; scripts that need DOM-ready semantics must wait explicitly.
 
 ### Injection Timing Options
 
 | Value | Description | Injection Path |
 |-------|-------------|----------------|
 | `document-start` | Before page scripts run | `registerContentScripts` + loader |
-| `document-end` | At DOMContentLoaded | `registerContentScripts` + loader |
+| `document-end` | Also routed through the early loader at `document_start`; wait explicitly if DOM-ready semantics are needed | `registerContentScripts` + loader |
 | `document-idle` | After page load (default) | `webNavigation.onCompleted` |
 
 Scripts specify timing via the `:epupp/run-at` annotation in code, parsed by `manifest_parser.cljs`.
@@ -173,7 +175,7 @@ flowchart TD
 
 ### Userscript Loader Flow
 
-The loader (`src/userscript_loader.cljs`, compiled through Squint to `extension/userscript-loader.mjs` then bundled to `build/userscript-loader.js`) runs in ISOLATED world at document-start:
+The loader (`src/userscript_loader.cljs`, compiled through Squint to `extension/userscript_loader.mjs` then bundled to `build/userscript-loader.js`) runs in ISOLATED world at document-start:
 
 1. Guard against multiple injections (`window.__epuppLoaderInjected`)
 2. Read all scripts from `chrome.storage.local`
@@ -213,6 +215,6 @@ sequenceDiagram
 |--------|---------|--------------|--------|------|
 | `document-idle` | `webNavigation.onCompleted` | No | No | Background orchestrates via content bridge |
 | `document-start` | Chrome content script | Yes | Yes | Runs before page scripts |
-| `document-end` | Chrome content script | Yes | Yes | Runs at DOMContentLoaded |
+| `document-end` | Chrome content script | Yes | Yes | Also routed via `document_start`; wait explicitly for DOM-ready if needed |
 
 Early scripts bypass the background worker's injection orchestration entirely - the loader handles everything.

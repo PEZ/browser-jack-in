@@ -62,14 +62,6 @@
                                         resolve)))))))]
       (swap! !write-queue (fn [prev] (.then prev write-fn))))))
 
-(defn ^:async clear-test-events!
-  "Clear all test events. Call at start of each test."
-  []
-  (js-await
-   (js/Promise.
-    (fn [resolve]
-      (.set js/chrome.storage.local #js {:test-events #js []} resolve)))))
-
 (defn ^:async get-test-events
   "Retrieve all test events from storage."
   []

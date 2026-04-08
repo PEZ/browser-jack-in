@@ -56,29 +56,6 @@
       test-has-host-permission-returns-true-when-api-unavailable)))
 
 ;; ============================================================
-;; has-all-urls-permission? Tests
-;; ============================================================
-
-(defn- test-has-all-urls-returns-true-when-granted []
-  (setup-permissions-mock! {:contains-result true})
-  (-> (permissions/has-all-urls-permission?)
-      (.then (fn [result]
-               (-> (expect result) (.toBe true))))))
-
-(defn- test-has-all-urls-returns-false-when-not-granted []
-  (setup-permissions-mock! {:contains-result false})
-  (-> (permissions/has-all-urls-permission?)
-      (.then (fn [result]
-               (-> (expect result) (.toBe false))))))
-
-(describe "has-all-urls-permission?"
-  (fn []
-    (test "returns true when granted"
-      test-has-all-urls-returns-true-when-granted)
-    (test "returns false when not granted"
-      test-has-all-urls-returns-false-when-not-granted)))
-
-;; ============================================================
 ;; request-host-permission! Tests
 ;; ============================================================
 

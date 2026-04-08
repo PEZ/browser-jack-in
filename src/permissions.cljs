@@ -19,20 +19,6 @@
          ;; If permissions API is unavailable, assume granted (Chrome behavior)
          (resolve true))))))
 
-(defn ^:async has-all-urls-permission?
-  "Check if extension has the <all_urls> permission.
-   Returns a promise resolving to boolean."
-  []
-  (js/Promise.
-   (fn [resolve]
-     (try
-       (js/chrome.permissions.contains
-        #js {:origins #js ["<all_urls>"]}
-        (fn [result]
-          (resolve (boolean result))))
-       (catch :default _
-         (resolve true))))))
-
 (defn ^:async request-host-permission!
   "Request the <all_urls> host permission from the user.
    Must be called from a user gesture context (e.g. popup button click).

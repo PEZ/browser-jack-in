@@ -6,32 +6,6 @@
 ;; Test Functions
 ;; ============================================================
 
-;; status-class tests
-
-(defn- test-returns-nil-for-nil-status []
-  (-> (expect (popup-utils/status-class nil))
-      (.toBeUndefined)))
-
-(defn- test-returns-failed-class-for-failed-prefix []
-  (-> (expect (popup-utils/status-class "Failed: connection error"))
-      (.toBe "status status-failed")))
-
-(defn- test-returns-failed-class-for-error-prefix []
-  (-> (expect (popup-utils/status-class "Error: timeout"))
-      (.toBe "status status-failed")))
-
-(defn- test-returns-pending-class-for-status-ending-with-ellipsis []
-  (-> (expect (popup-utils/status-class "Connecting..."))
-      (.toBe "status status-pending")))
-
-(defn- test-returns-pending-class-for-not-connected-status []
-  (-> (expect (popup-utils/status-class "REPL not connected yet"))
-      (.toBe "status status-pending")))
-
-(defn- test-returns-base-status-class-for-success-status []
-  (-> (expect (popup-utils/status-class "Connected to ws://localhost:1340"))
-      (.toBe "status")))
-
 ;; generate-server-cmd tests
 
 (defn- test-generates-command-with-custom-ports []
@@ -169,14 +143,6 @@
 ;; Test Registration
 ;; ============================================================
 
-(describe "status-class"
-          (fn []
-            (test "returns nil for nil status" test-returns-nil-for-nil-status)
-            (test "returns failed class for Failed prefix" test-returns-failed-class-for-failed-prefix)
-            (test "returns failed class for Error prefix" test-returns-failed-class-for-error-prefix)
-            (test "returns pending class for status ending with ellipsis" test-returns-pending-class-for-status-ending-with-ellipsis)
-            (test "returns pending class for not connected status" test-returns-pending-class-for-not-connected-status)
-            (test "returns base status class for success status" test-returns-base-status-class-for-success-status)))
 
 ;; ============================================================
 ;; generate-server-cmd tests

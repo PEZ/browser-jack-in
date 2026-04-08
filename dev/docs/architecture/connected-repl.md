@@ -68,11 +68,11 @@ At connect time, Epupp injects its API namespaces from bundled Scittle source fi
 | File | Namespace | Purpose |
 |------|-----------|--------|
 | `bundled/epupp/repl.cljs` | `epupp.repl` | REPL utilities including `manifest!` for library loading |
-| `bundled/epupp/fs.cljs` | `epupp.fs` | File system operations: `cat`, `ls`, `save!`, `mv!`, `rm!` |
+| `bundled/epupp/fs.cljs` | `epupp.fs` | File system operations: `show`, `ls`, `save!`, `mv!`, `rm!` |
 
 The injection uses the same pattern as userscripts: background fetches file content via `chrome.runtime.getURL`, sends it to the content bridge via `inject-userscript` message (creating inline `<script type="application/x-scittle">` tags), and triggers Scittle evaluation.
 
-`epupp.repl/manifest!` accepts a map with `:epupp/inject` and routes it through the same dependency resolution path used by popup quick-run, panel eval, and auto-run. The vector can contain mixed `scittle://`, `epupp://`, and supported pinned HTTPS external dependency URLs. For supported HTTPS URLs this manual path is cache-first: cached entries are reused immediately, missing URLs are fetched and persisted, and resolution only continues after that stage succeeds. See the [user guide](../../../docs/user-guide.md) for usage examples.
+`epupp.repl/manifest!` accepts a map with `:epupp/inject` and routes it through the same dependency resolution path used by popup quick-run, panel eval, and auto-run. The vector can contain mixed `scittle://`, `epupp://`, and supported pinned HTTPS external dependency URLs. For supported HTTPS URLs this manual path is cache-first: cached entries are reused immediately, missing URLs are fetched and persisted, and resolution only continues after that stage succeeds. See the [README](../../../README.md#runtime-library-loading) for usage examples.
 
 ### Library Loading Flow
 
@@ -108,12 +108,10 @@ This allows Scittle's nREPL client to "connect" to the relay server even though:
 
 ## Auto-Connect
 
-When enabled, Epupp automatically connects the REPL on navigation:
-1. `webNavigation.onCompleted` fires
-2. Background checks auto-connect settings
-3. If auto-connect is enabled, it connects every eligible tab
-4. Otherwise, if reconnect-on-navigation is enabled and the tab was previously
-    connected, it reconnects using the saved port
+Epupp makes a trigger-aware connection decision:
+1. On `webNavigation.onCompleted`, `all-pages` and `all-tabs` auto-connect using the saved or default port for that page.
+2. If auto-connect is `off`, reconnect-on-navigation can reconnect tabs that were previously connected, using that tab's history port.
+3. When a tab becomes visible again, only `all-tabs` auto-connects, reusing the history port when available and otherwise the saved or default port.
 
 ## Connection Tracking
 

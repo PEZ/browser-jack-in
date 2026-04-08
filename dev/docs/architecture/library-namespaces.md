@@ -13,7 +13,7 @@ Four dependency styles are supported in `:epupp/inject`:
 | `https://` | `https://raw.githubusercontent.com/user/repo/SHA/path.cljs` | External dependency from a trusted GitHub raw host, resolved from `extDepCache` |
 | `https://` | `https://gist.githubusercontent.com/user/ID/raw/SHA/file.cljs` | GitHub gist file from a trusted raw host, resolved from `extDepCache` |
 
-Unknown protocols are passed through without resolution (future-proofing).
+Only supported protocols participate in dependency resolution. Unsupported or unknown inject URLs are classified as `:unknown` and ignored - they do not become execution-plan steps.
 
 External dependencies require a full 40-character SHA (no branch/tag references). Saved scripts still prefetch uncached external dependencies. Manual library-loading entry points are cache-first: they reuse cached URLs immediately and fetch only missing supported HTTPS URLs before continuing. Auto-run and page-load injection resolve from `extDepCache` only. See [injection-flows.md](injection-flows.md#external-dependency-resolution) for the full flow.
 
@@ -31,7 +31,11 @@ So `epupp://My Utils.cljs`, `epupp://my-utils`, and `epupp://my_utils.cljs` all 
 
 ## Library Identity
 
-Library-ness is **emergent, not stored**. Any script becomes a library when another script references it. There is no `:script/library?` flag, no special storage field, no distinction in the script data contract. This keeps the storage model simple and avoids synchronization issues.
+Any script can be resolved as an `epupp://` dependency if its normalized name exists in the script catalog. The resolver does not require a dedicated library-only storage class.
+
+Separately, parsed script maps do carry derived library metadata. `script_utils.cljs` derives `:script/library?` from the manifest's `:epupp/library?` key, and UI helpers such as `script-utils/library-script?` and the popup Libraries section use that flag for grouping and presentation.
+
+That flag is runtime metadata on parsed script maps, not a separate storage column written by `script->js`. It is re-derived from the manifest when scripts are loaded.
 
 ### Disabled scripts are valid library targets
 
@@ -68,42 +72,42 @@ The resolver produces an ordered plan of injection steps:
 ```clojure
 {:plan/steps
  [{:step/type :vendor-file           ; :vendor-file | :library-script | :ext-dep-script | :root-script
-   :step/id   "scittle.reagent.js"
-   :step/file "scittle.reagent.js"}
+   :step/path "vendor/scittle.reagent.js"
+   :step/source :scittle}
   {:step/type :library-script
    :step/id   "script-abc-123"
    :step/name "utils/dom.cljs"
-   :step/code "..."}
+   :step/code "..."
+   :step/source :epupp}
   {:step/type :ext-dep-script
-   :step/id   "https://raw.githubusercontent.com/user/repo/SHA/helpers.cljs"
-   :step/name "https://raw.githubusercontent.com/user/repo/SHA/helpers.cljs"
-   :step/code "..."}
+   :step/url  "https://raw.githubusercontent.com/user/repo/SHA/helpers.cljs"
+   :step/code "..."
+   :step/source :ext}
   {:step/type :root-script
    :step/id   "script-xyz-789"
    :step/name "my/tweaks.cljs"
-   :step/code "..."}]
- :plan/roots ["script-xyz-789"]
+   :step/code "..."
+   :step/source :epupp}]
  :plan/vendor-namespaces ["reagent.core"]
  :plan/errors []}
 ```
 
-Steps are ordered: vendor files first, then library scripts and external dependency scripts in dependency order, then root scripts. Each file and script appears at most once (deduplicated).
+Steps are ordered: vendor files first, then library scripts and external dependency scripts in dependency order, then root scripts. Vendor steps carry `:step/path`; external dependency steps carry `:step/url` and `:step/code`; script steps carry `:step/id`, `:step/name`, and `:step/code`. Each file, URL, and script appears at most once (deduplicated). Roots are represented by `:step/type :root-script` entries inside `:plan/steps`; there is no separate `:plan/roots` collection.
 
-### Runtime Error Envelope
+### Resolution Error Envelope
 
-Resolution failures produce structured error envelopes:
+Resolution failures produce structured error maps. Resolver-produced errors use this envelope:
 
 ```clojure
 {:error/type   :library/not-found|:library/cycle|:library/self-reference|:ext-dep/cache-miss|:ext-dep/fetch-failed|:ext-dep/cycle
- :error/phase  :resolve|:inject|:verify
- :error/surface :idle|:panel|:load-manifest|:early-loader
- :script/id    "script-xyz-789"
- :script/name  "my/tweaks.cljs"
- :dep/raw      "epupp://missing.cljs"
- :dep/chain    ["my/tweaks.cljs" "utils/dom.cljs" "missing.cljs"]
- :tab/id       42
+ :error/phase  :resolve
+ :error/script-name "my/tweaks.cljs"
+ :error/dep-raw "epupp://missing.cljs"
+ :error/dep-chain ["my/tweaks.cljs" "utils/dom.cljs" "missing.cljs"]
  :error/message "Library not found: missing.cljs (required by utils/dom.cljs, required by my/tweaks.cljs)"}
 ```
+
+Fetch-stage external dependency errors follow the same `:error/*` naming pattern, but may omit script-specific keys such as `:error/script-name` and `:error/dep-chain` when the failing URL has not yet been attached to a consumer script.
 
 ### Failure Status
 
@@ -144,7 +148,7 @@ All four execution paths use the resolver:
 |------|---------|------------|
 | Auto-run (`document-idle`) | `webNavigation.onCompleted` | Background resolves before injection |
 | Early timing (`document-start`/`end`) | Content script registration | Loader resolves from storage at injection time |
-| Panel "Run" button | Popup sends `evaluate-script` | Background resolves before injection |
+| Panel evaluation | DevTools panel sends `inject-libs` and `ensure-scittle` as needed | Background resolves and executes a synthetic deps-only plan; the panel then evaluates code via `chrome.devtools.inspectedWindow.eval` |
 | REPL `load-manifest` | nREPL eval of `epupp.repl/manifest!` | Background resolves before injection |
 
 ### Error Surfacing

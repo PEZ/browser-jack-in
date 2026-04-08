@@ -77,25 +77,6 @@
   [inject-urls]
   (filterv valid-ext-dep-url? inject-urls))
 
-(defn normalize-gist-raw-url
-  "Normalize a gist.github.com raw URL into a validated gist.githubusercontent.com URL.
-   Returns nil when the input cannot be normalized into a valid pinned ext-dep URL."
-  [url]
-  (when-let [{:keys [host path-segments]} (parse-url-parts url)]
-    (when (and (= host "gist.github.com")
-               (>= (count path-segments) 5)
-               (= "raw" (nth path-segments 2)))
-      (let [[owner gist-id _ sha & file-path] path-segments
-            candidate (str "https://gist.githubusercontent.com/"
-                           owner "/"
-                           gist-id
-                           "/raw/"
-                           sha
-                           "/"
-                           (string/join "/" file-path))]
-        (when (valid-ext-dep-url? candidate)
-          candidate)))))
-
 (defn build-pinned-repo-raw-url
   "Build a validated raw.githubusercontent.com URL from extracted repo metadata.
    Expects {:owner :repo :sha :path}. Returns nil when the candidate is invalid."

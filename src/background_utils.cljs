@@ -2,12 +2,6 @@
   "Pure utility functions for background service worker.
    Extracted for testability - these have no side effects.")
 
-(defn any-tab-connected?
-  "Check if any tab has an active REPL connection.
-   Pure function - takes icon-states map directly."
-  [icon-states]
-  (boolean (some #(= % "connected") (vals icon-states))))
-
 (defn compute-display-icon-state
   "Compute icon state to display for the active tab.
    Shows connected (gold) only when the active tab has a REPL connection.
@@ -31,14 +25,6 @@
          :32 (str "icons/icon-" suffix "-32.png")
          :48 (str "icons/icon-" suffix "-48.png")
          :128 (str "icons/icon-" suffix "-128.png")}))
-
-
-
-(defn url-origin-allowed?
-  "Check if a URL starts with any allowed origin prefix.
-   Pure function - takes url and list of allowed origins."
-  [url allowed-origins]
-  (boolean (some #(.startsWith url %) allowed-origins)))
 
 (defn find-tab-on-port
   "Find the first tab-id connected to a given port, excluding exclude-tab-id.

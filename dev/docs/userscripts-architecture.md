@@ -336,8 +336,8 @@ For scripts loaded from files or shared, support TamperMonkey-style header comme
 
 ### Multi-Tab REPL
 
-- Current: One REPL connection at a time
-- Future: Multiple tabs connected, switch context in editor
+- Current: Multiple tabs can stay connected at once when they use distinct relay port pairs; a new connection only evicts an existing tab when both claim the same port.
+- Future: Easier context switching in the editor across connected tabs
 
 ### Sync Support
 

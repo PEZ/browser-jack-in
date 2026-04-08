@@ -232,14 +232,3 @@
      {:plan/steps (vec (concat vendor-steps non-root-steps root-steps))
       :plan/vendor-namespaces vendor-namespaces
       :plan/errors all-errors})))
-
-(defn plan-vendor-files
-  "Extract vendor file paths from plan steps."
-  [plan]
-  (mapv :step/path (filterv #(= :vendor-file (:step/type %)) (:plan/steps plan))))
-
-(defn plan-script-steps
-  "Extract library, ext-dep, and root script steps from plan (in order)."
-  [plan]
-  (filterv #(contains? #{:library-script :ext-dep-script :root-script} (:step/type %))
-           (:plan/steps plan)))
