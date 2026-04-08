@@ -875,23 +875,23 @@
     (-> (expect (:scriptable? result)) (.toBe true))))
 
 (describe "check-page-scriptability"
-  (fn []
-    (test "nil URL is not scriptable" test-scriptability-nil-url)
-    (test "empty URL is not scriptable" test-scriptability-empty-url)
-    (test "normal HTTPS URL is scriptable" test-scriptability-normal-https-url)
-    (test "chrome: scheme is blocked" test-scriptability-chrome-scheme)
-    (test "about: scheme is blocked" test-scriptability-about-scheme)
-    (test "devtools: scheme is blocked" test-scriptability-devtools-scheme)
-    (test "moz-extension: scheme is blocked" test-scriptability-moz-extension-scheme)
-    (test "Chrome Web Store (old URL) blocked for Chrome" test-scriptability-chrome-webstore-blocked)
-    (test "Chrome Web Store (new URL) blocked for Chrome" test-scriptability-chromewebstore-blocked)
-    (test "Firefox Add-ons blocked for Firefox" test-scriptability-firefox-addons-blocked)
-    (test "Edge Add-ons blocked for Edge" test-scriptability-edge-addons-blocked)
-    (test "Firefox domains NOT blocked for Chrome" test-scriptability-firefox-domain-not-blocked-for-chrome)
-    (test "Edge domains NOT blocked for Firefox" test-scriptability-edge-domain-not-blocked-for-firefox)))
+          (fn []
+            (test "nil URL is not scriptable" test-scriptability-nil-url)
+            (test "empty URL is not scriptable" test-scriptability-empty-url)
+            (test "normal HTTPS URL is scriptable" test-scriptability-normal-https-url)
+            (test "chrome: scheme is blocked" test-scriptability-chrome-scheme)
+            (test "about: scheme is blocked" test-scriptability-about-scheme)
+            (test "devtools: scheme is blocked" test-scriptability-devtools-scheme)
+            (test "moz-extension: scheme is blocked" test-scriptability-moz-extension-scheme)
+            (test "Chrome Web Store (old URL) blocked for Chrome" test-scriptability-chrome-webstore-blocked)
+            (test "Chrome Web Store (new URL) blocked for Chrome" test-scriptability-chromewebstore-blocked)
+            (test "Firefox Add-ons blocked for Firefox" test-scriptability-firefox-addons-blocked)
+            (test "Edge Add-ons blocked for Edge" test-scriptability-edge-addons-blocked)
+            (test "Firefox domains NOT blocked for Chrome" test-scriptability-firefox-domain-not-blocked-for-chrome)
+            (test "Edge domains NOT blocked for Firefox" test-scriptability-edge-domain-not-blocked-for-firefox)))
 
 ;; ============================================================
-;; Storage contract pinning (Phase 0)
+;; Storage contract pinning
 ;; ============================================================
 
 (defn- test-storage-contract-stored-fields []

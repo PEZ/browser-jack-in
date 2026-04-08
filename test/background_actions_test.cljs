@@ -458,16 +458,16 @@
   (let [state {:storage/scripts []}
         new-script {:script/id "script-attacker"
                     :script/name "EPUPP/my-script.cljs"
-                    :script/code "(println \"test\")"}]
-    (let [result (bg-actions/handle-action state uf-data
-                   [:fs/ax.save-script new-script])
-          error-response (some #(when (= :bg/fx.send-response (first %)) (second %)) (:uf/fxs result))]
-      (-> (expect error-response)
-          (.toBeTruthy))
-      (-> (expect (:success error-response))
-          (.toBe false))
-      (-> (expect (:error error-response))
-          (.toContain "reserved namespace")))))
+                    :script/code "(println \"test\")"}
+        result (bg-actions/handle-action state uf-data
+                                         [:fs/ax.save-script new-script])
+        error-response (some #(when (= :bg/fx.send-response (first %)) (second %)) (:uf/fxs result))]
+    (-> (expect error-response)
+        (.toBeTruthy))
+    (-> (expect (:success error-response))
+        (.toBe false))
+    (-> (expect (:error error-response))
+        (.toContain "reserved namespace"))))
 
 (defn- test-epupp-namespace-rejects-when-creating-script-with-epupp-prefix []
   (let [state {:storage/scripts []}
@@ -1205,7 +1205,7 @@
                   test-explicit-disconnect-forgets-history)))
 
 ;; ============================================================
-;; load-manifest and inject-libs baseline tests (Phase 0)
+;; load-manifest and inject-libs baseline tests
 ;; ============================================================
 
 (defn- execute-plan-effect

@@ -329,7 +329,7 @@
                   test-apply-init-ports-sets-source-override)))
 
 ;; ============================================================
-;; Save-path normalization tests (Phase 3)
+;; Save-path normalization tests
 ;; ============================================================
 
 (defn- test-set-nrepl-port-equal-to-default-clears-domain-ports []

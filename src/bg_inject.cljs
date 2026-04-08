@@ -3,7 +3,6 @@
    Handles loading Scittle, content bridge, and script execution."
   (:require [log :as log]
             [test-logger :as test-logger]
-            [scittle-libs :as scittle-libs]
             [bg-icon :as bg-icon]
             [permissions :as permissions]))
 
@@ -316,70 +315,6 @@
           (throw (js/Error. (str "Failed to inject library " file ": "
                                  (or (.-error response) "unknown error")))))
         (recur (rest remaining))))))
-
-(defn ^:async execute-scripts!
-  "Execute a list of scripts in the page via Scittle using script tag injection.
-   Injects content bridge, waits for readiness signal, injects required Scittle
-   libraries, verifies namespace availability, then injects userscripts."
-  [tab-id scripts]
-  ;; Log test event at start for E2E tests
-  (js-await (test-logger/log-event! "EXECUTE_SCRIPTS_START" {:tab-id tab-id :count (count scripts)}))
-  (when (seq scripts)
-    (try
-      (let [;; Collect all required library files from scripts
-            lib-files (scittle-libs/collect-lib-files scripts)]
-        ;; First ensure content bridge is loaded
-        (js-await (inject-content-script tab-id "content-bridge.js"))
-        (js-await (test-logger/log-event! "BRIDGE_INJECTED" {:tab-id tab-id}))
-        ;; Wait for bridge to signal readiness via ping response
-        (js-await (wait-for-bridge-ready tab-id))
-        (js-await (test-logger/log-event! "BRIDGE_READY_CONFIRMED" {:tab-id tab-id}))
-        ;; Clear any old userscript tags (prevents re-execution on bfcache navigation)
-        (js-await (send-tab-message tab-id {:type "clear-userscripts"}))
-        ;; Inject required Scittle libraries (in dependency order)
-        (when (seq lib-files)
-          (js-await (test-logger/log-event! "INJECTING_LIBS" {:files lib-files}))
-          ;; Use sequential await helper - doseq doesn't await properly in Squint
-          (js-await (inject-libs-sequentially! tab-id lib-files))
-          (js-await (test-logger/log-event! "LIBS_INJECTED" {:count (count lib-files)}))
-          ;; Verify namespace availability before evaluation
-          (let [expected-ns (scittle-libs/collect-lib-namespaces scripts)]
-            (when (seq expected-ns)
-              (js-await (poll-until
-                         (fn [] (execute-in-page tab-id check-namespaces-fn expected-ns))
-                         (fn [r] (and r (.-available r)))
-                         5000
-                         (str "Timeout waiting for library namespaces: "
-                              (.join expected-ns ", "))))
-              (js-await (test-logger/log-event! "NAMESPACES_VERIFIED" {:namespaces expected-ns})))))
-        ;; Inject all userscript tags
-        (js-await
-         (js/Promise.all
-          (clj->js
-           (map (fn [script]
-                  (-> (send-tab-message tab-id {:type "inject-userscript"
-                                                :id (str "userscript-" (:script/id script))
-                                                :code (:script/code script)})
-                      (.then (fn [_]
-                               ;; Log test event for E2E tests - return it so Promise.all waits
-                               (test-logger/log-event! "SCRIPT_INJECTED"
-                                                       {:script-id (:script/id script)
-                                                        :script-name (:script/name script)
-                                                        :timing (or (:script/run-at script) "document-idle")
-                                                        :tab-id tab-id})))))
-                scripts))))
-        ;; Trigger Scittle to evaluate them - use direct execution to avoid
-        ;; duplicate script injection check which would skip if already injected
-        (js-await (execute-in-page tab-id trigger-scittle-fn)))
-      (catch :default err
-        (log/error "Background:Inject" "Userscript injection error:" err)
-        (js-await (test-logger/log-event! "EXECUTE_SCRIPTS_ERROR" {:error (.-message err)}))))))
-
-
-
-;; ============================================================
-;; Plan-Based Execution (Phase 3)
-;; ============================================================
 
 (defn ^:async execute-plan!
   "Execute a resolved dependency plan on a tab.

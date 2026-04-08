@@ -1008,7 +1008,7 @@
             (test "does not reload for different script" test-handle-system-banner-no-affects-different-script)))
 
 ;; ============================================================
-;; Panel eval inject threading baseline tests (Phase 0)
+;; Panel eval inject threading baseline tests
 ;; ============================================================
 
 (defn- test-panel-eval-loaded-passes-inject-to-eval-effect []

@@ -92,7 +92,7 @@
 
 (defn- start-keepalive!
   "Start sending keepalive pings to background to prevent service worker termination.
-   Interval is 25s: alarm-based heartbeat (Phase 2) handles worker keepalive,
+   Interval is 25s: alarm-based heartbeat handles worker keepalive,
    so this ping only needs to detect extension context invalidation."
   []
   (stop-keepalive!)

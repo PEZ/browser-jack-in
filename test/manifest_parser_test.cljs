@@ -271,7 +271,7 @@
             (test "normalizes invalid types to empty vector" test-normalizes-invalid-types-to-empty-vector)))
 
 ;; ============================================================
-;; inject preserves arbitrary strings (Phase 0 contract pinning)
+;; inject preserves arbitrary strings (contract pinning)
 ;; ============================================================
 
 (defn- test-inject-preserves-epupp-protocol-urls []
