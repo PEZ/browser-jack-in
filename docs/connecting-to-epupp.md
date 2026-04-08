@@ -112,27 +112,27 @@ In addition to the [general prerequisites](#prerequisistes):
    ```
 0. Tell Claude the REPL is connected:
    ```
-   The Epupp REPL is connected on port 1339. Do something fun with the page.
+   The Epupp REPL is connected on port 3339. Do something fun with the page.
    ```
 
-Claude will use `clj-nrepl-eval -p 1339 "<code>"` to evaluate expressions. For example:
+Claude will use `clj-nrepl-eval -p 3339 "<code>"` to evaluate expressions. For example:
 
 ```bash
 # Check what page is connected
-clj-nrepl-eval -p 1339 '(.-title js/document)'
+clj-nrepl-eval -p 3339 '(.-title js/document)'
 
 # Query the DOM
-clj-nrepl-eval -p 1339 '(mapv #(.-textContent %) (js/document.querySelectorAll "h2"))'
+clj-nrepl-eval -p 3339 '(mapv #(.-textContent %) (js/document.querySelectorAll "h2"))'
 
 # Modify the page
-clj-nrepl-eval -p 1339 '(set! (.. js/document -body -style -backgroundColor) "pink")'
+clj-nrepl-eval -p 3339 '(set! (.. js/document -body -style -backgroundColor) "pink")'
 ```
 
 ### Tips
 
 - **AGENTS.md**: This project includes an `AGENTS.md` with Epupp-specific instructions that Claude Code reads automatically. It teaches Claude the Scittle environment, common patterns, and pitfalls.
 - **Navigation**: Claude should use `(js/setTimeout #(set! (.-location js/window) "https://...") 50)` to navigate — direct assignment hangs the REPL because the page unload kills the connection.
-- **Timeouts**: For heavy pages, Claude may need longer timeouts: `clj-nrepl-eval -p 1339 --timeout 30000 '<code>'`
+- **Timeouts**: For heavy pages, Claude may need longer timeouts: `clj-nrepl-eval -p 3339 --timeout 30000 '<code>'`
 - **State persists**: Definitions (`def`, `defn`) persist across evaluations within a page session. Page reload or navigation clears everything.
 - **Authenticated access**: Because the REPL runs inside your actual browser tab, Claude has access to whatever you're logged into — your YouTube history, LinkedIn feed, internal tools, etc.
 
