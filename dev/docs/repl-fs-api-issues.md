@@ -62,34 +62,17 @@ Read these first:
 ## Known issues
 Add new, currently failing issues here. If something is fixed, move it to "Resolved issues" and add an entry to the "Fixed log".
 
-### `mv!` allows renaming to existing script name, creates duplicate names
-
-**Severity:** High - causes data corruption
-
-**Symptom:** Calling `(epupp.fs/mv! "script_a.cljs" "script_b.cljs")` when `script_b.cljs` already exists succeeds with `:fs/success true` instead of rejecting. This creates two scripts with the same name but different internal IDs.
-
-**Expected:** The operation should reject with an error like "Destination script already exists: script_b.cljs"
-
-**Repro:**
-```clojure
-;; Create two test files
-(-> (epupp.fs/save! ["{:epupp/script-name \"test-file-1\" :epupp/site-match \"*\"}"
-                     "{:epupp/script-name \"test-file-2\" :epupp/site-match \"*\"}"]
-                    {:fs/force? true})
-    (p/then #(js/console.log "Created:" (pr-str %))))
-
-;; Rename file 1 to file 2 (should fail, but doesn't)
-(-> (epupp.fs/mv! "test_file_1.cljs" "test_file_2.cljs" {:fs/force? true})
-    (p/then #(js/console.log "Result:" (pr-str %)))
-    (p/catch #(js/console.log "Error:" (str %))))
-;; => {:fs/success true, :fs/from-name "test_file_1.cljs", :fs/to-name "test_file_2.cljs", :fs/error nil}
-
-;; Now ls shows TWO scripts named test_file_2.cljs with different timestamps
-(-> (epupp.fs/ls)
-    (p/then #(println (filter (fn [s] (clojure.string/includes? (:fs/name s) "test_file")) %))))
-```
+None currently tracked.
 
 ## Resolved issues
+
+### `mv!` duplicate-name collision handling
+
+`epupp.fs/mv!` no longer creates duplicate names on collision.
+
+- Without `:fs/force? true`, collisions still reject.
+- With `:fs/force? true`, `mv!` overwrites an existing normal target.
+- Built-in targets still reject.
 
 
 ## Test coverage gaps

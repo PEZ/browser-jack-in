@@ -133,9 +133,10 @@ flowchart LR
 The background worker replies via `sendResponse` with `{success, ...}` data. Errors
 use `success: false` and an `error` string. Successful write responses forward the
 background's `fs/*` payload unchanged, including `fs/from-name` and `fs/to-name`
-for rename, and `fs/unchanged?` for no-op saves. `rename-script` requests still
-carry a `force` field from `epupp.fs/mv!`, but the background currently ignores it.
-All FS operations (reads and writes) return an error when FS REPL Sync is not
+for rename, and `fs/unchanged?` for no-op saves. `rename-script` honors `force`
+from `epupp.fs/mv!`: with force it may replace an existing normal target while
+preserving the source script's identity, but built-in targets still reject. All
+FS operations (reads and writes) return an error when FS REPL Sync is not
 enabled for the requesting tab or the tab has no active WebSocket connection.
 Only one tab can have FS sync enabled at a time.
 

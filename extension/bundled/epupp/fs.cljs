@@ -4,10 +4,9 @@
    All fs operations require an active REPL connection and FS REPL Sync
    to be enabled in settings.
 
-   The :fs/force? option currently affects save! overwrite behavior:
-   - save! with :fs/force? overwrites an existing script with the same name
-   - mv! forwards :fs/force? in the request payload, but the background rename
-     path still rejects an existing target name")
+   Use :fs/force? to overwrite an existing normal script with save! or mv!.
+   Forced rename keeps the source script identity and still rejects
+   built-in targets.")
 
 (defonce ^:private !request-id (atom 0))
 
@@ -156,13 +155,12 @@
    Throws on failure.
 
    Opts:
-   - :fs/force? bool - forwarded in the request payload, but the current
-     background rename path ignores it and still rejects an existing target
-     name
+   - :fs/force? bool - overwrite an existing normal target while keeping the
+     source script identity; built-in targets are still rejected
 
    Examples:
    (epupp.fs/mv! \"old.cljs\" \"new.cljs\")
-   (epupp.fs/mv! \"old.cljs\" \"existing.cljs\" {:fs/force? true})  ; still rejects if target exists"
+   (epupp.fs/mv! \"old.cljs\" \"existing.cljs\" {:fs/force? true})  ; overwrite existing normal target"
   ([from-name to-name] (mv! from-name to-name {}))
   ([from-name to-name opts]
    (let [force? (get opts :fs/force?)

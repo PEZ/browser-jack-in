@@ -6,6 +6,8 @@ Changes to Epupp
 
 ## [Unreleased]
 
+- Fix: Honor `:force true` with `fs/mv!`
+
 ## [0.0.15] - 2026-04-07
 
 - Add support for Epupp dependencies (Epupp `.cljs` code as libraries)

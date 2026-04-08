@@ -50,17 +50,23 @@ For REPL connection setup, see [REPL](../README.md#repl) in the README.
 ;; Rename a script
 (epupp.fs/mv! "old_name.cljs" "new_name.cljs")
 
+;; Rename and overwrite an existing normal target
+(epupp.fs/mv! "old_name.cljs" "existing_name.cljs" {:fs/force? true})
+
 ;; Delete a script
 (epupp.fs/rm! "script.cljs")
 ```
 
 Return maps use `:fs/*` keys.
 
-Overwrites fail by default. Pass `{:fs/force? true}` to allow:
+Overwrites fail by default. Pass `{:fs/force? true}` to allow overwrite on `save!` and `mv!`:
 
 ```clojure
 (epupp.fs/save! code {:fs/force? true})
+(epupp.fs/mv! "old_name.cljs" "existing_name.cljs" {:fs/force? true})
 ```
+
+For `mv!`, force overwrite renames the source script in place and removes the replaced normal target. Built-in targets still reject.
 
 When a saved script has supported HTTPS external dependency URLs in its `:epupp/inject`, Epupp automatically fetches and caches the referenced content in the background. This happens on every save, so updating a script's external dependencies and saving is enough to populate the cache. Supported hosts are `raw.githubusercontent.com` and `gist.githubusercontent.com`, and the URL must be pinned to a full 40-character SHA.
 

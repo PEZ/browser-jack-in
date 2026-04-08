@@ -125,13 +125,15 @@
                                                         :error "FS Sync requires an active REPL connection and FS Sync enabled in settings"}]]}))
 
     :fs/ax.guard-rename-script
-    (let [[tab-id send-response from-name to-name] args
-          allowed? (bg-utils/fs-access-allowed? (:fs/sync-tab-id state) (:ws/connections state) tab-id)]
+    (let [[tab-id send-response from-name to-name force?] args
+          allowed? (bg-utils/fs-access-allowed? (:fs/sync-tab-id state) (:ws/connections state) tab-id)
+          rename-action (cond-> [:fs/ax.rename-script from-name to-name]
+                          force? (conj true))]
       (if allowed?
         (let [name-error (script-utils/validate-script-name to-name)]
           (if name-error
             {:uf/fxs [[:msg/fx.send-response send-response {:success false :error name-error}]]}
-            {:uf/fxs [[:fs/fx.dispatch-action send-response [:fs/ax.rename-script from-name to-name]]]}))
+            {:uf/fxs [[:fs/fx.dispatch-action send-response rename-action]]}))
         {:uf/fxs [[:banner/fx.broadcast-system {:event-type "error"
                                                 :operation "rename"
                                                 :error "FS Sync requires an active REPL connection and FS Sync enabled in settings"}]
@@ -162,12 +164,13 @@
                                                         :error "FS Sync requires an active REPL connection and FS Sync enabled in settings"}]]}))
 
     :fs/ax.rename-script
-    (let [[from-name to-name] args]
+    (let [[from-name to-name force?] args]
       (repl-fs-actions/rename-script
        state
-       {:fs/now-iso (.toISOString (js/Date. (:system/now uf-data)))
-        :fs/from-name from-name
-        :fs/to-name to-name}))
+       (cond-> {:fs/now-iso (.toISOString (js/Date. (:system/now uf-data)))
+                :fs/from-name from-name
+                :fs/to-name to-name}
+         force? (assoc :fs/force? true))))
 
     :fs/ax.delete-script
     (let [[payload] args

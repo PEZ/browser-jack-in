@@ -435,8 +435,11 @@
 
 (defn- handle-rename-script [message tab-id dispatch! send-response]
   (let [from-name (.-from message)
-        to-name (.-to message)]
-    (dispatch! [[:fs/ax.guard-rename-script tab-id send-response from-name to-name]])
+        to-name (.-to message)
+        force? (when (.-force message) true)
+        action (cond-> [:fs/ax.guard-rename-script tab-id send-response from-name to-name]
+                 force? (conj true))]
+    (dispatch! [action])
     true))
 
 (defn- handle-delete-script [message tab-id dispatch! send-response]

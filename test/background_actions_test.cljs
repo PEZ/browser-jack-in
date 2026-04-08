@@ -143,6 +143,44 @@
     (-> (expect modified)
         (.not.toBe "2026-01-01T00:00:00.000Z"))))
 
+(defn- test-rename-force-overwrite-replaces-normal-target-preserving-source-data []
+  (let [existing-script (assoc base-script
+                               :script/id "script-456"
+                               :script/name "existing.cljs"
+                               :script/code "(println \"existing\")")
+        state {:storage/scripts [base-script existing-script]}
+        result (bg-actions/handle-action state uf-data
+                 [:fs/ax.rename-script "test.cljs" "existing.cljs" true])
+        renamed-scripts (->> result :uf/db :storage/scripts
+                             (filter #(= (:script/name %) "existing.cljs")))
+        renamed-script (first renamed-scripts)]
+    (-> (expect (:uf/db result))
+        (.toBeTruthy))
+    (-> (expect (count (-> result :uf/db :storage/scripts)))
+        (.toBe 1))
+    (-> (expect (count renamed-scripts))
+        (.toBe 1))
+    (-> (expect (:script/id renamed-script))
+        (.toBe "script-123"))
+    (-> (expect (:script/code renamed-script))
+        (.toBe "(println \"hello\")"))
+    (-> (expect (some #(and (= :bg/fx.send-response (first %))
+                            (-> % second :success)) (:uf/fxs result)))
+        (.toBeTruthy))))
+
+(defn- test-rename-force-overwrite-rejects-built-in-target []
+  (let [builtin-target (assoc builtin-script :script/name "existing.cljs")
+        state {:storage/scripts [base-script builtin-target]}
+        result (bg-actions/handle-action state uf-data
+                 [:fs/ax.rename-script "test.cljs" "existing.cljs" true])
+        error-response (some #(when (= :bg/fx.send-response (first %)) (second %)) (:uf/fxs result))]
+    (-> (expect error-response)
+        (.toBeTruthy))
+    (-> (expect (:success error-response))
+        (.toBe false))
+    (-> (expect (:error error-response))
+        (.toContain "Cannot overwrite built-in scripts"))))
+
 (describe ":fs/ax.rename-script"
           (fn []
             (test "rejects when source script not found" test-rename-rejects-when-source-script-not-found)
@@ -153,7 +191,31 @@
             (test "rejects leading slash on rename" test-rename-rejects-leading-slash-on-rename)
             (test "rejects path traversal on rename" test-rename-rejects-path-traversal-on-rename)
             (test "allows rename when target name is free" test-rename-allows-rename-when-target-name-is-free)
-            (test "updates modified timestamp on rename" test-rename-updates-modified-timestamp-on-rename)))
+            (test "updates modified timestamp on rename" test-rename-updates-modified-timestamp-on-rename)
+            (test "force overwrite replaces normal target while preserving source identity and content"
+                  test-rename-force-overwrite-replaces-normal-target-preserving-source-data)
+            (test "force overwrite rejects built-in target"
+                  test-rename-force-overwrite-rejects-built-in-target)))
+
+;; ============================================================
+;; Guard Rename Script Tests
+;; ============================================================
+
+(defn- test-guard-rename-forwards-force-flag-when-fs-access-allowed []
+  (let [send-response :send-response
+        state {:fs/sync-tab-id 42
+               :ws/connections {42 {:ws/socket :socket}}}
+        result (bg-actions/handle-action state uf-data
+                 [:fs/ax.guard-rename-script 42 send-response "test.cljs" "existing.cljs" true])
+        dispatch-effect (some #(when (= :fs/fx.dispatch-action (first %)) %) (:uf/fxs result))]
+    (-> (expect dispatch-effect)
+        (.toEqual [:fs/fx.dispatch-action send-response
+                   [:fs/ax.rename-script "test.cljs" "existing.cljs" true]]))))
+
+(describe ":fs/ax.guard-rename-script"
+          (fn []
+            (test "forwards force flag when FS access is allowed"
+                  test-guard-rename-forwards-force-flag-when-fs-access-allowed)))
 
 ;; ============================================================
 ;; Delete Script Tests

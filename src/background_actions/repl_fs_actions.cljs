@@ -101,12 +101,19 @@
       (assoc :fs/inject (:script/inject script)))))
 
 (defn rename-script
-  "Rename a script by name."
-  [state {:fs/keys [now-iso from-name to-name]}]
+  "Rename a script by name.
+   With :fs/force? true, replaces an existing normal target while
+   preserving the source script's identity."
+  [state {:fs/keys [now-iso from-name to-name force?]}]
   (let [scripts (:storage/scripts state)
         name-error (script-utils/validate-script-name to-name)
         normalized-to-name (when to-name (script-utils/normalize-script-name to-name))
-        source-script (find-script-by-name scripts from-name)]
+        source-script (find-script-by-name scripts from-name)
+        target-script (find-script-by-name scripts normalized-to-name)
+        same-script-target? (and source-script
+                                 target-script
+                                 (= (:script/id source-script)
+                                    (:script/id target-script)))]
     (cond
       ;; Invalid name
       name-error
@@ -120,27 +127,41 @@
       (script-utils/builtin-script? source-script)
       (make-error-response "Cannot rename built-in scripts" {:operation "rename" :script-name from-name})
 
-      ;; Target name exists
-      (find-script-by-name scripts normalized-to-name)
+      ;; Force-overwrite cannot replace a built-in target
+      (and force?
+           target-script
+           (script-utils/builtin-script? target-script))
+      (make-error-response "Cannot overwrite built-in scripts"
+                           {:operation "rename" :script-name normalized-to-name})
+
+      ;; Preserve collision behavior for non-force collisions and same-name renames
+      (and target-script
+           (or (not force?)
+               same-script-target?))
       (make-error-response (str "Script already exists: " normalized-to-name) {:operation "rename" :script-name from-name})
 
       ;; All checks pass - allow rename
       :else
-      (let [updated-scripts (update-script-in-list scripts (:script/id source-script)
-                       (fn [script]
-                         (let [existing-code (:script/code script)
-                           manifest (when existing-code
-                              (try (mp/extract-manifest existing-code)
-                               (catch :default _ nil)))
-                           has-script-name? (and manifest
-                                 (get manifest "script-name"))
-                           updated-code (if has-script-name?
-                              (mp/update-manifest-script-name existing-code normalized-to-name)
-                              existing-code)]
-                       (cond-> (assoc script
-                              :script/name normalized-to-name
-                              :script/modified now-iso)
-                         has-script-name? (assoc :script/code updated-code)))))
+      (let [scripts-to-update (if (and force? target-script)
+                                (remove-script-from-list scripts (:script/id target-script))
+                                scripts)
+            updated-scripts (update-script-in-list
+                             scripts-to-update
+                             (:script/id source-script)
+                             (fn [script]
+                               (let [existing-code (:script/code script)
+                                     manifest (when existing-code
+                                                (try (mp/extract-manifest existing-code)
+                                                     (catch :default _ nil)))
+                                     has-script-name? (and manifest
+                                                           (get manifest "script-name"))
+                                     updated-code (if has-script-name?
+                                                    (mp/update-manifest-script-name existing-code normalized-to-name)
+                                                    existing-code)]
+                                 (cond-> (assoc script
+                                                :script/name normalized-to-name
+                                                :script/modified now-iso)
+                                   has-script-name? (assoc :script/code updated-code)))))
             renamed-script (find-script-by-name updated-scripts normalized-to-name)]
         (make-success-response updated-scripts "rename" normalized-to-name
                                {:event-data {:script-id (:script/id source-script)
