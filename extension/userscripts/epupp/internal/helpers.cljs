@@ -11,12 +11,6 @@
 
 (def default-run-at "document-idle")
 
-(def installer-manifest-sync-fields
-  "Installer manifest fields that must stay in sync with src/manifest_parser.cljs.
-   Update both parsers together when this contract changes."
-  [:script-name :raw-script-name :name-normalized? :auto-run-match :description
-   :inject :inject-invalid? :run-at :raw-run-at :run-at-invalid? :library?])
-
 (defn- next-request-id []
   (str "epupp-" (js/Date.now) "-" (rand-int 1000000000)))
 
@@ -56,13 +50,6 @@
                                         :type msg-type
                                         :requestId request-id))
                         "*")))))))
-
-(defn ^:async fetch-icon-url!+
-  "Fetch the Epupp icon URL from the extension via content bridge.
-   Returns a Promise that resolves with the URL string or nil on timeout."
-  []
-  (let [msg (await (send-and-receive "get-icon-url" "get-icon-url-response"))]
-    (when msg (.-url msg))))
 
 (defn- get-first-form
   "Read the first form from code text. Returns map or nil."

@@ -76,8 +76,6 @@
       (.toBeFalsy)))
 
 ;; ============================================================
-;; should-run-now?
-;; ============================================================
 
 (defn- test-document-start-is-early []
   (-> (expect (loader/should-run-now? #js {:runAt "document-start"}))
@@ -94,77 +92,6 @@
 (defn- test-undefined-runAt-defaults-to-idle []
   (-> (expect (loader/should-run-now? #js {}))
       (.toBe false)))
-
-;; ============================================================
-;; script-matches-url?
-;; ============================================================
-
-(defn- test-enabled-early-matching []
-  (-> (expect (loader/script-matches-url?
-               #js {:enabled true :runAt "document-start" :match #js ["https://example.com/*"]}
-               "https://example.com/page"))
-      (.toBe true)))
-
-(defn- test-disabled-script []
-  (-> (expect (loader/script-matches-url?
-               #js {:enabled false :runAt "document-start" :match #js ["https://example.com/*"]}
-               "https://example.com/page"))
-      (.toBe false)))
-
-(defn- test-idle-timing []
-  (-> (expect (loader/script-matches-url?
-               #js {:enabled true :runAt "document-idle" :match #js ["https://example.com/*"]}
-               "https://example.com/page"))
-      (.toBe false)))
-
-(defn- test-non-matching-url []
-  (-> (expect (loader/script-matches-url?
-               #js {:enabled true :runAt "document-start" :match #js ["https://other.com/*"]}
-               "https://example.com/page"))
-      (.toBe false)))
-
-(defn- test-null-match-patterns []
-  (-> (expect (loader/script-matches-url?
-               #js {:enabled true :runAt "document-start"}
-               "https://example.com/page"))
-      (.toBe false)))
-
-(defn- test-empty-match-patterns []
-  (-> (expect (loader/script-matches-url?
-               #js {:enabled true :runAt "document-start" :match #js []}
-               "https://example.com/page"))
-      (.toBe false)))
-
-;; ============================================================
-;; get-matching-scripts
-;; ============================================================
-
-(defn- test-filters-to-matching-only []
-  (let [scripts #js [#js {:enabled true :runAt "document-start" :match #js ["https://example.com/*"]}
-                     #js {:enabled true :runAt "document-idle" :match #js ["https://example.com/*"]}
-                     #js {:enabled false :runAt "document-start" :match #js ["https://example.com/*"]}
-                     #js {:enabled true :runAt "document-start" :match #js ["https://other.com/*"]}]
-        result (loader/get-matching-scripts scripts "https://example.com/page")]
-    (-> (expect (.-length result))
-        (.toBe 1))))
-
-(defn- test-returns-empty-when-no-match []
-  (let [scripts #js [#js {:enabled true :runAt "document-idle" :match #js ["https://example.com/*"]}]
-        result (loader/get-matching-scripts scripts "https://example.com/page")]
-    (-> (expect (.-length result))
-        (.toBe 0))))
-
-(defn- test-returns-multiple-matches []
-  (let [scripts #js [#js {:enabled true :runAt "document-start" :match #js ["https://example.com/*"]}
-                     #js {:enabled true :runAt "document-end" :match #js ["*"]}]
-        result (loader/get-matching-scripts scripts "https://example.com/page")]
-    (-> (expect (.-length result))
-        (.toBe 2))))
-
-(defn- test-empty-scripts-array []
-  (let [result (loader/get-matching-scripts #js [] "https://example.com/page")]
-    (-> (expect (.-length result))
-        (.toBe 0))))
 
 ;; ============================================================
 ;; Test registration
@@ -199,22 +126,6 @@
             (test "document-end is early" test-document-end-is-early)
             (test "document-idle is not early" test-document-idle-is-not-early)
             (test "undefined runAt defaults to idle" test-undefined-runAt-defaults-to-idle)))
-
-(describe "Loader: script-matches-url?"
-          (fn []
-            (test "enabled script with early timing and matching URL" test-enabled-early-matching)
-            (test "disabled script" test-disabled-script)
-            (test "idle timing" test-idle-timing)
-            (test "non-matching URL" test-non-matching-url)
-            (test "null match patterns" test-null-match-patterns)
-            (test "empty match patterns" test-empty-match-patterns)))
-
-(describe "Loader: get-matching-scripts"
-          (fn []
-            (test "filters to matching scripts only" test-filters-to-matching-only)
-            (test "returns empty when nothing matches" test-returns-empty-when-no-match)
-            (test "returns multiple matches" test-returns-multiple-matches)
-            (test "handles empty scripts array" test-empty-scripts-array)))
 
 ;; ============================================================
 ;; early-timing? (parsed Clojure maps)

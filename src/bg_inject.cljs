@@ -375,13 +375,7 @@
         (log/error "Background:Inject" "Userscript injection error:" err)
         (js-await (test-logger/log-event! "EXECUTE_SCRIPTS_ERROR" {:error (.-message err)}))))))
 
-(defn ^:async inject-installer!
-  "Inject the web userscript installer on a tab.
-   Ensures Scittle is loaded, injects dependency libraries,
-   injects the installer code, and triggers evaluation."
-  [dispatch! tab-id installer-script]
-  (js-await (ensure-scittle! dispatch! tab-id :disconnected))
-  (js-await (execute-scripts! tab-id [installer-script])))
+
 
 ;; ============================================================
 ;; Plan-Based Execution (Phase 3)

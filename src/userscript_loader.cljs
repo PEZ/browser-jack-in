@@ -56,20 +56,6 @@
     (or (= run-at "document-start")
         (= run-at "document-end"))))
 
-(defn script-matches-url?
-  "Check if a raw storage script is enabled, has early timing,
-   and matches the given URL."
-  [script url]
-  (and (.-enabled script)
-       (should-run-now? script)
-       (let [patterns (or (.-match script) #js [])]
-         (url-matches-any-pattern? url patterns))))
-
-(defn get-matching-scripts
-  "Filter raw storage scripts to those matching a URL for early injection."
-  [scripts url]
-  (.filter scripts (fn [s] (script-matches-url? s url))))
-
 ;; ============================================================
 ;; Parsed script helpers (work on Clojure maps from parse-scripts)
 ;; ============================================================
