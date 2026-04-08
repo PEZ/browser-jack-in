@@ -23,8 +23,6 @@
   (let [code "^{:epupp/script-name \"test.cljs\"}\n(ns test)"
         manifest (mp/extract-manifest code)]
     (-> (expect (:run-at manifest))
-        (.toBe "document-idle"))
-    (-> (expect (mp/get-run-at code))
         (.toBe "document-idle"))))
 
 (defn- test-defaults-invalid-run-at-instead-of-throwing []
@@ -46,9 +44,9 @@
         (.toBeUndefined))))
 
 (defn- test-has-manifest-detects-presence []
-  (-> (expect (mp/has-manifest? "^{:epupp/script-name \"x.cljs\"} (ns x)"))
+  (-> (expect (some? (mp/extract-manifest "^{:epupp/script-name \"x.cljs\"} (ns x)")))
       (.toBe true))
-  (-> (expect (mp/has-manifest? "(ns x)"))
+  (-> (expect (some? (mp/extract-manifest "(ns x)")))
       (.toBe false)))
 
 (defn- test-allows-whitespace-before-manifest []

@@ -110,14 +110,3 @@
                         (str ":epupp/script-name \"" new-name "\""))
         code))
     code))
-
-(defn has-manifest?
-  "Returns true if the code contains Epupp manifest metadata."
-  [code]
-  (boolean (extract-manifest code)))
-
-(defn get-run-at
-  "Extracts the run-at timing from code, defaulting to 'document-idle'."
-  [code]
-  (or (:run-at (extract-manifest code))
-      default-run-at))
