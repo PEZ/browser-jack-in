@@ -34,12 +34,6 @@
    :scittle/react      {:catalog/files ["react.production.min.js" "react-dom.production.min.js"]
                         :catalog/internal true}})
 
-(defn scittle-url?
-  "Returns true if the URL is a scittle:// URL"
-  [url]
-  (and (string? url)
-       (boolean (re-matches #"scittle://.*" url))))
-
 (defn resolve-scittle-url
   "Resolve scittle:// URL to library key (:scittle/lib-name keyword).
    Returns nil for invalid URLs, unknown libraries, or internal libraries."
@@ -100,15 +94,6 @@
           {:inject/lib lib-key
            :inject/files (vec (concat internal-files
                                        (mapcat get-library-files all-deps)))})))))
-
-(defn available-libraries
-  "Returns vector of available library keys (excluding internal)."
-  []
-  (->> library-catalog
-       (remove (fn [[_ v]] (:catalog/internal v)))
-       (map first)
-       sort
-       vec))
 
 (defn collect-lib-files
   "Collect all library files from multiple scripts.

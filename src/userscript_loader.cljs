@@ -43,19 +43,6 @@
   [url pattern]
   (.test (pattern->regex pattern) url))
 
-(defn url-matches-any-pattern?
-  "Check if a URL matches any pattern in the given JS array."
-  [url patterns]
-  (and patterns (.some patterns (fn [p] (url-matches-pattern? url p)))))
-
-(defn should-run-now?
-  "Check if a raw storage script should run via early injection.
-   Early injection handles document-start and document-end only."
-  [script]
-  (let [run-at (or (.-runAt script) "document-idle")]
-    (or (= run-at "document-start")
-        (= run-at "document-end"))))
-
 ;; ============================================================
 ;; Parsed script helpers (work on Clojure maps from parse-scripts)
 ;; ============================================================

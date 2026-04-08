@@ -6,26 +6,6 @@
 ;; Test Functions
 ;; ============================================================
 
-;; scittle-url? tests
-
-(defn- test-scittle-url-returns-true-for-scittle-urls []
-  (-> (expect (libs/scittle-url? "scittle://pprint.js"))
-      (.toBe true))
-  (-> (expect (libs/scittle-url? "scittle://reagent.js"))
-      (.toBe true)))
-
-(defn- test-scittle-url-returns-false-for-other-urls []
-  (-> (expect (libs/scittle-url? "https://example.com/lib.js"))
-      (.toBe false))
-  (-> (expect (libs/scittle-url? "http://localhost/test.js"))
-      (.toBe false)))
-
-(defn- test-scittle-url-returns-false-for-nil-and-non-strings []
-  (-> (expect (libs/scittle-url? nil))
-      (.toBe false))
-  (-> (expect (libs/scittle-url? 123))
-      (.toBe false)))
-
 ;; resolve-scittle-url tests
 
 (defn- test-resolve-scittle-url-resolves-valid-urls []
@@ -122,20 +102,6 @@
   (-> (expect (libs/expand-inject "https://example.com/lib.js"))
       (.toBeFalsy)))
 
-;; available-libraries tests
-
-(defn- test-available-libraries-returns-sorted-list []
-  (-> (expect (libs/available-libraries))
-      (.toEqual ["scittle/cljs-ajax" "scittle/js-interop" "scittle/pprint"
-                 "scittle/promesa" "scittle/re-frame" "scittle/reagent" "scittle/replicant"])))
-
-(defn- test-available-libraries-does-not-include-internal-libraries []
-  (let [libs-list (libs/available-libraries)]
-    (-> (expect libs-list)
-        (.not.toContain "scittle/core"))
-    (-> (expect libs-list)
-        (.not.toContain "scittle/react"))))
-
 ;; collect-lib-files tests
 
 (defn- test-collect-lib-files-collects-files-from-single-script []
@@ -191,12 +157,6 @@
 
 (describe "scittle-libs"
           (fn []
-            (describe "scittle-url?"
-                      (fn []
-                        (test "returns true for scittle:// URLs" test-scittle-url-returns-true-for-scittle-urls)
-                        (test "returns false for other URLs" test-scittle-url-returns-false-for-other-urls)
-                        (test "returns false for nil and non-strings" test-scittle-url-returns-false-for-nil-and-non-strings)))
-
             (describe "resolve-scittle-url"
                       (fn []
                         (test "resolves valid scittle:// URLs to library key" test-resolve-scittle-url-resolves-valid-urls)
@@ -224,12 +184,7 @@
                         (test "expands library with transitive dependency" test-expand-inject-expands-library-with-transitive-dependency)
                         (test "returns nil for internal library" test-expand-inject-returns-nil-for-internal-library)
                         (test "returns nil for unknown library" test-expand-inject-returns-nil-for-unknown-library)
-                        (test "returns nil for non-scittle URL" test-expand-inject-returns-nil-for-non-scittle-url)))
-
-            (describe "available-libraries"
-                      (fn []
-                        (test "returns sorted list of available libraries" test-available-libraries-returns-sorted-list)
-                        (test "does not include internal libraries" test-available-libraries-does-not-include-internal-libraries)))))
+                        (test "returns nil for non-scittle URL" test-expand-inject-returns-nil-for-non-scittle-url)))))
 
 (describe "collect-lib-files"
           (fn []

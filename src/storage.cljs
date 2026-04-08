@@ -208,11 +208,6 @@
   []
   (:storage/scripts @!db))
 
-(defn get-enabled-scripts
-  "Get all enabled scripts"
-  []
-  (filterv :script/enabled (get-scripts)))
-
 (defn get-script
   "Get script by id"
   [script-id]
@@ -299,35 +294,6 @@
                      scripts)))
       (persist!))))
 
-(defn rename-script!
-  "Rename a script (update display name only, ID remains stable)"
-  [script-id new-name]
-  (let [name-error (script-utils/validate-script-name new-name)
-        normalized-name (when new-name (script-utils/normalize-script-name new-name))
-        now (.toISOString (js/Date.))]
-    (when name-error
-      (throw (js/Error. name-error)))
-    (swap! !db update :storage/scripts
-           (fn [scripts]
-             (mapv #(if (= (:script/id %) script-id)
-                      (let [existing-script %
-                            existing-code (:script/code existing-script)
-                            manifest (when existing-code
-                                       (try (mp/extract-manifest existing-code)
-                                            (catch :default _ nil)))
-                            has-script-name? (and manifest
-                                                  (get manifest "script-name"))
-                            updated-code (if has-script-name?
-                                           (mp/update-manifest-script-name existing-code normalized-name)
-                                           existing-code)]
-                        (cond-> (assoc existing-script
-                                       :script/name normalized-name
-                                       :script/modified now)
-                          has-script-name? (assoc :script/code updated-code)))
-                      %)
-                   scripts)))
-    (persist!)))
-
 ;; ============================================================
 ;; Granted Origins CRUD
 ;; ============================================================
@@ -365,11 +331,6 @@
   "Get the full external dependency cache map."
   []
   (:storage/ext-dep-cache @!db))
-
-(defn get-cached-ext-dep
-  "Get a cached external dependency entry by URL key. Returns nil if not found."
-  [url]
-  (get (get-ext-dep-cache) url))
 
 ;; ============================================================
 ;; Built-in userscripts

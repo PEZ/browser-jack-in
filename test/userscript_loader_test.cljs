@@ -52,48 +52,6 @@
       (.toBe true)))
 
 ;; ============================================================
-;; url-matches-any-pattern?
-;; ============================================================
-
-(defn- test-matches-first-pattern []
-  (-> (expect (loader/url-matches-any-pattern? "https://example.com/x" #js ["https://example.com/*"]))
-      (.toBeTruthy)))
-
-(defn- test-matches-second-pattern []
-  (-> (expect (loader/url-matches-any-pattern? "https://other.com/x" #js ["https://example.com/*" "https://other.com/*"]))
-      (.toBeTruthy)))
-
-(defn- test-matches-none []
-  (-> (expect (loader/url-matches-any-pattern? "https://nope.com/x" #js ["https://example.com/*"]))
-      (.toBeFalsy)))
-
-(defn- test-null-patterns []
-  (-> (expect (loader/url-matches-any-pattern? "https://a.com" nil))
-      (.toBeFalsy)))
-
-(defn- test-empty-patterns []
-  (-> (expect (loader/url-matches-any-pattern? "https://a.com" #js []))
-      (.toBeFalsy)))
-
-;; ============================================================
-
-(defn- test-document-start-is-early []
-  (-> (expect (loader/should-run-now? #js {:runAt "document-start"}))
-      (.toBe true)))
-
-(defn- test-document-end-is-early []
-  (-> (expect (loader/should-run-now? #js {:runAt "document-end"}))
-      (.toBe true)))
-
-(defn- test-document-idle-is-not-early []
-  (-> (expect (loader/should-run-now? #js {:runAt "document-idle"}))
-      (.toBe false)))
-
-(defn- test-undefined-runAt-defaults-to-idle []
-  (-> (expect (loader/should-run-now? #js {}))
-      (.toBe false)))
-
-;; ============================================================
 ;; Test registration
 ;; ============================================================
 
@@ -111,21 +69,6 @@
             (test "matches with wildcard" test-wildcard-url-match)
             (test "rejects different domain" test-no-match-different-domain)
             (test "matches subdomain wildcard" test-subdomain-wildcard)))
-
-(describe "Loader: url-matches-any-pattern?"
-          (fn []
-            (test "matches first pattern" test-matches-first-pattern)
-            (test "matches second pattern" test-matches-second-pattern)
-            (test "matches none" test-matches-none)
-            (test "handles null patterns" test-null-patterns)
-            (test "handles empty patterns" test-empty-patterns)))
-
-(describe "Loader: should-run-now?"
-          (fn []
-            (test "document-start is early" test-document-start-is-early)
-            (test "document-end is early" test-document-end-is-early)
-            (test "document-idle is not early" test-document-idle-is-not-early)
-            (test "undefined runAt defaults to idle" test-undefined-runAt-defaults-to-idle)))
 
 ;; ============================================================
 ;; early-timing? (parsed Clojure maps)
