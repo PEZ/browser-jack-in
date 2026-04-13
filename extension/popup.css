@@ -726,6 +726,15 @@ body.ready .script-item {
   box-shadow: var(--shadow-soft);
 }
 
+.connected-tab-item.clickable {
+  cursor: pointer;
+}
+
+.connected-tab-item.clickable:hover {
+  border-color: var(--clojure-blue);
+  box-shadow: var(--shadow-soft);
+}
+
 .connected-tab-port {
   font-size: var(--font-size-sm);
   font-family: ui-monospace, SFMono-Regular, monospace;
@@ -750,7 +759,6 @@ body.ready .script-item {
   text-overflow: ellipsis;
 }
 
-.reveal-tab-btn,
 .disconnect-tab-btn {
   padding: 4px 6px;
   background: transparent;
@@ -766,12 +774,6 @@ body.ready .script-item {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.reveal-tab-btn:hover {
-  background: var(--color-bg-edit-hover);
-  color: var(--clojure-blue);
-  transform: scale(1.08);
 }
 
 .disconnect-tab-btn:hover {
