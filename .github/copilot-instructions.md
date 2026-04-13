@@ -10,13 +10,27 @@ Human ⊗ AI ⊗ REPL
   browser_extension ≡ bridge(editor, browser_page) via scittle(SCI_in_browser)
   | editor/AI → nREPL → bb_relay(12345/12346) → background_worker → content_bridge → ws_bridge → scittle_REPL → DOM
   | language: squint ≡ ClojureScript_variant | compiles_to_ESM_JS
-  | source: src/*.cljs | compiled: extension/*.mjs ∧ build/*.js
-  | ¬edit(.mjs) | ¬edit(build/*.js) | treat_as_binary
-  | read(.mjs) only_when debugging_compilation
+  | logic_source: src/*.cljs
+  | ui_source: extension/*.css ∧ extension/*.html ∧ extension/manifest.json ∧ extension/trigger-scittle.js ∧ extension/disable-scittle-auto-eval.js
+  | generated: extension/*.mjs ∧ build/*
+  | ¬edit(.mjs) | ¬edit(build/*) | treat_generated_as_derived
+  | read(.mjs) ∧ read(build/*) only_when debugging_compilation ∨ packaging
 
 λ build_pipeline.
   src/*.cljs → squint_compiler → extension/*.mjs(ESM) → esbuild → build/*.js(IIFE)
   | config: squint.edn | bb_squint-compile ≡ compile_check | bb_watch ≡ continuous
+
+λ build_outputs.
+  build/*.js(bundle_entries) derived_from extension/*.mjs
+  | build/*.css ∧ build/*.html copied_from extension/*.css ∧ extension/*.html
+  | build/trigger-scittle.js ∧ build/disable-scittle-auto-eval.js copied_from extension/*
+  | edit_owning_source_in(src/* ∨ extension/*) | ¬edit(build/*)
+
+λ investigation_entrypoints.
+  | behavior ∧ state ∧ messaging → start_in src/*.cljs
+  | popup ∧ panel ∧ styling ∧ manifest ∧ static_assets → start_in extension/*(except_.mjs)
+  | build_pipeline ∨ packaging_issue → inspect(squint.edn ∧ scripts/tasks.clj ∧ dev/docs/architecture/build-pipeline.md)
+  | ¬start_in build/* ∧ ¬start_in extension/*.mjs
 
 ## Principles
 

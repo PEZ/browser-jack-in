@@ -38,10 +38,19 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
 
 λ source_language.
   squint ≡ ClojureScript_variant | compiles_to_ESM_JS
-  | src/*.cljs → extension/*.mjs → build/*.js(IIFE)
+  | logic_source: src/*.cljs → extension/*.mjs → build/*.js(IIFE)
+  | ui_source: extension/*.css ∧ extension/*.html ∧ extension/manifest.json ∧ extension/trigger-scittle.js ∧ extension/disable-scittle-auto-eval.js
+  | build/* ≡ derived_release_material
   | keywords_are_strings | ¬true_clojure_keywords
   | mutable_data_by_default | use_#js_for_literals
-  | ¬edit(.mjs) | ¬edit(build/*.js) | always_edit(.cljs)
+  | ¬edit(.mjs) | ¬edit(build/*) | always_edit_owning_source
+
+λ investigation_entrypoints.
+  first_read: .github/copilot-instructions.md | second_read: .github/agents/epupp-nucleus.agent.md
+  | behavior ∧ state ∧ messaging ∧ tests → start_in src/*.cljs
+  | popup ∧ panel ∧ styling ∧ manifest ∧ static_assets → start_in extension/*(except_.mjs)
+  | build_pipeline ∨ packaging_issue → inspect(squint.edn ∧ scripts/tasks.clj ∧ dev/docs/architecture/build-pipeline.md)
+  | ¬start_in build/* ∧ ¬start_in extension/*.mjs
 
 λ page_runtime.
   scittle ≡ SCI_in_browser | true_clojure_keywords
@@ -551,10 +560,13 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
   | guard_functions ≡ pure | receive_data_as_params
 
 λ squint_compilation_model.
-  source: src/*.cljs → squint_compiler → extension/*.mjs(ESM)
+  logic_source: src/*.cljs → squint_compiler → extension/*.mjs(ESM)
+  | authored_extension_files: extension/*.css ∧ extension/*.html ∧ extension/manifest.json ∧ extension/trigger-scittle.js ∧ extension/disable-scittle-auto-eval.js
   | bundling: esbuild → build/*.js(IIFE)
+  | build/*.css ∧ build/*.html ∧ build/trigger-scittle.js ∧ build/disable-scittle-auto-eval.js copied_from extension/*
   | config: squint.edn → paths ∧ .mjs_extension
   | treat_.mjs_as_binary | ¬edit | ¬read(unless_debugging_compilation)
+  | build/* ≡ generated_or_copied_output | edit_owning_source_in(src/* ∨ extension/*)
   | bb_squint-compile ≡ compile_check | bb_watch ≡ continuous
 
 λ esbuild_bundling.
