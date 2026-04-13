@@ -4,56 +4,59 @@
 
 ```mermaid
 graph TB
-    subgraph EXT["Extension Context (outside page CSP)"]
-        direction TB
-        BG["Background Service Worker<br/><i>chrome.runtime, WebSocket, storage</i>"]
-        POPUP["Popup / Panel<br/><i>chrome.runtime.sendMessage</i>"]
+    subgraph MAIN["MAIN World — Page JS Context"]
+        direction LR
+        WS["WS Bridge<br/><i>postMessage relay</i>"]
+        SCI["Scittle / SCI<br/><i>Pure AST interpreter</i><br/><i>Extension-origin script</i>"]
+        US["Userscripts<br/><i>&lt;script type=application/x-scittle&gt;</i>"]
+        DOM["DOM<br/><i>Full page access</i>"]
+        SCI --> US
+        SCI --> DOM
+        US --> DOM
     end
 
-    subgraph PAGE["Page Context (subject to page CSP)"]
-        direction TB
-        subgraph ISOLATED["ISOLATED World"]
-            CB["Content Bridge<br/><i>Message registry gate</i><br/><i>Source + type validation</i>"]
-        end
-        subgraph MAIN["MAIN World"]
-            WS["WS Bridge<br/><i>postMessage relay</i>"]
-            SCI["Scittle / SCI<br/><i>Pure interpreter</i><br/><i>Extension-origin script</i>"]
-            US["Userscripts<br/><i>&lt;script type=application/x-scittle&gt;</i>"]
-        end
+    subgraph ISOLATED["ISOLATED World"]
+        CB["Content Bridge<br/><i>Message registry gate</i><br/><i>Source + type validation</i>"]
+    end
+
+    subgraph EXT["Extension Context — Outside Page CSP"]
+        direction LR
+        BG["Background Worker<br/><i>chrome.runtime</i><br/><i>WebSocket, storage</i>"]
+        POPUP["Popup / Panel"]
+        POPUP -->|chrome.runtime| BG
     end
 
     subgraph LOCAL["Developer Machine"]
-        RELAY["bb browser-nrepl relay"]
-        EDITOR["Editor / AI<br/><i>nREPL client</i>"]
+        direction LR
+        EDITOR["Editor / AI"]
+        RELAY["bb browser-nrepl"]
+        EDITOR -->|nREPL| RELAY
     end
 
-    EDITOR <-->|nREPL| RELAY
-    RELAY <-->|WebSocket| BG
-    POPUP <-->|chrome.runtime| BG
-    BG <-->|chrome.tabs.sendMessage| CB
-    CB <-->|postMessage| WS
-    WS <--> SCI
-    SCI --> US
+    MAIN -.->|postMessage| CB
+    CB -.->|chrome.runtime| BG
+    BG -.->|WebSocket| RELAY
 
-    style EXT fill:#1a3a1a,stroke:#4a4,color:#fff
-    style ISOLATED fill:#1a2a3a,stroke:#48f,color:#fff
     style MAIN fill:#3a2a1a,stroke:#f84,color:#fff
+    style ISOLATED fill:#1a2a3a,stroke:#48f,color:#fff
+    style EXT fill:#1a3a1a,stroke:#4a4,color:#fff
     style LOCAL fill:#2a2a2a,stroke:#888,color:#fff
+    style SCI fill:#3a2a1a,stroke:#f84,color:#fff
+    style US fill:#3a2a1a,stroke:#f84,color:#fff
+    style WS fill:#3a2a1a,stroke:#f84,color:#fff
+    style DOM fill:#3a2a1a,stroke:#f84,color:#fff
     style CB fill:#1a2a3a,stroke:#48f,color:#fff
     style BG fill:#1a3a1a,stroke:#4a4,color:#fff
     style POPUP fill:#1a3a1a,stroke:#4a4,color:#fff
-    style WS fill:#3a2a1a,stroke:#f84,color:#fff
-    style SCI fill:#3a2a1a,stroke:#f84,color:#fff
-    style US fill:#3a2a1a,stroke:#f84,color:#fff
     style RELAY fill:#2a2a2a,stroke:#888,color:#fff
     style EDITOR fill:#2a2a2a,stroke:#888,color:#fff
 ```
 
 **Key boundaries:**
-- **Green** (Extension context) - completely outside page CSP. WebSocket connections, storage access, and cross-tab messaging happen here.
-- **Blue** (ISOLATED world) - has `chrome.runtime` access but no page DOM. The content bridge validates every message against the registry before forwarding.
-- **Orange** (MAIN world) - runs in the page's JS context with full DOM access. Page CSP applies here, but extension-origin scripts (Scittle) bypass `script-src` restrictions.
-- **Grey** (Developer machine) - the nREPL relay and editor, connected via localhost WebSocket through the background worker.
+- **Orange** (MAIN world) - the page's JS context. Scittle, userscripts, and the WS bridge all run here with full DOM access. Page CSP applies, but extension-origin scripts (Scittle) bypass `script-src` restrictions.
+- **Blue** (ISOLATED world) - the content bridge sits between page and extension. Has `chrome.runtime` access but no DOM. Validates every message against the registry before forwarding.
+- **Green** (Extension context) - completely outside page CSP. The background worker holds the actual WebSocket to localhost and manages storage.
+- **Grey** (Developer machine) - the nREPL relay and editor, connected via the background worker's WebSocket.
 
 ## How Epupp Runs Code in Pages Despite CSP
 
