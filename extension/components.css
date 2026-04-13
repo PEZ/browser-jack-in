@@ -14,11 +14,11 @@
   cursor: pointer;
   border: none;
   border-radius: var(--radius-sm);
-  transition: background-color var(--transition-duration),
-              border-color var(--transition-duration),
-              color var(--transition-duration),
-              box-shadow var(--transition-duration),
-              transform var(--transition-duration);
+  transition: background-color var(--transition-snappy) var(--ease-out-expo),
+              border-color var(--transition-snappy) var(--ease-out-expo),
+              color var(--transition-snappy) var(--ease-out-expo),
+              box-shadow var(--transition-duration) var(--ease-out-expo),
+              transform var(--transition-snappy) var(--ease-out-expo);
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -39,6 +39,7 @@
 .btn-primary {
   background: var(--clojure-blue);
   color: var(--color-text-on-primary);
+  box-shadow: var(--shadow-btn-primary);
 }
 
 .btn-primary:hover {
@@ -48,7 +49,14 @@
 .btn-primary:hover:not(:disabled),
 .btn-success:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: var(--shadow-soft);
+  box-shadow: var(--shadow-hover);
+}
+
+.btn-primary:active:not(:disabled),
+.btn-success:active:not(:disabled) {
+  transform: translateY(0.5px);
+  box-shadow: none;
+  transition-duration: 0.05s;
 }
 
 .btn-primary:disabled {
@@ -84,6 +92,11 @@
   background: var(--color-bg-btn-hover);
   color: var(--color-text-primary);
   border-color: var(--color-border-strong);
+}
+
+.btn-secondary:active {
+  transform: translateY(0.5px);
+  transition-duration: 0.05s;
 }
 
 /* Danger - destructive buttons (Deny, Delete) */
@@ -196,7 +209,8 @@
   padding: 12px;
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-soft);
 }
 
 .card-dashed {
@@ -363,12 +377,14 @@ kbd {
     padding-top: 0;
     padding-bottom: 0;
     opacity: 0;
+    transform: translateY(-4px);
   }
   to {
     max-height: 60px;
     padding-top: 8px;
     padding-bottom: 8px;
     opacity: 1;
+    transform: translateY(0);
   }
 }
 
@@ -378,12 +394,14 @@ kbd {
     padding-top: 8px;
     padding-bottom: 8px;
     opacity: 1;
+    transform: translateY(0);
   }
   to {
     max-height: 0;
     padding-top: 0;
     padding-bottom: 0;
     opacity: 0;
+    transform: translateY(-4px);
   }
 }
 

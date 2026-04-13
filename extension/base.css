@@ -80,6 +80,18 @@
   z-index: 100;
 }
 
+/* Subtle brand accent line at the very top of the header */
+.app-header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--clojure-blue) 0%, var(--clojure-blue-light) 50%, var(--clojure-green) 100%);
+  opacity: 0.7;
+}
+
 /* Header title */
 .app-header-title {
   font-size: var(--font-size-lg);
@@ -107,14 +119,14 @@
 }
 
 .tagline {
-  font-size: var(--font-size-sm);
+  font-size: 10px;
   font-style: normal;
-  font-weight: var(--font-weight-medium);
-  letter-spacing: var(--font-tracking-label);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--color-text-secondary);
+  color: var(--clojure-blue);
   margin-left: 8px;
-  opacity: 0.9;
+  opacity: 0.75;
 }
 
 /* Footer container - applied to both .popup-footer and .panel-footer */
@@ -133,15 +145,22 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  opacity: 0.6;
-}
-
-.footer-logos a {
+  opacity: 0.5;
   transition: opacity var(--transition-duration);
 }
 
-.footer-logos a:hover {
+.footer-logos:hover {
   opacity: 0.8;
+}
+
+.footer-logos a {
+  transition: transform var(--transition-snappy) var(--ease-out-expo),
+              opacity var(--transition-duration);
+}
+
+.footer-logos a:hover {
+  opacity: 1;
+  transform: scale(1.1);
 }
 
 .footer-logos img {
@@ -231,12 +250,24 @@
   left: 50%;
   transform: translateX(-50%);
   background: var(--color-bg-elevated-more);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-soft);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-hover);
   padding: 0;
   z-index: 100;
   text-align: left;
+  animation: menu-appear var(--transition-duration) var(--ease-out-expo);
+}
+
+@keyframes menu-appear {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
 }
 
 .creator-menu-header {

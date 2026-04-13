@@ -34,6 +34,18 @@ body {
 
 .panel-header {
   background: var(--color-bg-elevated);
+  position: relative;
+}
+
+.panel-header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--clojure-blue), var(--clojure-blue-light), var(--clojure-green));
+  opacity: 0.7;
 }
 
 /* Main content area - scrollable container */
@@ -79,13 +91,16 @@ body {
   background: var(--color-bg-input);
   color: var(--color-text-primary);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   resize: vertical;
+  transition: border-color var(--transition-snappy) var(--ease-out-expo),
+              box-shadow var(--transition-duration) var(--ease-out-expo);
 }
 
 .code-input-area textarea:focus {
   outline: none;
   border-color: var(--clojure-blue);
+  box-shadow: 0 0 0 3px rgba(88, 129, 216, 0.12);
 }
 
 .code-input-area textarea::placeholder {
@@ -118,11 +133,11 @@ body {
   cursor: pointer;
   border: none;
   border-radius: var(--radius-sm);
-  transition: background-color var(--transition-duration),
-              border-color var(--transition-duration),
-              color var(--transition-duration),
-              box-shadow var(--transition-duration),
-              transform var(--transition-duration);
+  transition: background-color var(--transition-snappy) var(--ease-out-expo),
+              border-color var(--transition-snappy) var(--ease-out-expo),
+              color var(--transition-snappy) var(--ease-out-expo),
+              box-shadow var(--transition-duration) var(--ease-out-expo),
+              transform var(--transition-snappy) var(--ease-out-expo);
 }
 
 .btn-eval {
@@ -131,10 +146,19 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  box-shadow: var(--shadow-btn-primary);
 }
 
 .btn-eval:hover {
   background: var(--clojure-blue-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 12px rgba(88, 129, 216, 0.3);
+}
+
+.btn-eval:active:not(:disabled) {
+  transform: translateY(0.5px);
+  box-shadow: 0 1px 2px rgba(88, 129, 216, 0.2);
+  transition-duration: 0.05s;
 }
 
 .btn-eval:disabled {
@@ -171,7 +195,7 @@ body {
 
 .result-item {
   padding: 10px 12px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
   font-size: var(--font-size-base);
   line-height: 1.5;
@@ -180,9 +204,9 @@ body {
   max-height: 500px;
   opacity: 1;
   overflow: auto;
-  transition: max-height var(--transition-duration) ease-out,
-              opacity var(--transition-duration) ease-out,
-              padding var(--transition-duration) ease-out;
+  transition: max-height var(--transition-duration) var(--ease-out-expo),
+              opacity var(--transition-duration) var(--ease-out-expo),
+              padding var(--transition-duration) var(--ease-out-expo);
 
   @starting-style {
     max-height: 0;
@@ -218,6 +242,7 @@ body {
 
 .result-label {
   font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
   letter-spacing: var(--font-tracking-label);
   margin-bottom: 4px;
@@ -299,15 +324,16 @@ body {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background-color var(--transition-duration),
-              border-color var(--transition-duration),
-              color var(--transition-duration),
+  transition: background-color var(--transition-snappy) var(--ease-out-expo),
+              border-color var(--transition-snappy) var(--ease-out-expo),
+              color var(--transition-snappy) var(--ease-out-expo),
               box-shadow var(--transition-duration);
 }
 
 .btn-new-script:hover {
   background: var(--color-border);
   color: var(--color-text-primary);
+  border-color: var(--color-border-strong);
 }
 
 .btn-new-script svg {
@@ -337,15 +363,23 @@ body {
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background-color var(--transition-duration),
-              border-color var(--transition-duration),
-              color var(--transition-duration),
-              box-shadow var(--transition-duration),
-              transform var(--transition-duration);
+  box-shadow: 0 1px 3px rgba(145, 220, 71, 0.2), 0 2px 8px rgba(145, 220, 71, 0.1);
+  transition: background-color var(--transition-snappy) var(--ease-out-expo),
+              border-color var(--transition-snappy) var(--ease-out-expo),
+              color var(--transition-snappy) var(--ease-out-expo),
+              box-shadow var(--transition-duration) var(--ease-out-expo),
+              transform var(--transition-snappy) var(--ease-out-expo);
 }
 
 .btn-save:hover {
   background: var(--clojure-green-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 12px rgba(145, 220, 71, 0.3);
+}
+
+.btn-save:active:not(:disabled) {
+  transform: translateY(0.5px);
+  transition-duration: 0.05s;
 }
 
 .btn-save:disabled {
@@ -363,15 +397,23 @@ body {
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background-color var(--transition-duration),
-              border-color var(--transition-duration),
-              color var(--transition-duration),
-              box-shadow var(--transition-duration),
-              transform var(--transition-duration);
+  box-shadow: var(--shadow-btn-primary);
+  transition: background-color var(--transition-snappy) var(--ease-out-expo),
+              border-color var(--transition-snappy) var(--ease-out-expo),
+              color var(--transition-snappy) var(--ease-out-expo),
+              box-shadow var(--transition-duration) var(--ease-out-expo),
+              transform var(--transition-snappy) var(--ease-out-expo);
 }
 
 .btn-rename:hover {
   background: var(--clojure-blue-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 12px rgba(88, 129, 216, 0.3);
+}
+
+.btn-rename:active:not(:disabled) {
+  transform: translateY(0.5px);
+  transition-duration: 0.05s;
 }
 
 /* Scrollbar styling moved to base.css */

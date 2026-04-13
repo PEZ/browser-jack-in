@@ -225,14 +225,23 @@ body.ready .connected-repl-settings {
   color: var(--color-text-secondary);
 }
 
+button#connect {
+  box-shadow: var(--shadow-btn-primary);
+  transition: background-color var(--transition-snappy) var(--ease-out-expo),
+              transform var(--transition-snappy) var(--ease-out-expo),
+              box-shadow var(--transition-duration) var(--ease-out-expo);
+}
+
 button#connect:hover {
   background: var(--clojure-blue-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(88, 129, 216, 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(88, 129, 216, 0.35), 0 1px 3px rgba(58, 92, 168, 0.15);
 }
 
 button#connect:active {
-  transform: translateY(0);
+  transform: translateY(0.5px);
+  box-shadow: 0 1px 2px rgba(88, 129, 216, 0.2);
+  transition-duration: 0.05s;
 }
 
 /* Status */
@@ -274,6 +283,13 @@ button#connect:active {
   max-height: 120px;
   opacity: 1;
   overflow: hidden;
+  transition: box-shadow var(--transition-duration) var(--ease-out-expo),
+             border-color var(--transition-duration) var(--ease-out-expo);
+}
+
+.script-item:hover {
+  box-shadow: var(--shadow-hover);
+  border-color: var(--color-border-strong);
 }
 
 body.ready .script-item {
@@ -407,15 +423,17 @@ body.ready .script-item {
   background: transparent;
   border: none;
   color: var(--color-text-muted);
-  border-radius: 4px;
-  transition: background-color var(--transition-duration),
-              color var(--transition-duration),
+  border-radius: var(--radius-sm);
+  transition: background-color var(--transition-snappy) var(--ease-out-expo),
+              color var(--transition-snappy) var(--ease-out-expo),
+              transform var(--transition-snappy) var(--ease-out-expo),
               box-shadow var(--transition-duration);
 }
 
 .script-delete:hover {
   background: var(--color-bg-delete-hover);
   color: var(--color-text-delete-hover);
+  transform: scale(1.08);
 }
 
 .script-inspect {
@@ -424,15 +442,17 @@ body.ready .script-item {
   background: transparent;
   border: none;
   color: var(--color-text-muted);
-  border-radius: 4px;
-  transition: background-color var(--transition-duration),
-              color var(--transition-duration),
+  border-radius: var(--radius-sm);
+  transition: background-color var(--transition-snappy) var(--ease-out-expo),
+              color var(--transition-snappy) var(--ease-out-expo),
+              transform var(--transition-snappy) var(--ease-out-expo),
               box-shadow var(--transition-duration);
 }
 
 .script-inspect:hover {
   background: var(--color-bg-edit-hover);
   color: var(--clojure-blue);
+  transform: scale(1.08);
 }
 
 .script-run {
@@ -441,15 +461,17 @@ body.ready .script-item {
   background: transparent;
   border: none;
   color: var(--color-text-muted);
-  border-radius: 4px;
-  transition: background-color var(--transition-duration),
-              color var(--transition-duration),
+  border-radius: var(--radius-sm);
+  transition: background-color var(--transition-snappy) var(--ease-out-expo),
+              color var(--transition-snappy) var(--ease-out-expo),
+              transform var(--transition-snappy) var(--ease-out-expo),
               box-shadow var(--transition-duration);
 }
 
 .script-run:hover {
   background: var(--color-bg-status-success);
   color: var(--color-text-success-banner-strong);
+  transform: scale(1.08);
 }
 
 .script-edit-hint {
@@ -482,12 +504,14 @@ body.ready .script-item {
 /* FS REPL Sync - flash animation for modified scripts */
 @keyframes fs-modified-flash {
   0% {
-    background: var(--clojure-green);
-    border-color: var(--clojure-green);
+    background: var(--color-gold);
+    border-color: var(--color-gold-border);
+    box-shadow: 0 0 12px rgba(255, 220, 115, 0.3);
   }
   100% {
     background: var(--color-bg-elevated);
     border-color: var(--color-border);
+    box-shadow: var(--shadow-soft);
   }
 }
 
@@ -509,15 +533,21 @@ body.ready .script-item {
   color: white;
   border: none;
   border-radius: var(--radius-md);
-  transition: background-color var(--transition-duration),
-              color var(--transition-duration),
-              box-shadow var(--transition-duration),
-              transform var(--transition-duration);
+  transition: background-color var(--transition-snappy) var(--ease-out-expo),
+              color var(--transition-snappy) var(--ease-out-expo),
+              box-shadow var(--transition-duration) var(--ease-out-expo),
+              transform var(--transition-snappy) var(--ease-out-expo);
 }
 
 .approval-allow:hover {
   background: var(--clojure-green-hover);
   transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(145, 220, 71, 0.3);
+}
+
+.approval-allow:active {
+  transform: translateY(0.5px);
+  transition-duration: 0.05s;
 }
 
 .approval-deny {
@@ -529,15 +559,20 @@ body.ready .script-item {
   color: var(--color-text-delete-hover);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  transition: background-color var(--transition-duration),
-              border-color var(--transition-duration),
-              color var(--transition-duration),
+  transition: background-color var(--transition-snappy) var(--ease-out-expo),
+              border-color var(--transition-snappy) var(--ease-out-expo),
+              color var(--transition-snappy) var(--ease-out-expo),
               box-shadow var(--transition-duration);
 }
 
 .approval-deny:hover {
   background: var(--color-bg-delete-hover);
   border-color: var(--color-text-delete-hover);
+}
+
+.approval-deny:active {
+  transform: translateY(0.5px);
+  transition-duration: 0.05s;
 }
 
 /* Scrollbar styling moved to base.css */
@@ -568,16 +603,19 @@ body.ready .script-item {
   cursor: pointer;
   display: flex;
   align-items: center;
-  padding: 0.375rem 0.5rem;
+  padding: 0.4rem 0.6rem;
   background: var(--color-bg-accent);
   color: var(--color-fg-accent);
   border-radius: var(--radius-md);
   border: 1px solid color-mix(in oklab, var(--color-bg-accent), black 14%);
+  transition: background-color var(--transition-snappy) var(--ease-out-expo),
+             box-shadow var(--transition-duration) var(--ease-out-expo);
 }
 
 .section-header:hover {
   background: color-mix(in oklab, var(--color-bg-accent), black 30%);
   color: color-mix(in oklab, var(--color-fg-accent), white 30%);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
 }
 
 .section-title {
@@ -589,22 +627,23 @@ body.ready .script-item {
 .section-badge {
   background: var(--clojure-blue);
   color: white;
-  padding: 0.1rem 0.4rem;
+  padding: 0.1rem 0.45rem;
   border-radius: 10px;
   font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-semibold);
   margin-left: 0.5rem;
-  transition: transform var(--transition-duration) ease-out;
+  transition: transform var(--transition-duration) var(--ease-out-expo);
+  box-shadow: 0 1px 3px rgba(88, 129, 216, 0.25);
 }
 
 .section-badge:not(:empty) {
-  animation: badge-pop var(--transition-duration) ease-out;
+  animation: badge-pop 0.3s var(--ease-out-expo);
 }
 
 @keyframes badge-pop {
-  0% { transform: scale(0.8); }
-  50% { transform: scale(1.1); }
-  100% { transform: scale(1); }
+  0% { transform: scale(0.6); opacity: 0.5; }
+  60% { transform: scale(1.12); }
+  100% { transform: scale(1); opacity: 1; }
 }
 
 .section-content {
@@ -678,7 +717,13 @@ body.ready .script-item {
   max-height: 60px;
   opacity: 1;
   overflow: hidden;
-  transition: opacity var(--transition-duration) ease-out;
+  transition: opacity var(--transition-duration) var(--ease-out-expo),
+             box-shadow var(--transition-duration) var(--ease-out-expo),
+             border-color var(--transition-duration) var(--ease-out-expo);
+}
+
+.connected-tab-item:hover {
+  box-shadow: var(--shadow-soft);
 }
 
 .connected-tab-port {
@@ -712,9 +757,10 @@ body.ready .script-item {
   border: none;
   color: var(--color-text-muted);
   cursor: pointer;
-  border-radius: 4px;
-  transition: background-color var(--transition-duration),
-              color var(--transition-duration),
+  border-radius: var(--radius-sm);
+  transition: background-color var(--transition-snappy) var(--ease-out-expo),
+              color var(--transition-snappy) var(--ease-out-expo),
+              transform var(--transition-snappy) var(--ease-out-expo),
               box-shadow var(--transition-duration);
   flex-shrink: 0;
   display: flex;
@@ -725,17 +771,20 @@ body.ready .script-item {
 .reveal-tab-btn:hover {
   background: var(--color-bg-edit-hover);
   color: var(--clojure-blue);
+  transform: scale(1.08);
 }
 
 .disconnect-tab-btn:hover {
   background: var(--color-bg-delete-hover);
   color: var(--color-text-delete-hover);
+  transform: scale(1.08);
 }
 
 .connected-tab-item.current-tab {
   font-weight: var(--font-weight-semibold);
-  background: var(--color-bg-status-info);
-  border-color: var(--color-border-status-info);
+  background: var(--color-gold-subtle);
+  border-color: var(--color-gold-border);
+  box-shadow: 0 1px 4px rgba(240, 208, 106, 0.15);
 }
 
 .no-connections {
@@ -895,21 +944,24 @@ body.ready .script-item {
   color: white;
   border: none;
   border-radius: var(--radius-md);
-  transition: background-color var(--transition-duration),
-              color var(--transition-duration),
-              box-shadow var(--transition-duration),
-              transform var(--transition-duration);
+  transition: background-color var(--transition-snappy) var(--ease-out-expo),
+              color var(--transition-snappy) var(--ease-out-expo),
+              box-shadow var(--transition-duration) var(--ease-out-expo),
+              transform var(--transition-snappy) var(--ease-out-expo);
   flex-shrink: 0;
+  box-shadow: var(--shadow-btn-primary);
 }
 
 .add-btn:hover {
   background: var(--clojure-blue-hover);
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(88, 129, 216, 0.3);
+  box-shadow: 0 3px 10px rgba(88, 129, 216, 0.3);
 }
 
 .add-btn:active {
-  transform: translateY(0);
+  transform: translateY(0.5px);
+  box-shadow: 0 1px 2px rgba(88, 129, 216, 0.2);
+  transition-duration: 0.05s;
 }
 
 .setting {
@@ -996,22 +1048,24 @@ body.ready .script-item {
   color: var(--color-text-primary);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  transition: background-color var(--transition-duration),
-              border-color var(--transition-duration),
-              color var(--transition-duration),
-              box-shadow var(--transition-duration),
-              transform var(--transition-duration);
+  transition: background-color var(--transition-snappy) var(--ease-out-expo),
+              border-color var(--transition-snappy) var(--ease-out-expo),
+              color var(--transition-snappy) var(--ease-out-expo),
+              box-shadow var(--transition-duration) var(--ease-out-expo),
+              transform var(--transition-snappy) var(--ease-out-expo);
 }
 
 .export-btn:hover,
 .import-btn:hover {
   background: var(--color-bg-btn-hover);
   border-color: var(--clojure-blue);
+  box-shadow: var(--shadow-soft);
 }
 
 .export-btn:active,
 .import-btn:active {
-  transform: translateY(1px);
+  transform: translateY(0.5px);
+  transition-duration: 0.05s;
 }
 
 /* Dev log button - only visible in dev/test mode */
