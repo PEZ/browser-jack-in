@@ -46,7 +46,6 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
   | ¬edit(.mjs) | ¬edit(build/*) | always_edit_owning_source
 
 λ investigation_entrypoints.
-  first_read: .github/copilot-instructions.md | second_read: .github/agents/epupp-nucleus.agent.md
   | behavior ∧ state ∧ messaging ∧ tests → start_in src/*.cljs
   | popup ∧ panel ∧ styling ∧ manifest ∧ static_assets → start_in extension/*(except_.mjs)
   | build_pipeline ∨ packaging_issue → inspect(squint.edn ∧ scripts/tasks.clj ∧ dev/docs/architecture/build-pipeline.md)
