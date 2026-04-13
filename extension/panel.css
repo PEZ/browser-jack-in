@@ -6,7 +6,7 @@
 body {
   margin: 0;
   padding: 0;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: var(--font-sans);
   background: var(--color-bg-base);
   color: var(--color-text-primary);
   height: 100vh;
@@ -53,11 +53,11 @@ body {
   align-items: center;
   gap: 6px;
   padding: 8px 12px;
-  background: var(--color-error-bg, rgba(255, 68, 68, 0.1));
-  color: var(--color-error, #f44);
-  font-size: 12px;
+  background: var(--color-bg-error-banner);
+  color: var(--color-text-error-banner);
+  font-size: var(--font-size-sm);
   line-height: 1.4;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border-error-banner);
 }
 
 /* Code input area */
@@ -74,7 +74,7 @@ body {
   min-height: 120px;
   padding: 10px;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   line-height: 1.5;
   background: var(--color-bg-input);
   color: var(--color-text-primary);
@@ -113,12 +113,16 @@ body {
 
 .code-actions button {
   padding: 6px 14px;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
   cursor: pointer;
   border: none;
   border-radius: var(--radius-sm);
-  transition: all var(--transition-duration);
+  transition: background-color var(--transition-duration),
+              border-color var(--transition-duration),
+              color var(--transition-duration),
+              box-shadow var(--transition-duration),
+              transform var(--transition-duration);
 }
 
 .btn-eval {
@@ -150,7 +154,7 @@ body {
 }
 
 .shortcut-hint {
-  font-size: 11px;
+  font-size: var(--font-size-sm);
   color: var(--color-text-muted);
   margin-left: auto;
 }
@@ -169,8 +173,10 @@ body {
   padding: 10px 12px;
   border-radius: var(--radius-sm);
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
-  font-size: 12px;
+  font-size: var(--font-size-base);
   line-height: 1.5;
+  background: var(--color-bg-base);
+  border: 1px solid var(--color-border);
   max-height: 500px;
   opacity: 1;
   overflow: auto;
@@ -187,35 +193,50 @@ body {
 }
 
 .result-input {
-  background: var(--color-bg-result-input);
-  border-left: 3px solid var(--clojure-blue);
+  background: var(--color-bg-status-info);
+  border-color: var(--color-border-status-info);
   color: var(--color-text-secondary);
   white-space: pre-wrap;
   word-break: break-all;
 }
 
 .result-output {
-  background: var(--color-bg-result-output);
-  border-left: 3px solid var(--color-success);
-  color: var(--color-success);
+  background: var(--color-bg-status-success);
+  border-color: var(--color-border-status-success);
+  color: var(--color-text-primary);
   white-space: pre-wrap;
   word-break: break-all;
 }
 
 .result-error {
   background: var(--color-bg-result-error);
-  border-left: 3px solid var(--color-error);
+  border-color: var(--color-border-error-banner);
   color: var(--color-error);
   white-space: pre-wrap;
   word-break: break-all;
 }
 
 .result-label {
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--font-tracking-label);
   margin-bottom: 4px;
   opacity: 0.7;
+}
+
+.result-input .result-label {
+  color: var(--color-text-info-banner-strong);
+  opacity: 1;
+}
+
+.result-output .result-label {
+  color: var(--color-text-success-banner-strong);
+  opacity: 1;
+}
+
+.result-error .result-label {
+  color: var(--color-text-error-banner-strong);
+  opacity: 1;
 }
 
 /* Empty state */
@@ -231,7 +252,7 @@ body {
 }
 
 .empty-results-text {
-  font-size: 13px;
+  font-size: var(--font-size-base);
   line-height: 1.6;
 }
 
@@ -259,10 +280,10 @@ body {
 }
 
 .save-script-header .header-title {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--font-tracking-label);
   color: var(--color-text-muted);
 }
 
@@ -271,14 +292,17 @@ body {
   align-items: center;
   gap: 4px;
   padding: 4px 8px;
-  font-size: 11px;
-  font-weight: 500;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   background: var(--color-bg-input);
   color: var(--color-text-secondary);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all var(--transition-duration);
+  transition: background-color var(--transition-duration),
+              border-color var(--transition-duration),
+              color var(--transition-duration),
+              box-shadow var(--transition-duration);
 }
 
 .btn-new-script:hover {
@@ -306,14 +330,18 @@ body {
 
 .btn-save {
   padding: 6px 14px;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
   background: var(--clojure-green);
   color: var(--color-text-on-success);
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all var(--transition-duration);
+  transition: background-color var(--transition-duration),
+              border-color var(--transition-duration),
+              color var(--transition-duration),
+              box-shadow var(--transition-duration),
+              transform var(--transition-duration);
 }
 
 .btn-save:hover {
@@ -328,18 +356,22 @@ body {
 
 .btn-rename {
   padding: 6px 14px;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
   background: var(--clojure-blue);
   color: #ffffff;
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all var(--transition-duration);
+  transition: background-color var(--transition-duration),
+              border-color var(--transition-duration),
+              color var(--transition-duration),
+              box-shadow var(--transition-duration),
+              transform var(--transition-duration);
 }
 
 .btn-rename:hover {
-  background: #5c9fd4;
+  background: var(--clojure-blue-hover);
 }
 
 /* Scrollbar styling moved to base.css */
@@ -348,7 +380,7 @@ body {
 .metadata-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: var(--font-size-base);
   margin-bottom: 10px;
 }
 
@@ -367,8 +399,8 @@ body {
 
 .property-label {
   width: 100px;
-  font-size: 11px;
-  font-weight: 500;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   color: var(--color-text-secondary);
   white-space: nowrap;
 }
@@ -402,7 +434,7 @@ body {
 /* Field hints */
 .field-hint {
   display: block;
-  font-size: 11px;
+  font-size: var(--font-size-sm);
   margin-top: 4px;
   transition: opacity var(--transition-duration) ease-out;
 }
@@ -412,13 +444,13 @@ body {
 }
 
 .field-hint.hint-warning {
-  color: var(--error);
+  color: var(--color-error);
 }
 
 /* Unknown keys warning */
 .manifest-warning {
   flex-basis: 100%;
-  font-size: 11px;
+  font-size: var(--font-size-sm);
   padding: 8px 10px;
   background: var(--color-bg-warning-banner);
   border: 1px solid var(--color-border-warning-banner);
@@ -450,7 +482,7 @@ body {
   border: 1px dashed var(--color-border);
   border-radius: var(--radius-sm);
   color: var(--color-text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-base);
   transition: opacity var(--transition-duration) ease-out,
               max-height var(--transition-duration) ease-out;
 }
@@ -461,7 +493,7 @@ body {
 
 .manifest-example {
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
-  font-size: 11px;
+  font-size: var(--font-size-sm);
   line-height: 1.5;
   padding: 10px;
   background: var(--color-bg-elevated);
@@ -489,8 +521,14 @@ body {
    ============================================================ */
 
 .empty-results-shortcut {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
   color: var(--color-text-secondary);
   margin-bottom: 8px;
+}
+
+.btn-save:focus-visible,
+.btn-rename:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
 }
