@@ -782,9 +782,7 @@ body.ready .script-item {
 
 .connected-tab-item.current-tab {
   font-weight: var(--font-weight-semibold);
-  background: var(--color-gold-subtle);
-  border-color: var(--color-gold-border);
-  box-shadow: 0 1px 4px rgba(240, 208, 106, 0.15);
+  border-color: var(--clojure-blue);
 }
 
 .no-connections {
