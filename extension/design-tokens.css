@@ -15,19 +15,19 @@
   --color-text-on-success: #1e1e1e;
 
   /* Semantic colors - light theme defaults */
-  --color-text-primary: #18202c;
-  --color-text-secondary: #586476;
-  --color-text-muted: #7b8797;
+  --color-text-primary: #1c2028;
+  --color-text-secondary: #5c6170;
+  --color-text-muted: #7e848e;
 
-  --color-bg-base: #fcfdff;
-  --color-bg-elevated: #f4f6fa;
-  --color-bg-elevated-more: #eef2f7;
+  --color-bg-base: #fcfbf9;
+  --color-bg-elevated: #f5f3f0;
+  --color-bg-elevated-more: #efedea;
   --color-bg-input: #ffffff;
-  --color-bg-accent: #53607b;
-  --color-fg-accent: #f7f9fd;
+  --color-bg-accent: #545b68;
+  --color-fg-accent: #f7f8fa;
 
-  --color-border: #d8dfeb;
-  --color-border-strong: #c5cfde;
+  --color-border: #d9d6d1;
+  --color-border-strong: #c7c3bc;
   --color-border-focus: var(--clojure-blue);
 
   --color-success: #4ec9b0;
@@ -37,9 +37,9 @@
   --color-linkedin-brand: #0A66C2;
 
   /* Contextual backgrounds */
-  --color-bg-code: #f5f7fb;
+  --color-bg-code: #f5f4f1;
   --color-bg-btn: #ffffff;
-  --color-bg-btn-hover: #eef3fb;
+  --color-bg-btn-hover: #f0eeea;
   --color-bg-status-success: #f1faf5;
   --color-border-status-success: #b9e3c6;
   --color-bg-status-info: #f2f7ff;
@@ -51,7 +51,7 @@
   --color-bg-approval: #fffbeb;
   --color-border-approval: #fcd34d;
   --color-text-approval-header: #b45309;
-  --color-bg-builtin: #f2f5fb;
+  --color-bg-builtin: #f3f2ef;
   --color-bg-edit-hover: #dbeafe;
   --color-bg-edit-hint: #eff6ff;
   --color-bg-delete-hover: #fee2e2;
@@ -135,6 +135,7 @@
   --color-surface-0: var(--color-bg-base);
   --color-surface-1: var(--color-bg-elevated);
   --color-surface-2: var(--color-bg-input);
+  --color-surface-card: #ffffff;
 
   /* Scrollbar */
   --scrollbar-thumb: #c0c0c0;
@@ -145,39 +146,42 @@
 /* Dark theme */
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-text-primary: #e7ecf5;
-    --color-text-secondary: #a8b2c3;
-    --color-text-muted: #7b8698;
+    --color-text-primary: #e8ebf0;
+    --color-text-secondary: #aab0bc;
+    --color-text-muted: #7d848f;
 
-    --color-bg-base: #171c24;
-    --color-bg-elevated: #202734;
-    --color-bg-elevated-more: #121822;
-    --color-bg-input: #273040;
-    --color-bg-accent: #6b7898;
-    --color-fg-accent: #f5f7fd;
+    --color-bg-base: #191c21;
+    --color-bg-elevated: #23262e;
+    --color-bg-elevated-more: #131619;
+    --color-bg-input: #292e36;
+    --color-bg-accent: #363b47;
+    --color-fg-accent: #d0d3db;
 
-    --color-border: #394354;
-    --color-border-strong: #4a5567;
+    --color-border: #3a3d47;
+    --color-border-strong: #4c4f58;
+
+    /* Card surface - lifted above base for visual separation */
+    --color-surface-card: #252930;
 
     --color-success: #4ec9b0;
     --color-error: #f14c4c;
 
     /* Contextual backgrounds */
-    --color-bg-code: #212835;
-    --color-bg-btn: #273040;
-    --color-bg-btn-hover: #303b4d;
+    --color-bg-code: #21252c;
+    --color-bg-btn: #292e36;
+    --color-bg-btn-hover: #323740;
     --color-bg-status-success: #133528;
     --color-border-status-success: #2a7b60;
     --color-bg-status-info: #1f334f;
     --color-border-status-info: #426fa8;
-    --color-bg-status-warning: #3b3120;
-    --color-border-status-warning: #8c6940;
+    --color-bg-status-warning: #252416;
+    --color-border-status-warning: #7a7228;
     --color-bg-status-failed: #2d1f1f;
     --color-border-status-failed: #f14c4c;
-    --color-bg-approval: #3d3520;
-    --color-border-approval: #5c4d1f;
+    --color-bg-approval: #252416;
+    --color-border-approval: #6b6420;
     --color-text-approval-header: #fcd34d;
-    --color-bg-builtin: #1f2a39;
+    --color-bg-builtin: #1f232b;
     --color-bg-edit-hover: #1e3a5f;
     --color-bg-edit-hint: #1e3a5f;
     --color-bg-delete-hover: #3d1f1f;
@@ -197,10 +201,10 @@
     --color-text-info-banner: #93c5fd;
     --color-text-info-banner-strong: #bfdbfe;
 
-    --color-bg-warning-banner: #3d3520;
-    --color-border-warning-banner: #5c4d1f;
-    --color-text-warning-banner: #f0c674;
-    --color-text-warning-banner-strong: #ffd866;
+    --color-bg-warning-banner: #242315;
+    --color-border-warning-banner: #7a7220;
+    --color-text-warning-banner: #f5cc4d;
+    --color-text-warning-banner-strong: #fde68a;
 
     --color-bg-error-banner: #450a0a;
     --color-border-error-banner: #dc2626;

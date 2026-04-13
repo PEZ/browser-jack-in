@@ -276,7 +276,7 @@ button#connect:active {
   grid-template-columns: auto 1fr;
   gap: 6px 8px;
   padding: 10px 12px;
-  background: var(--color-bg-base);
+  background: var(--color-surface-card, var(--color-bg-base));
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border);
   box-shadow: var(--shadow-soft);
@@ -307,8 +307,7 @@ body.ready .script-item {
 }
 
 .script-item-builtin {
-  background: var(--color-bg-builtin);
-  border-color: var(--color-border-strong);
+  border-style: dashed;
 }
 
 .script-button-column {
@@ -618,6 +617,13 @@ body.ready .script-item {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
 }
 
+@media (prefers-color-scheme: dark) {
+  .section-header:hover {
+    background: color-mix(in oklab, var(--color-bg-accent), white 18%);
+    color: color-mix(in oklab, var(--color-fg-accent), white 20%);
+  }
+}
+
 .section-title {
   flex: 1;
   font-weight: var(--font-weight-semibold);
@@ -711,7 +717,7 @@ body.ready .script-item {
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  background: var(--color-bg-base);
+  background: var(--color-surface-card, var(--color-bg-base));
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border);
   max-height: 60px;

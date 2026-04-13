@@ -129,6 +129,12 @@
   opacity: 0.75;
 }
 
+@media (prefers-color-scheme: dark) {
+  .tagline {
+    color: var(--clojure-blue-light);
+  }
+}
+
 /* Footer container - applied to both .popup-footer and .panel-footer */
 .app-footer {
   display: flex;

@@ -152,12 +152,12 @@ body {
 .btn-eval:hover {
   background: var(--clojure-blue-hover);
   transform: translateY(-1px);
-  box-shadow: 0 3px 12px rgba(88, 129, 216, 0.3);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.12);
 }
 
 .btn-eval:active:not(:disabled) {
   transform: translateY(0.5px);
-  box-shadow: 0 1px 2px rgba(88, 129, 216, 0.2);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
   transition-duration: 0.05s;
 }
 
@@ -363,7 +363,7 @@ body {
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  box-shadow: 0 1px 3px rgba(145, 220, 71, 0.2), 0 2px 8px rgba(145, 220, 71, 0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.05);
   transition: background-color var(--transition-snappy) var(--ease-out-expo),
               border-color var(--transition-snappy) var(--ease-out-expo),
               color var(--transition-snappy) var(--ease-out-expo),
@@ -374,7 +374,7 @@ body {
 .btn-save:hover {
   background: var(--clojure-green-hover);
   transform: translateY(-1px);
-  box-shadow: 0 3px 12px rgba(145, 220, 71, 0.3);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.12);
 }
 
 .btn-save:active:not(:disabled) {
@@ -408,7 +408,7 @@ body {
 .btn-rename:hover {
   background: var(--clojure-blue-hover);
   transform: translateY(-1px);
-  box-shadow: 0 3px 12px rgba(88, 129, 216, 0.3);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.12);
 }
 
 .btn-rename:active:not(:disabled) {
