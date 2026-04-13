@@ -8,17 +8,26 @@
 
 /* Base button - shared foundation for all button variants */
 .btn {
-  padding: 6px 14px;
-  font-size: 12px;
-  font-weight: 500;
+  padding: 7px 14px;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
   cursor: pointer;
   border: none;
   border-radius: var(--radius-sm);
-  transition: all var(--transition-duration);
+  transition: background-color var(--transition-snappy) var(--ease-out-expo),
+              border-color var(--transition-snappy) var(--ease-out-expo),
+              color var(--transition-snappy) var(--ease-out-expo),
+              box-shadow var(--transition-duration) var(--ease-out-expo),
+              transform var(--transition-snappy) var(--ease-out-expo);
   display: inline-flex;
   align-items: center;
   gap: 4px;
   border: 1px solid transparent; /* Default border to prevent layout shift button style/state changes */
+}
+
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
 }
 
 .btn:disabled {
@@ -30,10 +39,24 @@
 .btn-primary {
   background: var(--clojure-blue);
   color: var(--color-text-on-primary);
+  box-shadow: var(--shadow-btn-primary);
 }
 
 .btn-primary:hover {
   background: var(--clojure-blue-hover);
+}
+
+.btn-primary:hover:not(:disabled),
+.btn-success:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-hover);
+}
+
+.btn-primary:active:not(:disabled),
+.btn-success:active:not(:disabled) {
+  transform: translateY(0.5px);
+  box-shadow: none;
+  transition-duration: 0.05s;
 }
 
 .btn-primary:disabled {
@@ -68,6 +91,12 @@
 .btn-secondary:hover {
   background: var(--color-bg-btn-hover);
   color: var(--color-text-primary);
+  border-color: var(--color-border-strong);
+}
+
+.btn-secondary:active {
+  transform: translateY(0.5px);
+  transition-duration: 0.05s;
 }
 
 /* Danger - destructive buttons (Deny, Delete) */
@@ -85,49 +114,50 @@
 /* Size variants */
 .btn-sm {
   padding: 4px 8px;
-  font-size: 11px;
+  font-size: var(--font-size-sm);
 }
 
 .btn-lg {
   padding: 8px 20px;
-  font-size: 13px;
+  font-size: var(--font-size-md);
 }
 
 /* ============================================================
    Status Indicators
    ============================================================ */
 
-/* Left-border status bar pattern */
 .status-bar {
   padding: 10px 12px;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   border-radius: var(--radius-sm);
-  border-left: 3px solid var(--color-border);
-  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-bg-base);
   color: var(--color-text-secondary);
 }
 
 .status-bar--success {
-  border-left-color: var(--color-success);
+  border-color: var(--color-border-status-success);
+  background: var(--color-bg-status-success);
 }
 
 .status-bar--error {
-  border-left-color: var(--color-error);
+  border-color: var(--color-border-status-failed);
   background: var(--color-bg-status-failed);
 }
 
 .status-bar--warning {
-  border-left-color: var(--color-warning);
+  border-color: var(--color-border-status-warning);
   background: var(--color-bg-approval);
 }
 
 .status-bar--info {
-  border-left-color: var(--clojure-blue);
+  border-color: var(--color-border-status-info);
+  background: var(--color-bg-status-info);
 }
 
 /* Inline status text */
 .status-text {
-  font-size: 11px;
+  font-size: var(--font-size-sm);
   animation: fadeIn var(--transition-duration) ease;
 }
 
@@ -158,7 +188,7 @@
 }
 
 .empty-state-text {
-  font-size: 13px;
+  font-size: var(--font-size-base);
   line-height: 1.6;
 }
 
@@ -179,7 +209,8 @@
   padding: 12px;
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-soft);
 }
 
 .card-dashed {
@@ -194,10 +225,10 @@
    ============================================================ */
 
 .section-header {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--font-tracking-label);
   color: var(--color-text-muted);
 }
 
@@ -211,7 +242,7 @@ kbd {
   padding: 2px 6px;
   border-radius: 3px;
   border: 1px solid var(--color-border);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
 }
 
 /* ============================================================
@@ -260,7 +291,8 @@ kbd {
   background: var(--color-bg-success-banner);
   border-bottom: 1px solid var(--color-border-success-banner);
   color: var(--color-text-success-banner);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   text-align: center;
   overflow: hidden;
   animation: banner-slide-in var(--transition-duration) ease-out;
@@ -275,7 +307,8 @@ kbd {
   background: var(--color-bg-error-banner);
   border-bottom: 1px solid var(--color-border-error-banner);
   color: var(--color-text-error-banner);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   text-align: center;
   overflow: hidden;
   animation: banner-slide-in var(--transition-duration) ease-out;
@@ -290,7 +323,8 @@ kbd {
   background: var(--color-bg-info-banner);
   border-bottom: 1px solid var(--color-border-info-banner);
   color: var(--color-text-info-banner);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   text-align: center;
   overflow: hidden;
   animation: banner-slide-in var(--transition-duration) ease-out;
@@ -306,9 +340,21 @@ kbd {
   background: var(--color-bg-warning-banner);
   border-bottom: 1px solid var(--color-border-warning-banner);
   color: var(--color-text-warning-banner);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   text-align: center;
   overflow: hidden;
+}
+
+.success-banner,
+.error-banner,
+.info-banner,
+.warning-banner,
+.page-banner.warning-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .warning-banner strong {
@@ -331,12 +377,14 @@ kbd {
     padding-top: 0;
     padding-bottom: 0;
     opacity: 0;
+    transform: translateY(-4px);
   }
   to {
     max-height: 60px;
     padding-top: 8px;
     padding-bottom: 8px;
     opacity: 1;
+    transform: translateY(0);
   }
 }
 
@@ -346,12 +394,14 @@ kbd {
     padding-top: 8px;
     padding-bottom: 8px;
     opacity: 1;
+    transform: translateY(0);
   }
   to {
     max-height: 0;
     padding-top: 0;
     padding-bottom: 0;
     opacity: 0;
+    transform: translateY(-4px);
   }
 }
 
@@ -369,7 +419,7 @@ kbd {
 /* Text input field - consistent styling for form inputs */
 .input-field {
   padding: 8px 10px;
-  font-size: 12px;
+  font-size: var(--font-size-base);
   font-family: ui-monospace, SFMono-Regular, monospace;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -381,7 +431,7 @@ kbd {
 .input-field:focus {
   outline: none;
   border-color: var(--clojure-blue);
-  box-shadow: 0 0 0 3px rgba(88, 129, 216, 0.1);
+  box-shadow: var(--shadow-focus);
 }
 
 .input-field::placeholder {
@@ -392,7 +442,7 @@ kbd {
 .input-field-sm {
   width: 68px;
   padding: 6px 8px;
-  font-size: 13px;
+  font-size: var(--font-size-base);
 }
 
 /* ============================================================
@@ -404,7 +454,7 @@ kbd {
   display: flex;
   align-items: center;
   padding: 8px 10px;
-  background: var(--color-bg-elevated);
+  background: var(--color-bg-base);
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border);
   max-height: 120px;
@@ -438,11 +488,19 @@ kbd {
   color: var(--color-text-muted);
   cursor: pointer;
   border-radius: 4px;
-  transition: all var(--transition-duration);
+  transition: background-color var(--transition-duration),
+              color var(--transition-duration),
+              box-shadow var(--transition-duration);
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.list-item-action:focus-visible,
+.sponsor-heart:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
 }
 
 .list-item-action:hover {
@@ -471,6 +529,7 @@ kbd {
   padding: 2px;
   display: flex;
   align-items: center;
+  border-radius: 999px;
 }
 
 .sponsor-heart-icon {
@@ -484,5 +543,20 @@ kbd {
 
 .sponsor-heart:hover .sponsor-heart-icon {
   color: var(--color-sponsor-heart);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn,
+  .status-text,
+  .success-banner,
+  .error-banner,
+  .info-banner,
+  .warning-banner,
+  .list-item,
+  .list-item-action,
+  .sponsor-heart-icon {
+    animation: none;
+    transition: none;
+  }
 }
 

@@ -1042,29 +1042,25 @@
 ;; ============================================================
 
 (defn connected-tab-item [{:keys [tab-id port title url favicon is-current-tab]}]
-  [:div.connected-tab-item {:class (str (when is-current-tab "current-tab "))
-                            :title (str title (when url (str "\n" url)))}
+  [:div.connected-tab-item (merge {:class (str (when is-current-tab "current-tab ")
+                                               (when-not is-current-tab "clickable "))
+                                   :title (str title (when url (str "\n" url)))}
+                                  (when-not is-current-tab
+                                    {:on-click #(dispatch! [[:popup/ax.reveal-tab tab-id]])}))
    (when favicon
      [:img.connected-tab-favicon {:src favicon :width 16 :height 16}])
    [:span.connected-tab-title (or title "Unknown")]
    [:span.connected-tab-port (str ":" port)]
-   (if is-current-tab
-     [view-elements/action-button
-      {:button/variant :danger
-       :button/class "disconnect-tab-btn"
-       :button/size :sm
-       :button/icon icons/debug-disconnect
-       :button/title "Disconnect this tab"
-       :button/on-click #(dispatch! [[:popup/ax.disconnect-tab tab-id]])}
-      nil]
-     [view-elements/action-button
-      {:button/variant :secondary
-       :button/class "reveal-tab-btn"
-       :button/size :sm
-       :button/icon icons/link-external
-       :button/title "Reveal this tab"
-       :button/on-click #(dispatch! [[:popup/ax.reveal-tab tab-id]])}
-      nil])])
+   [view-elements/action-button
+    {:button/variant :danger
+     :button/class "disconnect-tab-btn"
+     :button/size :sm
+     :button/icon icons/debug-disconnect
+     :button/title "Disconnect this tab"
+     :button/on-click (fn [e]
+                        (.stopPropagation e)
+                        (dispatch! [[:popup/ax.disconnect-tab tab-id]]))}
+    nil]])
 
 (defn connected-tabs-section [{:repl/keys [connections] :scripts/keys [current-tab-id]}]
   [:div.connected-tabs-section

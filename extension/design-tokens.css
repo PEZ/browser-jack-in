@@ -15,18 +15,19 @@
   --color-text-on-success: #1e1e1e;
 
   /* Semantic colors - light theme defaults */
-  --color-text-primary: #1a1a1a;
-  --color-text-secondary: #666;
-  --color-text-muted: #999;
+  --color-text-primary: #1c2028;
+  --color-text-secondary: #5c6170;
+  --color-text-muted: #7e848e;
 
-  --color-bg-base: #ffffff;
-  --color-bg-elevated: #f8f9fa;
-  --color-bg-elevated-more: #fcfcfc;
+  --color-bg-base: #fcfbf9;
+  --color-bg-elevated: #f5f3f0;
+  --color-bg-elevated-more: #efedea;
   --color-bg-input: #ffffff;
-  --color-bg-accent: #707070;
-  --color-fg-accent: #fafafa;
+  --color-bg-accent: #545b68;
+  --color-fg-accent: #f7f8fa;
 
-  --color-border: #e5e7eb;
+  --color-border: #d9d6d1;
+  --color-border-strong: #c7c3bc;
   --color-border-focus: var(--clojure-blue);
 
   --color-success: #4ec9b0;
@@ -36,14 +37,21 @@
   --color-linkedin-brand: #0A66C2;
 
   /* Contextual backgrounds */
-  --color-bg-code: #f8f9fa;
+  --color-bg-code: #f5f4f1;
   --color-bg-btn: #ffffff;
-  --color-bg-btn-hover: #f8f9fa;
+  --color-bg-btn-hover: #f0eeea;
+  --color-bg-status-success: #f1faf5;
+  --color-border-status-success: #b9e3c6;
+  --color-bg-status-info: #f2f7ff;
+  --color-border-status-info: #c0d4ff;
+  --color-bg-status-warning: #fff8ea;
+  --color-border-status-warning: #f3d79e;
   --color-bg-status-failed: #fff5f5;
   --color-border-status-failed: #e53935;
   --color-bg-approval: #fffbeb;
   --color-border-approval: #fcd34d;
   --color-text-approval-header: #b45309;
+  --color-bg-builtin: #f3f2ef;
   --color-bg-edit-hover: #dbeafe;
   --color-bg-edit-hint: #eff6ff;
   --color-bg-delete-hover: #fee2e2;
@@ -81,19 +89,38 @@
   --space-xl: 20px;
 
   /* Border radius */
-  --radius-sm: 4px;
-  --radius-md: 6px;
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Brand warmth - gold accent for liveness/connected states */
+  --color-gold: #FFDC73;
+  --color-gold-subtle: #FFF8E7;
+  --color-gold-border: #F0D06A;
 
   /* Animation */
-  --transition-duration: 0.25s;
+  --transition-duration: 0.2s;
+  --transition-snappy: 0.12s;
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --shadow-soft: 0 1px 3px rgba(58, 92, 168, 0.06), 0 4px 16px rgba(58, 92, 168, 0.04);
+  --shadow-hover: 0 2px 8px rgba(88, 129, 216, 0.14), 0 1px 3px rgba(58, 92, 168, 0.08);
+  --shadow-focus: 0 0 0 3px rgba(88, 129, 216, 0.2);
+  --shadow-btn-primary: 0 1px 3px rgba(58, 92, 168, 0.2), 0 4px 12px rgba(88, 129, 216, 0.15);
 
   /* Typography */
-  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-sans: "Avenir Next", "Segoe UI", "Noto Sans", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
-  --font-size-xs: 10px;
-  --font-size-sm: 11px;
-  --font-size-base: 12px;
-  --font-size-md: 13px;
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-base: 13px;
+  --font-size-md: 14px;
+  --font-size-lg: 15px;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-tracking-label: 0.04em;
+  --line-height-tight: 1.35;
+  --line-height-base: 1.5;
 
   /* Icon sizes */
   --icon-sm: 12px;
@@ -108,6 +135,7 @@
   --color-surface-0: var(--color-bg-base);
   --color-surface-1: var(--color-bg-elevated);
   --color-surface-2: var(--color-bg-input);
+  --color-surface-card: #ffffff;
 
   /* Scrollbar */
   --scrollbar-thumb: #c0c0c0;
@@ -118,31 +146,42 @@
 /* Dark theme */
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-text-primary: #e8e8e8;
-    --color-text-secondary: #a0a0a0;
-    --color-text-muted: #707070;
+    --color-text-primary: #e8ebf0;
+    --color-text-secondary: #aab0bc;
+    --color-text-muted: #7d848f;
 
-    --color-bg-base: #1e1e1e;
-    --color-bg-elevated: #252526;
-    --color-bg-elevated-more: #040404;
-    --color-bg-input: #2d2d2d;
-    --color-bg-accent: #8f8f8f;
-    --color-fg-accent: #ffffff;
+    --color-bg-base: #191c21;
+    --color-bg-elevated: #23262e;
+    --color-bg-elevated-more: #131619;
+    --color-bg-input: #292e36;
+    --color-bg-accent: #363b47;
+    --color-fg-accent: #d0d3db;
 
-    --color-border: #3c3c3c;
+    --color-border: #3a3d47;
+    --color-border-strong: #4c4f58;
+
+    /* Card surface - lifted above base for visual separation */
+    --color-surface-card: #252930;
 
     --color-success: #4ec9b0;
     --color-error: #f14c4c;
 
     /* Contextual backgrounds */
-    --color-bg-code: #2d2d2d;
-    --color-bg-btn: #2d2d2d;
-    --color-bg-btn-hover: #3c3c3c;
+    --color-bg-code: #21252c;
+    --color-bg-btn: #292e36;
+    --color-bg-btn-hover: #323740;
+    --color-bg-status-success: #133528;
+    --color-border-status-success: #2a7b60;
+    --color-bg-status-info: #1f334f;
+    --color-border-status-info: #426fa8;
+    --color-bg-status-warning: #252416;
+    --color-border-status-warning: #7a7228;
     --color-bg-status-failed: #2d1f1f;
     --color-border-status-failed: #f14c4c;
-    --color-bg-approval: #3d3520;
-    --color-border-approval: #5c4d1f;
+    --color-bg-approval: #252416;
+    --color-border-approval: #6b6420;
     --color-text-approval-header: #fcd34d;
+    --color-bg-builtin: #1f232b;
     --color-bg-edit-hover: #1e3a5f;
     --color-bg-edit-hint: #1e3a5f;
     --color-bg-delete-hover: #3d1f1f;
@@ -162,15 +201,23 @@
     --color-text-info-banner: #93c5fd;
     --color-text-info-banner-strong: #bfdbfe;
 
-    --color-bg-warning-banner: #3d3520;
-    --color-border-warning-banner: #5c4d1f;
-    --color-text-warning-banner: #f0c674;
-    --color-text-warning-banner-strong: #ffd866;
+    --color-bg-warning-banner: #242315;
+    --color-border-warning-banner: #7a7220;
+    --color-text-warning-banner: #f5cc4d;
+    --color-text-warning-banner-strong: #fde68a;
 
     --color-bg-error-banner: #450a0a;
     --color-border-error-banner: #dc2626;
     --color-text-error-banner: #fca5a5;
     --color-text-error-banner-strong: #fecaca;
+
+    /* Gold warmth - dark equivalents */
+    --color-gold-subtle: #2e2a1e;
+    --color-gold-border: #5c4d1f;
+
+    --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.2), 0 4px 16px rgba(0, 0, 0, 0.12);
+    --shadow-hover: 0 2px 8px rgba(88, 129, 216, 0.2), 0 1px 3px rgba(0, 0, 0, 0.16);
+    --shadow-btn-primary: 0 1px 3px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(88, 129, 216, 0.2);
 
     --scrollbar-thumb: #5a5a5a;
     --scrollbar-thumb-hover: #6a6a6a;
