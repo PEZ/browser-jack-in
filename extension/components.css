@@ -193,7 +193,7 @@
 }
 
 .empty-state-text a {
-  color: var(--clojure-blue);
+  color: var(--color-interactive);
   text-decoration: none;
 }
 
@@ -250,7 +250,7 @@ kbd {
    ============================================================ */
 
 .blank-slate-link {
-  color: var(--clojure-blue);
+  color: var(--color-interactive);
   text-decoration: none;
   font-weight: 500;
 }
@@ -266,7 +266,7 @@ kbd {
 .run-at-badge {
   display: inline-flex;
   align-items: center;
-  color: var(--clojure-blue);
+  color: var(--color-interactive);
   flex-shrink: 0;
 }
 
@@ -510,7 +510,7 @@ kbd {
 
 .list-item-action--edit:hover {
   background: var(--color-bg-edit-hover);
-  color: var(--clojure-blue);
+  color: var(--color-interactive);
 }
 
 .list-item-action--delete:hover {

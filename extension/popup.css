@@ -384,7 +384,7 @@ body.ready .script-item {
 }
 
 .builtin-indicator:hover {
-  color: var(--clojure-blue);
+  color: var(--color-interactive);
 }
 
 .script-description {
@@ -450,7 +450,7 @@ body.ready .script-item {
 
 .script-inspect:hover {
   background: var(--color-bg-edit-hover);
-  color: var(--clojure-blue);
+  color: var(--color-interactive);
   transform: scale(1.08);
 }
 
@@ -744,7 +744,7 @@ body.ready .script-item {
 .connected-tab-port {
   font-size: var(--font-size-sm);
   font-family: ui-monospace, SFMono-Regular, monospace;
-  color: var(--clojure-blue);
+  color: var(--color-interactive);
   flex-shrink: 0;
 }
 

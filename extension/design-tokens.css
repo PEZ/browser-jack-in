@@ -149,8 +149,17 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --color-text-primary: #e8ebf0;
-    --color-text-secondary: #aab0bc;
-    --color-text-muted: #7d848f;
+    --color-text-secondary: #b5bbc8;
+    --color-text-muted: #949aa6;
+
+    /* Brand blues brightened for dark-on-dark readability */
+    --clojure-blue: #6B93E0;
+    --clojure-blue-hover: #5A82CF;
+    --clojure-blue-light: #b6caf9;
+
+    /* Interactive text: bright enough for links on dark backgrounds */
+    --color-interactive: var(--clojure-blue-light);
+    --color-interactive-hover: #c8d8ff;
 
     --color-bg-base: #191c21;
     --color-bg-elevated: #23262e;

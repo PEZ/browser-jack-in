@@ -124,16 +124,12 @@
   font-weight: var(--font-weight-semibold);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--clojure-blue);
+  color: var(--color-interactive);
   margin-left: 8px;
   opacity: 0.75;
 }
 
 @media (prefers-color-scheme: dark) {
-  .tagline {
-    color: var(--clojure-blue-light);
-  }
-
   .footer-logos img {
     background: #e8e6e3;
     box-shadow: 0 1px 6px rgba(0, 0, 0, 0.35);
@@ -141,6 +137,30 @@
 
   .footer-logos a:hover img {
     box-shadow: 0 3px 14px rgba(88, 129, 216, 0.3);
+  }
+
+  /* Creator menu dark mode: popover needs strong lift */
+  .creator-menu {
+    background: #3a404c;
+    border-color: #525a68;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  }
+
+  .creator-menu-header {
+    border-bottom-color: #4e5566;
+  }
+
+  .creator-menu .creator-menu-item:hover {
+    background: #454c5a;
+  }
+
+  /* Brand icons lighter on dark popover */
+  .creator-menu .creator-menu-item .icon-linkedin {
+    color: #4C9AE6;
+  }
+
+  .creator-menu .creator-menu-item:nth-child(5) svg {
+    color: #8B9DB0;
   }
 }
 
@@ -222,7 +242,7 @@
 }
 
 .footer-powered a {
-  color: var(--clojure-blue);
+  color: var(--color-interactive);
   text-decoration: none;
 }
 
@@ -238,7 +258,7 @@
 }
 
 .app-footer a {
-  color: var(--clojure-blue);
+  color: var(--color-interactive);
   text-decoration: none;
 }
 
@@ -264,7 +284,7 @@
   cursor: pointer;
   padding: 0;
   font: inherit;
-  color: var(--clojure-blue);
+  color: var(--color-interactive);
 }
 
 .footer-sponsor-heart:hover {
@@ -309,9 +329,9 @@
 }
 
 .creator-link {
-  color: var(--clojure-blue);
+  color: var(--color-interactive);
   font-weight: var(--font-weight-semibold);
-  background-image: linear-gradient(var(--clojure-blue), var(--clojure-blue));
+  background-image: linear-gradient(var(--color-interactive), var(--color-interactive));
   background-size: 0% 1px;
   background-position: 0% 100%;
   background-repeat: no-repeat;
@@ -394,11 +414,11 @@
   animation: menu-item-enter var(--transition-duration) var(--ease-out-expo) backwards;
 }
 
-/* Staggered entrance for each menu item */
-.creator-menu .creator-menu-item:nth-child(1) { animation-delay: 0.04s; }
-.creator-menu .creator-menu-item:nth-child(2) { animation-delay: 0.08s; }
-.creator-menu .creator-menu-item:nth-child(3) { animation-delay: 0.12s; }
-.creator-menu .creator-menu-item:nth-child(4) { animation-delay: 0.16s; }
+/* Staggered entrance for each menu item (header is nth-child(1)) */
+.creator-menu .creator-menu-item:nth-child(2) { animation-delay: 0.04s; }
+.creator-menu .creator-menu-item:nth-child(3) { animation-delay: 0.08s; }
+.creator-menu .creator-menu-item:nth-child(4) { animation-delay: 0.12s; }
+.creator-menu .creator-menu-item:nth-child(5) { animation-delay: 0.16s; }
 
 @keyframes menu-item-enter {
   from {
@@ -412,7 +432,7 @@
 }
 
 .creator-menu .creator-menu-item span {
-  color: var(--clojure-blue);
+  color: var(--color-interactive);
   white-space: nowrap;
 }
 
@@ -420,12 +440,8 @@
   color: var(--color-sponsor-heart);
 }
 
-/* Social icons: always show brand colors - not gray! */
-.creator-menu .creator-menu-item:nth-child(1) svg {
-  color: var(--color-text-primary);
-}
-
-.creator-menu .creator-menu-item:nth-child(2) svg {
+/* Social icons: brand colors always visible */
+.creator-menu .creator-menu-item:nth-child(3) svg {
   color: var(--color-youtube-brand);
 }
 
@@ -433,7 +449,7 @@
   color: var(--color-linkedin-brand);
 }
 
-.creator-menu .creator-menu-item:nth-child(4) svg {
+.creator-menu .creator-menu-item:nth-child(5) svg {
   color: var(--color-twitter-brand);
 }
 

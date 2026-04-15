@@ -282,7 +282,7 @@ body {
 }
 
 .empty-results-text a {
-  color: var(--clojure-blue);
+  color: var(--color-interactive);
   text-decoration: none;
 }
 
@@ -482,7 +482,7 @@ body {
 }
 
 .field-hint.hint-info {
-  color: var(--clojure-blue);
+  color: var(--color-interactive);
 }
 
 .field-hint.hint-warning {
