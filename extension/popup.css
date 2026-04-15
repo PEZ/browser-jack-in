@@ -46,7 +46,7 @@ body {
 }
 
 .popup-header .app-header-title-text {
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   letter-spacing: -0.01em;
 }
 
@@ -416,8 +416,8 @@ body.ready .script-item {
 }
 
 .script-delete {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
   cursor: pointer;
   background: transparent;
   border: none;
@@ -436,7 +436,7 @@ body.ready .script-item {
 }
 
 .script-inspect {
-  font-size: 14px;
+  font-size: var(--font-size-md);
   cursor: pointer;
   background: transparent;
   border: none;
@@ -455,7 +455,7 @@ body.ready .script-item {
 }
 
 .script-run {
-  font-size: 14px;
+  font-size: var(--font-size-md);
   cursor: pointer;
   background: transparent;
   border: none;
@@ -487,7 +487,7 @@ body.ready .script-item {
 .no-scripts {
   padding: 16px;
   text-align: center;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--color-text-muted);
   background: var(--color-bg-elevated);
   border-radius: var(--radius-md);
@@ -525,11 +525,11 @@ body.ready .script-item {
 
 .approval-allow {
   padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   cursor: pointer;
   background: var(--clojure-green);
-  color: white;
+  color: var(--color-text-on-success);
   border: none;
   border-radius: var(--radius-md);
   transition: background-color var(--transition-snappy) var(--ease-out-expo),
@@ -551,8 +551,8 @@ body.ready .script-item {
 
 .approval-deny {
   padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   cursor: pointer;
   background: var(--color-bg-btn);
   color: var(--color-text-delete-hover);
@@ -632,7 +632,7 @@ body.ready .script-item {
 
 .section-badge {
   background: var(--clojure-blue);
-  color: white;
+  color: var(--color-text-on-primary);
   padding: 0.1rem 0.45rem;
   border-radius: 10px;
   font-size: var(--font-size-xs);
@@ -796,7 +796,7 @@ body.ready .script-item {
 .no-connections {
   padding: 12px;
   text-align: center;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-style: italic;
   color: var(--color-text-muted);
 }
@@ -808,14 +808,14 @@ body.ready .script-item {
 }
 
 .settings-section-title {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
   margin: 0;
   color: var(--color-text-primary);
 }
 
 .section-description {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   line-height: 1.5;
   margin: 0;
@@ -901,7 +901,7 @@ body.ready .script-item {
 .no-origins {
   padding: 12px;
   text-align: center;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--color-text-muted);
   background: var(--color-bg-elevated);
   border-radius: var(--radius-md);
@@ -922,7 +922,7 @@ body.ready .script-item {
 .add-origin-form input {
   flex: 1;
   padding: 8px 10px;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-family: ui-monospace, SFMono-Regular, monospace;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -943,11 +943,11 @@ body.ready .script-item {
 
 .add-btn {
   padding: 8px 14px;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   cursor: pointer;
   background: var(--clojure-blue);
-  color: white;
+  color: var(--color-text-on-primary);
   border: none;
   border-radius: var(--radius-md);
   transition: background-color var(--transition-snappy) var(--ease-out-expo),
@@ -1047,8 +1047,8 @@ body.ready .script-item {
 .import-btn {
   flex: 1;
   padding: 8px 14px;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   cursor: pointer;
   background: var(--color-bg-btn);
   color: var(--color-text-primary);
@@ -1084,8 +1084,8 @@ body.ready .script-item {
 
 .dev-log-btn {
   padding: 6px 12px;
-  font-size: 11px;
-  font-weight: 500;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
   cursor: pointer;
   background: var(--color-bg-btn);
   color: var(--color-text-secondary);
@@ -1119,7 +1119,7 @@ body.ready .script-item {
 
 .no-scripts-hint,
 .no-connections-hint {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--color-text-muted);
   margin-top: 8px;
   line-height: 1.5;
@@ -1153,6 +1153,10 @@ body.ready .script-item {
   font-size: var(--font-size-base);
 }
 
+.icon-button,
+button#connect,
+.section-header,
+.connected-tab-item.clickable,
 .add-btn,
 .approval-allow,
 .approval-deny,
@@ -1168,6 +1172,10 @@ body.ready .script-item {
   outline: none;
 }
 
+.icon-button:focus-visible,
+button#connect:focus-visible,
+.section-header:focus-visible,
+.connected-tab-item.clickable:focus-visible,
 .add-btn:focus-visible,
 .approval-allow:focus-visible,
 .approval-deny:focus-visible,
@@ -1186,4 +1194,36 @@ body.ready .script-item {
 .dev-tools-buttons {
   display: flex;
   gap: 8px;
+}
+
+/* ============================================================
+   Reduced Motion
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .connect-setup,
+  .connected-repl-settings,
+  .script-item,
+  .section-content,
+  .origin-item,
+  .connected-tab-item,
+  button#connect,
+  .icon-button,
+  .section-header,
+  .script-delete,
+  .script-inspect,
+  .script-run,
+  .approval-allow,
+  .approval-deny,
+  .add-btn,
+  .export-btn,
+  .import-btn,
+  .dev-log-btn,
+  .disconnect-tab-btn,
+  .chevron,
+  .section-badge,
+  .port-row input {
+    animation: none;
+    transition: none;
+  }
 }

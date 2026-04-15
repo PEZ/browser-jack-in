@@ -281,7 +281,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 6px 12px;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   font-size: var(--font-size-base);
   color: var(--color-text-primary);
   border-bottom: 1px solid var(--color-border);

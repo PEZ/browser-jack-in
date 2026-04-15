@@ -142,7 +142,7 @@ body {
 
 .btn-eval {
   background: var(--clojure-blue);
-  color: white;
+  color: var(--color-text-on-primary);
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -393,7 +393,7 @@ body {
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-medium);
   background: var(--clojure-blue);
-  color: #ffffff;
+  color: var(--color-text-on-primary);
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -570,7 +570,32 @@ body {
 }
 
 .btn-save:focus-visible,
-.btn-rename:focus-visible {
+.btn-rename:focus-visible,
+.btn-eval:focus-visible,
+.btn-clear:focus-visible,
+.btn-new-script:focus-visible {
   outline: none;
   box-shadow: var(--shadow-focus);
+}
+
+/* ============================================================
+   Reduced Motion
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .result-item,
+  .code-input-area textarea,
+  .code-actions button,
+  .btn-eval,
+  .btn-clear,
+  .btn-save,
+  .btn-rename,
+  .btn-new-script,
+  .field-hint,
+  .manifest-warning,
+  .no-manifest-message,
+  .empty-results {
+    animation: none;
+    transition: none;
+  }
 }
