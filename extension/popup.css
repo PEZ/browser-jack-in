@@ -638,6 +638,7 @@ body.ready .script-item {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  padding-top: 1px; /* optical: shift glyph down to counter font ascender bias */
   border-radius: 10px;
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
@@ -1015,7 +1016,7 @@ body.ready .script-item {
 
 .setting select {
   width: 100%;
-  padding: 6px 28px 6px 10px;
+  padding: 6px 10px;
   font-size: var(--font-size-base);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
