@@ -102,3 +102,25 @@
                   test-check-script-exists-registry-entry)
             (test "web-installer-save-script has correct registry entry"
                   test-web-installer-save-script-registry-entry)))
+
+;; ============================================================
+;; Screenshot Capture Message Registry Tests
+;; ============================================================
+
+(defn- test-capture-element-registry-entry []
+  (let [entry (get message-registry "capture-element")]
+    ;; Must be registered
+    (-> (expect entry) (.toBeTruthy))
+    ;; Only accessible from epupp-page
+    (-> (expect (contains? (:msg/sources entry) "epupp-page"))
+        (.toBe true))
+    (-> (expect (contains? (:msg/sources entry) "epupp-userscript"))
+        (.toBe false))
+    ;; Response-bearing message
+    (-> (expect (:msg/response? entry))
+        (.toBe true))))
+
+(describe "screenshot capture message registry"
+          (fn []
+            (test "capture-element has correct registry entry"
+                  test-capture-element-registry-entry)))

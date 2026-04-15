@@ -57,6 +57,10 @@
    {:script/id "epupp-builtin-sponsor-check"
     :path "userscripts/epupp/sponsor.cljs"
     :name "epupp/sponsor.cljs"
+    :always-enabled? true}
+   {:script/id "epupp-builtin-tools"
+    :path "userscripts/epupp/tools.cljs"
+    :name "epupp/tools.cljs"
     :always-enabled? true}])
 
 (def ^:private security-probe-builtin

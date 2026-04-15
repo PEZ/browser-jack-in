@@ -50,6 +50,10 @@
                              :msg/pre-forward (fn [_msg]
                                                 (log/debug "Bridge" "Forwarding sponsor-status to background"))}
    "get-sponsored-username" {:msg/sources #{"epupp-page"}
+                             :msg/response? true}
+
+   ;; Screenshot capture
+   "capture-element"        {:msg/sources #{"epupp-page"}
                              :msg/response? true}})
 
 (def !state (atom {:bridge/connected? false
