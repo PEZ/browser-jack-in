@@ -135,15 +135,12 @@
   }
 
   .footer-logos img {
-    box-shadow: 0 0 0 3px var(--color-bg-elevated),
-                0 0 0 4px var(--color-border),
-                0 2px 8px rgba(0, 0, 0, 0.25);
+    background: #e8e6e3;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
   }
 
   .footer-logos a:hover img {
-    box-shadow: 0 0 0 3px var(--color-bg-elevated),
-                0 0 0 4px var(--clojure-blue-light),
-                0 3px 12px rgba(88, 129, 216, 0.25);
+    box-shadow: 0 2px 10px rgba(88, 129, 216, 0.3);
   }
 }
 
@@ -155,7 +152,7 @@
   gap: 10px;
   padding: 16px 12px;
   font-size: var(--font-size-sm);
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   text-align: center;
 }
 
@@ -174,25 +171,19 @@
 /* Version - subtle pill badge with brand warmth */
 .footer-version {
   font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   letter-spacing: var(--font-tracking-label);
   padding: 2px 8px;
   background: var(--color-gold-subtle);
   border: 1px solid var(--color-gold-border);
   border-radius: 10px;
-  opacity: 0.7;
-  transition: opacity var(--transition-duration);
-}
-
-.footer-version:hover {
-  opacity: 1;
 }
 
 .footer-logos {
   display: flex;
   align-items: center;
   gap: 16px;
-  opacity: 0.65;
+  opacity: 0.8;
   transition: opacity var(--transition-duration);
 }
 
@@ -210,21 +201,20 @@
   transform: scale(1.12) rotate(-3deg);
 }
 
-/* Sticker effect - soft white halo bleeds outside the logo */
+/* Sticker effect - logos printed on white paper discs */
 .footer-logos img {
   width: 28px;
   height: 28px;
+  padding: 3px;
+  background: #fff;
   border-radius: 50%;
-  box-shadow: 0 0 0 3px var(--color-bg-elevated),
-              0 0 0 4px var(--color-border),
-              0 2px 6px rgba(0, 0, 0, 0.06);
-  transition: box-shadow var(--transition-duration) var(--ease-out-expo);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: box-shadow var(--transition-duration) var(--ease-out-expo),
+              background var(--transition-duration);
 }
 
 .footer-logos a:hover img {
-  box-shadow: 0 0 0 3px var(--color-bg-elevated),
-              0 0 0 4px var(--clojure-blue-light),
-              0 3px 10px rgba(88, 129, 216, 0.15);
+  box-shadow: 0 2px 8px rgba(88, 129, 216, 0.18);
 }
 
 .footer-powered {
@@ -295,11 +285,12 @@
 /* Gentle pulse for unsponsored heart - draws soft attention */
 @keyframes heart-nudge {
   0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.12); }
+  50% { transform: scale(1.3); }
 }
 
 .footer-sponsor-heart .sponsor-heart-icon:not(.sponsor-heart-filled) {
-  animation: heart-nudge 3s ease-in-out 6s 2;
+  transform-origin: center;
+  animation: heart-nudge 2s ease-in-out 2s 3;
 }
 
 .footer-sponsor-heart .sponsor-heart-filled {
