@@ -964,12 +964,13 @@
      [:div.setting
       [:label.select-label {:for (str prefix "auto-connect-level")}
        "Auto-connect"]
-      [:select {:id (str prefix "auto-connect-level")
-                :value auto-connect-level
-                :on-change #(dispatch! [[:popup/ax.set-auto-connect-level (.. % -target -value)]])}
-       [:option {:value "off"} "Never"]
-       [:option {:value "all-pages"} "On page load"]
-       [:option {:value "all-tabs"} "On page load + tab activation"]]
+      [:div.select-wrapper
+       [:select {:id (str prefix "auto-connect-level")
+                 :value auto-connect-level
+                 :on-change #(dispatch! [[:popup/ax.set-auto-connect-level (.. % -target -value)]])}
+        [:option {:value "off"} "Never"]
+        [:option {:value "all-pages"} "On page load"]
+        [:option {:value "all-tabs"} "On page load + tab activation"]]]
       [:p.description.warning
        (case auto-connect-level
          "all-pages" "Epupp connects a REPL to every page you load."

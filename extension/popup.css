@@ -1014,15 +1014,39 @@ body.ready .script-item {
   margin-bottom: 4px;
 }
 
+.select-wrapper {
+  position: relative;
+}
+
+.select-wrapper::after {
+  content: "";
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: var(--icon-md);
+  height: var(--icon-md);
+  background: var(--color-text-secondary);
+  mask-image: var(--icon-chevron-down);
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  -webkit-mask-image: var(--icon-chevron-down);
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  pointer-events: none;
+}
+
 .setting select {
   width: 100%;
-  padding: 6px 10px;
+  padding: 6px 28px 6px 10px;
   font-size: var(--font-size-base);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-bg-input);
   color: var(--color-text-primary);
   cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .settings-section .description,
