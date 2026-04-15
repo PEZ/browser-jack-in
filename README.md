@@ -346,6 +346,41 @@ Userscripts can load bundled Scittle ecosystem libraries via `:epupp/inject`:
 
 Dependencies resolve automatically: `scittle://re-frame.js` loads Reagent and React.
 
+**Built-in Epupp libraries:**
+
+| Inject URL | Namespace | Description |
+|------------|-----------|-------------|
+| `epupp://epupp/ui.cljs` | `epupp.ui` | Epupp branding components: icon, header, banner hiccup |
+| `epupp://epupp/tools.cljs` | `epupp.tools` | Element and viewport screenshot capture |
+
+Built-in libraries are always available - just add the inject URL and require the namespace.
+
+#### `epupp.tools` - Capture Elements
+
+Capture screenshots of DOM elements or the visible viewport as data URL images:
+
+```clojure
+{:epupp/script-name "my/screenshot.cljs"
+ :epupp/inject ["epupp://epupp/tools.cljs"]}
+
+(ns my.screenshot
+  (:require [epupp.tools :as tools]))
+
+;; Capture a DOM element (returns Promise resolving to {:success bool :dataUrl string :error string})
+(tools/capture-element (js/document.querySelector "#hero"))
+(tools/capture-element element {:format "jpeg" :quality 80})
+
+;; CSS selector shorthand
+(tools/capture-selector "#hero")
+(tools/capture-selector ".card" {:format "png"})
+
+;; Full visible viewport
+(tools/capture-visible)
+(tools/capture-visible {:format "jpeg" :quality 90})
+```
+
+All three functions are `^:async` and return Promises. Options: `:format` (`"png"` or `"jpeg"`, default `"png"`), `:quality` (0-100, for JPEG).
+
 ### Library Namespaces
 
 Any userscript can serve as a shared library. Reference it from another script's `:epupp/inject` using the `epupp://` protocol:

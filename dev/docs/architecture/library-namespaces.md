@@ -49,6 +49,7 @@ Built-in library scripts live under the reserved `epupp/` path. For example:
 
 - `epupp://epupp/internal/helpers.cljs`
 - `epupp://epupp/ui.cljs`
+- `epupp://epupp/tools.cljs`
 
 Built-ins also dogfood the same mechanism. `epupp/web_userscript_installer.cljs` and `epupp/sponsor.cljs` declare `:epupp/inject` dependencies on these built-in libraries via `epupp://`.
 

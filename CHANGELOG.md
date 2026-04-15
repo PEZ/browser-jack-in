@@ -6,6 +6,8 @@ Changes to Epupp
 
 ## [Unreleased]
 
+- Add `epupp.tools` built-in library: `capture-element`, `capture-selector`, `capture-visible` for capturing DOM element and viewport screenshots as data URL images
+
 ## [0.0.16] - 2026-04-08
 
 - Fix: Honor `:force true` with `fs/mv!`
