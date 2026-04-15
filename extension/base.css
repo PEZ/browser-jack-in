@@ -304,6 +304,11 @@
 
 .creator-trigger {
   cursor: pointer;
+  transition: color var(--transition-duration);
+}
+
+.creator-trigger:hover {
+  color: var(--color-text-primary);
 }
 
 .creator-link {
@@ -332,6 +337,15 @@
   z-index: 100;
   text-align: left;
   animation: menu-appear var(--transition-duration) var(--ease-out-expo);
+  overflow: hidden;
+}
+
+/* Brand gradient accent on the card top edge */
+.creator-menu::before {
+  content: '';
+  display: block;
+  height: 2px;
+  background: linear-gradient(90deg, var(--clojure-blue-light), var(--clojure-green), var(--clojure-gold));
 }
 
 @keyframes menu-appear {
@@ -386,6 +400,24 @@
   border: none;
   font: inherit;
   width: 100%;
+  animation: menu-item-enter var(--transition-duration) var(--ease-out-expo) backwards;
+}
+
+/* Staggered entrance for each menu item */
+.creator-menu .creator-menu-item:nth-child(1) { animation-delay: 0.04s; }
+.creator-menu .creator-menu-item:nth-child(2) { animation-delay: 0.08s; }
+.creator-menu .creator-menu-item:nth-child(3) { animation-delay: 0.12s; }
+.creator-menu .creator-menu-item:nth-child(4) { animation-delay: 0.16s; }
+
+@keyframes menu-item-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .creator-menu .creator-menu-item span {
@@ -401,6 +433,23 @@
   color: var(--color-linkedin-brand);
 }
 
+/* Icon brand colors on hover */
+.creator-menu .creator-menu-item svg {
+  transition: color var(--transition-duration);
+}
+
+.creator-menu .creator-menu-item:nth-child(2):hover svg {
+  color: var(--color-youtube-brand);
+}
+
+.creator-menu .creator-menu-item:nth-child(3):hover svg {
+  color: var(--color-linkedin-brand);
+}
+
+.creator-menu .creator-menu-item:nth-child(4):hover svg {
+  color: var(--color-twitter-brand);
+}
+
 .creator-menu .creator-menu-item:hover {
   background: var(--color-bg-btn-hover);
   color: var(--color-text-primary);
@@ -409,6 +458,17 @@
 
 .creator-menu .creator-menu-item:hover span {
   text-decoration: underline;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .creator-menu,
+  .creator-menu .creator-menu-item,
+  .creator-trigger,
+  .creator-link,
+  .creator-menu .creator-menu-item svg {
+    animation: none;
+    transition: none;
+  }
 }
 
 /* Buttons */
