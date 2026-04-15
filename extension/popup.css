@@ -1109,7 +1109,6 @@ body.ready .script-item {
 
 .popup-footer {
   margin: 12px -20px -20px -20px;
-  border-top: 1px solid var(--color-border);
   background: var(--color-bg-elevated);
 }
 
@@ -1222,7 +1221,11 @@ button#connect:focus-visible,
   .disconnect-tab-btn,
   .chevron,
   .section-badge,
-  .port-row input {
+  .port-row input,
+  .footer-logos a,
+  .footer-logos img,
+  .footer-version,
+  .creator-link {
     animation: none;
     transition: none;
   }

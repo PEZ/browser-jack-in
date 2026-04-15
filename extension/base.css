@@ -133,6 +133,18 @@
   .tagline {
     color: var(--clojure-blue-light);
   }
+
+  .footer-logos img {
+    box-shadow: 0 0 0 3px var(--color-bg-elevated),
+                0 0 0 4px var(--color-border),
+                0 2px 8px rgba(0, 0, 0, 0.25);
+  }
+
+  .footer-logos a:hover img {
+    box-shadow: 0 0 0 3px var(--color-bg-elevated),
+                0 0 0 4px var(--clojure-blue-light),
+                0 3px 12px rgba(88, 129, 216, 0.25);
+  }
 }
 
 /* Footer container - applied to both .popup-footer and .panel-footer */
@@ -147,31 +159,72 @@
   text-align: center;
 }
 
+/* Subtle brand gradient replaces hard border-top, echoing the header accent */
+.app-footer::before {
+  content: '';
+  display: block;
+  width: 60%;
+  height: 1px;
+  margin-bottom: 4px;
+  background: linear-gradient(90deg, transparent, var(--clojure-blue-light), var(--clojure-green), transparent);
+  opacity: 0.35;
+  border-radius: 1px;
+}
+
+/* Version - subtle pill badge with brand warmth */
+.footer-version {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  letter-spacing: var(--font-tracking-label);
+  padding: 2px 8px;
+  background: var(--color-gold-subtle);
+  border: 1px solid var(--color-gold-border);
+  border-radius: 10px;
+  opacity: 0.7;
+  transition: opacity var(--transition-duration);
+}
+
+.footer-version:hover {
+  opacity: 1;
+}
+
 .footer-logos {
   display: flex;
   align-items: center;
-  gap: 12px;
-  opacity: 0.5;
+  gap: 16px;
+  opacity: 0.65;
   transition: opacity var(--transition-duration);
 }
 
 .footer-logos:hover {
-  opacity: 0.8;
+  opacity: 1;
 }
 
 .footer-logos a {
+  display: flex;
   transition: transform var(--transition-snappy) var(--ease-out-expo),
-              opacity var(--transition-duration);
+              filter var(--transition-duration);
 }
 
 .footer-logos a:hover {
-  opacity: 1;
-  transform: scale(1.1);
+  transform: scale(1.12) rotate(-3deg);
 }
 
+/* Sticker effect - soft white halo bleeds outside the logo */
 .footer-logos img {
   width: 28px;
   height: 28px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px var(--color-bg-elevated),
+              0 0 0 4px var(--color-border),
+              0 2px 6px rgba(0, 0, 0, 0.06);
+  transition: box-shadow var(--transition-duration) var(--ease-out-expo);
+}
+
+.footer-logos a:hover img {
+  box-shadow: 0 0 0 3px var(--color-bg-elevated),
+              0 0 0 4px var(--clojure-blue-light),
+              0 3px 10px rgba(88, 129, 216, 0.15);
 }
 
 .footer-powered {
@@ -231,6 +284,26 @@
 
 .footer-sponsor-heart .sponsor-heart-icon {
   color: var(--color-sponsor-heart);
+  transition: transform var(--transition-snappy) var(--ease-out-expo),
+              color var(--transition-duration);
+}
+
+.footer-sponsor-heart:hover .sponsor-heart-icon {
+  transform: scale(1.15);
+}
+
+/* Gentle pulse for unsponsored heart - draws soft attention */
+@keyframes heart-nudge {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.12); }
+}
+
+.footer-sponsor-heart .sponsor-heart-icon:not(.sponsor-heart-filled) {
+  animation: heart-nudge 3s ease-in-out 6s 2;
+}
+
+.footer-sponsor-heart .sponsor-heart-filled {
+  color: var(--color-sponsor-heart);
 }
 
 /* Creator menu */
@@ -242,12 +315,17 @@
   cursor: pointer;
 }
 
-.creator-trigger:hover .creator-link {
-  text-decoration: underline;
-}
-
 .creator-link {
   color: var(--clojure-blue);
+  background-image: linear-gradient(var(--clojure-blue), var(--clojure-blue));
+  background-size: 0% 1px;
+  background-position: 0% 100%;
+  background-repeat: no-repeat;
+  transition: background-size var(--transition-duration) var(--ease-out-expo);
+}
+
+.creator-trigger:hover .creator-link {
+  background-size: 100% 1px;
 }
 
 .creator-menu {
