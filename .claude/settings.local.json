@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__node__clojure_evaluate_code",
+      "mcp__node__clojure_repl_output_log"
+    ]
+  }
+}

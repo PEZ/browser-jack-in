@@ -20,3 +20,4 @@ playwright-report/
 
 # E2E test output (written by bb test:e2e)
 .tmp/
+.calva/mcp-server/port

@@ -133,6 +133,7 @@
 			".tmp": true,
 			"extension/**/*.mjs": true,
 			"extension/vendor": true
-		}
+		},
+		"calva-backseat-driver.mcpSocketServerPort": 1665
 	}
 }
