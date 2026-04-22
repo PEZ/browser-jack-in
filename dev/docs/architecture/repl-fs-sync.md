@@ -99,9 +99,10 @@ into the page. The list of injected files is maintained in `epupp-api-files`.
 content bridge using `inject-userscript`. After all files are injected it
 fires `trigger-scittle.js` to evaluate and register the namespaces.
 
-This means the REPL caller can directly require `epupp.fs` and `epupp.repl`
-in the page environment. The injected code runs in Scittle, while the content
-bridge and background worker run in Squint and service worker contexts.
+This means the REPL caller can directly require `epupp.fs`, `epupp.repl`,
+and `epupp.tools` in the page environment. The injected code runs in Scittle,
+while the content bridge and background worker run in Squint and service
+worker contexts.
 
 ## FS Operation Flow and Access Gate
 

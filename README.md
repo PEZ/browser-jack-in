@@ -351,20 +351,25 @@ Dependencies resolve automatically: `scittle://re-frame.js` loads Reagent and Re
 | Inject URL | Namespace | Description |
 |------------|-----------|-------------|
 | `epupp://epupp/ui.cljs` | `epupp.ui` | Epupp branding components: icon, header, banner hiccup |
-| `epupp://epupp/tools.cljs` | `epupp.tools` | Element and viewport screenshot capture |
 
 Built-in libraries are always available - just add the inject URL and require the namespace.
 
+**REPL bootstrap APIs:**
+
+These namespaces are automatically available when the REPL connects - no `:epupp/inject` needed:
+
+| Namespace | Description |
+|-----------|-------------|
+| `epupp.repl` | REPL utilities including `manifest!` for library loading |
+| `epupp.fs` | File system operations: `ls`, `show`, `save!`, `mv!`, `rm!` |
+| `epupp.tools` | Element and viewport screenshot capture |
+
 #### `epupp.tools` - Capture Elements
 
-Capture screenshots of DOM elements or the visible viewport as data URL images:
+`epupp.tools` is available automatically when the REPL connects. Capture screenshots of DOM elements or the visible viewport as data URL images:
 
 ```clojure
-{:epupp/script-name "my/screenshot.cljs"
- :epupp/inject ["epupp://epupp/tools.cljs"]}
-
-(ns my.screenshot
-  (:require [epupp.tools :as tools]))
+(require '[epupp.tools :as tools])
 
 ;; Capture a DOM element (returns Promise resolving to {:success bool :dataUrl string :error string})
 (tools/capture-element (js/document.querySelector "#hero"))

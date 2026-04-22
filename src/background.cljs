@@ -115,7 +115,11 @@
   [{:id "epupp-repl"
     :path "bundled/epupp/repl.cljs"}
    {:id "epupp-fs"
-    :path "bundled/epupp/fs.cljs"}])
+    :path "bundled/epupp/fs.cljs"}
+   {:id "epupp-internal-helpers"
+    :path "bundled/epupp/internal/helpers.cljs"}
+   {:id "epupp-tools"
+    :path "bundled/epupp/tools.cljs"}])
 
 (defn ^:async fetch-text!
   [url]

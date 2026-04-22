@@ -49,7 +49,8 @@ Built-in library scripts live under the reserved `epupp/` path. For example:
 
 - `epupp://epupp/internal/helpers.cljs`
 - `epupp://epupp/ui.cljs`
-- `epupp://epupp/tools.cljs`
+
+`epupp.tools` was previously a built-in library but is now a REPL bootstrap API - injected automatically at REPL connect time (like `epupp.fs` and `epupp.repl`). See [connected-repl.md](connected-repl.md) for the full list of bootstrap namespaces.
 
 Built-ins also dogfood the same mechanism. `epupp/web_userscript_installer.cljs` and `epupp/sponsor.cljs` declare `:epupp/inject` dependencies on these built-in libraries via `epupp://`.
 

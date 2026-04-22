@@ -69,6 +69,8 @@ At connect time, Epupp injects its API namespaces from bundled Scittle source fi
 |------|-----------|--------|
 | `bundled/epupp/repl.cljs` | `epupp.repl` | REPL utilities including `manifest!` for library loading |
 | `bundled/epupp/fs.cljs` | `epupp.fs` | File system operations: `show`, `ls`, `save!`, `mv!`, `rm!` |
+| `bundled/epupp/internal/helpers.cljs` | `epupp.internal.helpers` | Shared helpers (dependency of `epupp.tools`) |
+| `bundled/epupp/tools.cljs` | `epupp.tools` | Element and viewport screenshot capture |
 
 The injection uses the same pattern as userscripts: background fetches file content via `chrome.runtime.getURL`, sends it to the content bridge via `inject-userscript` message (creating inline `<script type="application/x-scittle">` tags), and triggers Scittle evaluation.
 
