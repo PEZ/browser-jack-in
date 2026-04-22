@@ -6,7 +6,10 @@ Changes to Epupp
 
 ## [Unreleased]
 
+## [0.0.17] - 2026-04-22
+
 - Add `epupp.tools` built-in library: `capture-element`, `capture-selector`, `capture-visible` for capturing DOM element and viewport screenshots as data URL images
+
 
 ## [0.0.16] - 2026-04-08
 
