@@ -8,6 +8,9 @@ Changes to Epupp
 
 ## [0.0.18] - 2026-04-23
 
+- Default to JPEG 75% for captures, to protect the repl connection from blowing up
+- Fix evaluating element captures on Firefox
+
 ## [0.0.17] - 2026-04-22
 
 - Add `epupp.tools` built-in library: `capture-element`, `capture-selector`, `capture-visible` for capturing DOM element and viewport screenshots as data URL images
