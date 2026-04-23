@@ -1,4 +1,4 @@
-(ns tampers.fs-api-exercise
+(ns fs-api-exercise
   (:require epupp.fs))
 
 (comment
@@ -29,8 +29,6 @@
   (show-bulk-scripts)
 
   ;; ===== WRITE OPERATIONS (require FS REPL Sync enabled) =====
-  ;; PEZ: I tested all with the setting disabled and they all rejected the promise correctly
-  ;; PEZ: We should show an error banner in both the panel and the popup, and the extension icon should get an error badge.
 
   ;; Save new script
   (defn ^:async save-new-script []
@@ -84,7 +82,6 @@
         (def save-built-in-force-result save-built-in-force-result))
       (catch :default e (def save-built-in-force-error (.-message e)))))
   (save-force-over-builtin)
-  ;; PEZ: Checks out!
 
   ;; Bulk save
   (defn ^:async bulk-save []
@@ -95,7 +92,6 @@
         (def bulk-save-result bulk-save-result))
       (catch :default e (def bulk-save-error (.-message e)))))
   (bulk-save)
-  ;; PEZ: Message says bulk-2 was saved, should say “2 files" saved
 
   ;; Rename script
   (defn ^:async rename-script []
@@ -104,7 +100,6 @@
         (def mv-result mv-result))
       (catch :default e (def mv-error (.-message e)))))
   (rename-script)
-  ;; PEZ: Checks out! Also: doing ut twice gave the expected reject
 
   ;; Rename script to start with `epupp/` rejects
   (defn ^:async rename-to-epupp-prefix []
@@ -113,7 +108,6 @@
         (def epupp-prefix-mv-result epupp-prefix-mv-result))
       (catch :default e (def epupp-prefix-mv-error (.-message e)))))
   (rename-to-epupp-prefix)
-  ;; PEZ: Checks out! Also: doing ut twice gave the expected reject
 
   ;; Rename non-existent rejects
   (defn ^:async rename-nonexistent []
@@ -122,7 +116,6 @@
         (def mv-noexist-result mv-noexist-result))
       (catch :default e (def mv-noexist-error (.-message e)))))
   (rename-nonexistent)
-  ;; PEZ: Checks out!
 
   ;; Rename built-in rejects
   (defn ^:async rename-builtin []
@@ -131,7 +124,6 @@
         (def mv-builtin-result mv-builtin-result))
       (catch :default e (def mv-builtin-error (.-message e)))))
   (rename-builtin)
-  ;; PEZ: Checks out!
 
   ;; Delete script - returns :fs/existed? true
   (defn ^:async delete-script []
@@ -140,7 +132,6 @@
         (def rm-result rm-result))
       (catch :default e (def rm-error (.-message e)))))
   (delete-script)
-  ;; PEZ: Checks out!
 
   ;; Delete non-existent - rejects with Script not found
   (defn ^:async delete-nonexistent []
@@ -149,7 +140,6 @@
         (def rm-noexist-result rm-noexist-result))
       (catch :default e (def rm-noexist-error (.-message e)))))
   (delete-nonexistent)
-  ;; PEZ: Checks out!
 
   ;; Delete built-in rejects
   (defn ^:async delete-builtin []
@@ -158,7 +148,6 @@
         (def rm-builtin-result rm-builtin-result))
       (catch :default e (def rm-builtin-error (.-message e)))))
   (delete-builtin)
-  ;; PEZ: Checks out!
 
   ;; Bulk delete
   (defn ^:async bulk-delete []
@@ -167,7 +156,6 @@
         (def bulk-rm-result bulk-rm-result))
       (catch :default e (def bulk-rm-error (.-message e)))))
   (bulk-delete)
-  ;; PEZ: Reports "bulk_2.cljs" as deleted, should report 2 files as deleted
 
   ;; Bulk delete - mixed existing/non-existing
   (defn ^:async bulk-delete-mixed []
@@ -176,7 +164,6 @@
         (def bulk-rm-result bulk-rm-result))
       (catch :default e (def bulk-rm-error (.-message e)))))
   (bulk-delete-mixed)
-  ;; PEZ: Checks out!
 
   ;; Bulk delete - mixed existing/non-existing (re-create the bulk files first)
   (defn ^:async bulk-delete-with-builtin []
@@ -185,7 +172,6 @@
         (def bulk-rm-w-built-in-result bulk-rm-w-built-in-result))
       (catch :default e (def bulk-rm-w-built-in-error (.-message e)))))
   (bulk-delete-with-builtin)
-  ;; PEZ: Checks out!
 
   ;; ===== CLEANUP =====
   (defn ^:async cleanup []
