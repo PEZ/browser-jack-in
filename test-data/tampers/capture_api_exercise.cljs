@@ -95,22 +95,28 @@
                  (re-find #"data:image/\w+" url))
        :data-length (count (:dataUrl viewport-result))}))
 
-  ;; Quick preview - create an img element from a capture result
+  ;; Quick preview - create an img element from a capture result with close button
   (defn preview-capture! [result]
     (when (:success result)
-      (let [img (js/document.createElement "img")]
+      (let [container (js/document.createElement "div")
+            img (js/document.createElement "img")
+            btn (js/document.createElement "button")]
+        (set! (.. container -style -cssText)
+              "position:fixed;top:10px;right:10px;z-index:99999;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);overflow:hidden;")
         (set! (.-src img) (:dataUrl result))
         (set! (.. img -style -cssText)
-              "position:fixed;top:10px;right:10px;z-index:99999;max-width:300px;max-height:200px;border:2px solid #5881d8;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);")
-        (.appendChild js/document.body img)
-        img)))
+              "display:block;max-width:300px;max-height:200px;")
+        (set! (.-textContent btn) "✕")
+        (set! (.. btn -style -cssText)
+              "position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);color:white;border:none;border-radius:50%;width:20px;height:20px;cursor:pointer;font-size:12px;line-height:20px;padding:0;")
+        (set! (.-onclick btn) #(.remove container))
+        (.appendChild container img)
+        (.appendChild container btn)
+        (.appendChild js/document.body container)
+        container)))
 
   ;; Preview the viewport capture
   (when-let [viewport-result-var (resolve 'viewport-result)]
     (preview-capture! @viewport-result-var))
-
-  ;; Remove all preview images
-  (doseq [img (js/document.querySelectorAll "img[style*='z-index:99999']")]
-    (.remove img))
 
   :rcf)
