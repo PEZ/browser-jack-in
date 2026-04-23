@@ -10,17 +10,16 @@
       (def viewport-result result)))
   (capture-viewport)
 
-  ;; Capture viewport as JPEG with quality setting
-  (defn ^:async capture-viewport-jpeg []
-    (let [result (await (tools/capture-visible {:format "jpeg" :quality 75}))]
-      (def viewport-jpeg-result result)
+  ;; Capture viewport as PNG (caution: PNG data URLs are much larger)
+  (defn ^:async capture-viewport-png []
+    (let [result (await (tools/capture-visible :format "png"))]
+      (def viewport-png-result result)
       result))
-  (capture-viewport-jpeg)
+  (capture-viewport-png)
 
   ;; ===== SELECTOR CAPTURE =====
 
-  ;; Capture by CSS selector - use a small visible element
-  ;; WARNING: "body" can be thousands of pixels tall and will hang/crash the REPL!
+  ;; Capture by CSS selector
   (defn ^:async capture-nav []
     (try
       (let [result (await (tools/capture-selector "nav"))]
@@ -48,8 +47,13 @@
 
   ;; ===== ELEMENT CAPTURE =====
 
-  ;; WARNING: Large elements (body, wrapper divs) can hang/crash the REPL!
-  ;; Consider checking dimensions before capturing an element.
+  ;; Capture a specific element by reference
+  (defn ^:async capture-element-simple [selector]
+    (let [result (await (tools/capture-element (js/document.querySelector selector)))]
+      (def el-result result)))
+  (capture-element-simple "nav")
+
+  ;; Check element dimensions and viewport visibility
   (defn element-info [selector]
     (when-let [el (js/document.querySelector selector)]
       (let [r (.getBoundingClientRect el)]
@@ -60,7 +64,7 @@
                             (> (.-width r) 0) (> (.-height r) 0))})))
   (element-info "nav")
 
-  ;; Capture a specific element by reference - pick something small and visible
+  ;; Capture a specific element with error handling
   (defn ^:async capture-element-safe [selector]
     (let [el (js/document.querySelector selector)]
       (if el
@@ -82,7 +86,7 @@
 
   ;; ===== RESULT INSPECTION =====
 
-  ;; Check a result's data URL prefix (should be "data:image/png;base64,...")
+  ;; Check a result's data URL prefix and size
   ;; Evaluate after running one of the captures above
   (when-let [viewport-result-var (resolve 'viewport-result)]
     (let [viewport-result @viewport-result-var]
