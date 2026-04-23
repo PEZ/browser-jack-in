@@ -680,37 +680,9 @@
   (dispatch! [[:visibility/ax.handle-tab-visible tab-id]])
   false)
 
-(defn- ^:async crop-image
-  "Crop a full-viewport screenshot to the given rect at device-pixel coordinates."
-  [data-url rect dpr format quality]
-  (let [response (js-await (js/fetch data-url))
-        blob (js-await (.blob response))
-        bitmap (js-await (js/createImageBitmap blob))
-        sx (js/Math.round (* (.-x rect) dpr))
-        sy (js/Math.round (* (.-y rect) dpr))
-        sw (js/Math.round (* (.-width rect) dpr))
-        sh (js/Math.round (* (.-height rect) dpr))
-        csx (js/Math.max 0 sx)
-        csy (js/Math.max 0 sy)
-        csw (js/Math.min sw (- (.-width bitmap) csx))
-        csh (js/Math.min sh (- (.-height bitmap) csy))
-        canvas (js/OffscreenCanvas. csw csh)
-        ctx (.getContext canvas "2d")]
-    (.drawImage ctx bitmap csx csy csw csh 0 0 csw csh)
-    (.close bitmap)
-    (let [mime (if (= format "jpeg") "image/jpeg" "image/png")
-          out-blob (js-await (.convertToBlob canvas
-                                             (if (= format "jpeg")
-                                               #js {:type mime :quality quality}
-                                               #js {:type mime})))
-          reader (js/FileReader.)]
-      (js-await (js/Promise. (fn [resolve]
-                               (set! (.-onloadend reader) resolve)
-                               (.readAsDataURL reader out-blob))))
-      (.-result reader))))
-
 (defn- handle-capture-element
-  "Handle capture-element message: take viewport screenshot and optionally crop to element."
+  "Handle capture-element message: take viewport screenshot.
+   Cropping to element rect is done page-side for cross-browser compatibility."
   [message sender send-response]
   (let [tab-id (when (.-tab sender) (.. sender -tab -id))
         window-id (when (.-tab sender) (.. sender -tab -windowId))]
@@ -719,19 +691,14 @@
           false)
       (do ((^:async fn []
              (try
-               (let [format (or (.-format message) "png")
-                     quality (or (.-quality message) 0.92)
+               (let [format (or (.-format message) "jpeg")
+                     quality (or (.-quality message) 75)
                      capture-opts (if (= format "jpeg")
                                     #js {:format "jpeg" :quality quality}
                                     #js {:format "png"})
                      data-url (js-await (js/chrome.tabs.captureVisibleTab
-                                         window-id capture-opts))
-                     rect (.-rect message)
-                     dpr (or (.-dpr message) 1)]
-                 (if rect
-                   (let [cropped (js-await (crop-image data-url rect dpr format quality))]
-                     (send-response #js {:success true :dataUrl cropped}))
-                   (send-response #js {:success true :dataUrl data-url})))
+                                         window-id capture-opts))]
+                 (send-response #js {:success true :dataUrl data-url}))
                (catch :default err
                  (send-response #js {:success false
                                      :error (str "Capture failed: " (.-message err))})))))
