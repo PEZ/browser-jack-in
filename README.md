@@ -373,18 +373,18 @@ These namespaces are automatically available when the REPL connects - no `:epupp
 
 ;; Capture a DOM element (returns Promise resolving to {:success bool :dataUrl string :error string})
 (tools/capture-element (js/document.querySelector "#hero"))
-(tools/capture-element element {:format "jpeg" :quality 80})
+(tools/capture-element element {:format "png"})
 
 ;; CSS selector shorthand
 (tools/capture-selector "#hero")
-(tools/capture-selector ".card" {:format "png"})
+(tools/capture-selector ".card" {:quality 90})
 
 ;; Full visible viewport
 (tools/capture-visible)
-(tools/capture-visible {:format "jpeg" :quality 90})
+(tools/capture-visible {:format "png"})
 ```
 
-All three functions are `^:async` and return Promises. Options: `:format` (`"png"` or `"jpeg"`, default `"png"`), `:quality` (0-100, for JPEG).
+All three functions are `^:async` and return Promises. Options: `:format` (`"jpeg"` or `"png"`, default `"jpeg"`), `:quality` (0-100, default 75). Large data URLs can overwhelm the nREPL/WebSocket transport, killing the connection.
 
 ### Library Namespaces
 

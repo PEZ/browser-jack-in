@@ -13,7 +13,8 @@
   ;; Capture viewport as JPEG with quality setting
   (defn ^:async capture-viewport-jpeg []
     (let [result (await (tools/capture-visible {:format "jpeg" :quality 75}))]
-      (def viewport-jpeg-result result)))
+      (def viewport-jpeg-result result)
+      result))
   (capture-viewport-jpeg)
 
   ;; ===== SELECTOR CAPTURE =====
