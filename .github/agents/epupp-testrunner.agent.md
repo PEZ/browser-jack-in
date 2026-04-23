@@ -2,7 +2,7 @@
 description: 'Runs unit tests (bb test) and E2E tests (bb test:e2e), checks watchers, reports pass/fail status. Invoke before and after code changes. Never attempts fixes.'
 tools: ['execute/getTerminalOutput', 'execute/runInTerminal', 'read/problems', 'read/getTaskOutput', 'todo']
 name: epupp-testrunner
-model: GPT-5.4 (copilot)
+model: GPT-5.3-Codex (copilot)
 ---
 
 # Test Runner Agent
