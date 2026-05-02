@@ -36,8 +36,18 @@
                  "document opened:"
                  (.-fileName doc)))))
 
-  (p/let [_ (vscode/commands.executeCommand "workbench.action.tasks.build")]
-    (scittle-repl/start!+)))
+  (p/let [tasks (vscode/tasks.fetchTasks)
+          task (->> tasks
+                    (filter #(= "Start Dev Environment" (.-name %)))
+                    (filter #(-> % .-scope .-uri .-path (.endsWith "/epupp")))
+                    first)]
+    (when task
+      (vscode/tasks.executeTask task))
+    (p/delay 1500)
+    (vscode/commands.executeCommand "calva.connect" #js {:connectSequence "Babashka REPL"})
+    (vscode/commands.executeCommand "calva.connect" #js {:connectSequence "Squint REPL"}))
+  (scittle-repl/start!+)
+  (vscode/commands.executeCommand "calva.connect" #js {:connectSequence "Scittle Dev REPL"}))
 
 (when (= (joyride/invoked-script) joyride/*file*)
   (my-main))

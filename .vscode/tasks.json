@@ -38,57 +38,9 @@
       }
     },
     {
-      "label": "Scittle Dev REPL",
-      "type": "shell",
-      "command": "bb browser-nrepl --nrepl-port 31337 --websocket-port 31338",
-      "group": "build",
-      "isBackground": true,
-      "problemMatcher": [],
-      "presentation": {
-        "panel": "dedicated",
-        "group": "repl"
-      }
-    },
-    {
-      "label": "Epupp Gitlab REPL",
-      "type": "shell",
-      "command": "bb browser-nrepl --nrepl-port 13397 --websocket-port 13398",
-      "group": "build",
-      "isBackground": true,
-      "problemMatcher": [],
-      "presentation": {
-        "panel": "dedicated",
-        "group": "manual-testing"
-      }
-    },
-    {
-      "label": "Epupp YouTube REPL",
-      "type": "shell",
-      "command": "bb browser-nrepl --nrepl-port 13399 --websocket-port 13400",
-      "group": "build",
-      "isBackground": true,
-      "problemMatcher": [],
-      "presentation": {
-        "panel": "dedicated",
-        "group": "manual-testing"
-      }
-    },
-    {
-      "label": "Epupp GitHub REPL",
-      "type": "shell",
-      "command": "bb browser-nrepl --nrepl-port 11331 --websocket-port 11332",
-      "group": "build",
-      "isBackground": true,
-      "problemMatcher": [],
-      "presentation": {
-        "panel": "dedicated",
-        "group": "manual-testing"
-      }
-    },
-    {
       "label": "Babashka REPL",
       "type": "shell",
-      "command": "bb nrepl-server :0",
+      "command": "bb nrepl-server 1664",
       "group": "build",
       "isBackground": true,
       "problemMatcher": [],
@@ -103,7 +55,6 @@
         "Squint Watch",
         "Unit Test Watch",
         "Squint REPL",
-        "Scittle Dev REPL",
         "Babashka REPL"
       ],
       "group": {

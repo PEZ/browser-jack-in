@@ -16,40 +16,36 @@
 	"settings": {
 		"calva.replConnectSequences": [
 			{
-				"name": "squint",
-				"projectType": "generic",
-				"fallbackPort": 1337,
+				"name": "Squint REPL",
+				"projectType": "squint",
+				"fallbackPort": 1888,
+				"projectRootPath": ["../epupp"],
 				"replSessionNames": {
-					"primary": "squint"
+					"primary": "squint-repl"
+				}
+			},
+			{
+				"name": "Babashka REPL",
+				"projectType": "babashka",
+				"fallbackPort": 1664,
+				"projectRootPath": ["../epupp"],
+				"replSessionNames": {
+					"primary": "babashka-repl"
 				}
 			},
 			{
 				"name": "Scittle Dev REPL",
 				"projectType": "scittle",
-				"fallbackPort": 31337,
+				"webSocketPort": 31338,
+				"projectRootPath": ["../epupp"],
 				"replSessionNames": {
 					"primary": "scittle-dev-repl"
 				}
 			},
 			{
-				"name": "Epupp REPL",
-				"projectType": "scittle",
-				"fallbackPort": 3339,
-				"replSessionNames": {
-					"primary": "epupp-general"
-				},
-				"replSessionFilePatterns": {
-					"primary": [
-						"test-data/tampers/*.clj*",
-						"test-data/tampers/*.edn",
-						"extension/userscripts/**/*.{cljs,edn}"
-					]
-				}
-			},
-			{
 				"name": "Epupp GitLab REPL",
 				"projectType": "scittle",
-				"fallbackPort": 11333,
+				"webSocketPort": 11334,
 				"replSessionNames": {
 					"primary": "epupp-gitlab"
 				},
@@ -64,7 +60,7 @@
 			{
 				"name": "Epupp YouTube REPL",
 				"projectType": "scittle",
-				"fallbackPort": 11335,
+				"webSocketPort": 11336,
 				"replSessionNames": {
 					"primary": "epupp-youtube"
 				},
@@ -79,7 +75,7 @@
 			{
 				"name": "Epupp GitHub REPL",
 				"projectType": "scittle",
-				"fallbackPort": 11331,
+				"webSocketPort": 11332,
 				"replSessionNames": {
 					"primary": "epupp-github"
 				},
@@ -94,7 +90,7 @@
 			{
 				"name": "Epupp X REPL",
 				"projectType": "scittle",
-				"fallbackPort": 11339,
+				"webSocketPort": 11340,
 				"replSessionNames": {
 					"primary": "epupp-twitter"
 				},
@@ -111,7 +107,7 @@
 			{
 				"name": "Epupp Ebay REPL",
 				"projectType": "scittle",
-				"fallbackPort": 23398,
+				"webSocketPort": 23398,
 				"replSessionNames": {
 					"primary": "epupp-ebay"
 				},

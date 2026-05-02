@@ -35,20 +35,6 @@
             (fn [_err]
               (resolve false)))))))
 
-(defn start-browser-nrepl-task!+ []
-  (p/let [running? (relay-running?+)]
-    (if running?
-      (println "Browser-nrepl relay already running on port" nrepl-port)
-      (p/let [all-tasks (vscode/tasks.fetchTasks)
-              task (find-task-by-label "Scittle Dev REPL" all-tasks)]
-        (if task
-          (do
-            (println "Starting Scittle Dev REPL task...")
-            (vscode/tasks.executeTask task))
-          (do
-            (println "Task 'Scittle Dev REPL' not found. Please add it to .vscode/tasks.json")
-            (throw (js/Error. "Task not found"))))))))
-
 (defn open-scittle-flare!+ []
   (println "Opening Scittle flare webview...")
   (flare/flare!+
@@ -107,37 +93,13 @@
     :key flare-key
     :title "Scittle Dev REPL"}))
 
-(defn prompt-calva-connect!+ []
-  (p/let [choice (vscode/window.showInformationMessage
-                  (str "Scittle REPL ready on port " nrepl-port ". Connect Calva now?")
-                  "Connect" "Later")]
-    (when (= choice "Connect")
-      (vscode/commands.executeCommand "calva.connect" #js {:connectSequence "Scittle Dev REPL"}))))
-
 (defn start!+ []
   (p/do!
-   ;; Close any existing flare first
-   (flare/close! flare-key)
-   ;; Start the relay server
-   (start-browser-nrepl-task!+)
-   ;; Give the server time to start
-   (p/delay 2000)
-   ;; Open the Scittle flare
-   (open-scittle-flare!+)
-   ;; Give flare time to connect
-   (p/delay 1000)
-   ;; Prompt to connect Calva
-   (prompt-calva-connect!+)
-   (println "Scittle Dev REPL setup complete!")))
+   (p/delay 1500)
+   (open-scittle-flare!+)))
 
 (defn stop!+ []
-  (p/do!
-   (flare/close! flare-key)
-   (println "Scittle Dev REPL stopped.")))
-
-;; Run when script is invoked directly
-(when (= (joyride/invoked-script) joyride/*file*)
-  (start!+))
+  (flare/close! flare-key))
 
 (comment
   ;; Manual control
