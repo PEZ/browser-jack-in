@@ -244,6 +244,19 @@ button#connect:active {
   transition-duration: 0.05s;
 }
 
+/* Connecting / retry state */
+.connect-row.connecting .connect-status {
+  font-size: var(--font-size-sm);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  color: var(--color-text-secondary);
+  animation: connect-pulse 2s ease-in-out infinite;
+}
+
+@keyframes connect-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
 /* Status */
 .status {
   margin-top: 14px;
@@ -1238,6 +1251,8 @@ button#connect:focus-visible,
   .origin-item,
   .connected-tab-item,
   button#connect,
+  button#cancel-connect,
+  .connect-status,
   .icon-button,
   .section-header,
   .script-delete,

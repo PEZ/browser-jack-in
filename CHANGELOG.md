@@ -6,6 +6,8 @@ Changes to Epupp
 
 ## [Unreleased]
 
+- Connecting a tab waits for a server to respond (instead of giving up on no response)
+
 ## [0.0.18] - 2026-04-23
 
 - Default to JPEG 75% for captures, to protect the repl connection from blowing up

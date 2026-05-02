@@ -71,9 +71,17 @@
       {:uf/fxs [[:popup/fx.copy-command cmd]]})
 
     :popup/ax.connect
-    (let [port (js/parseInt (:ports/ws state) 10)]
-      (when (and (not (js/isNaN port)) (<= 1 port 65535))
-        {:uf/fxs [[:popup/fx.connect port]]}))
+    (when-not (:ui/connecting? state)
+      (let [port (js/parseInt (:ports/ws state) 10)]
+        (when (and (not (js/isNaN port)) (<= 1 port 65535))
+          {:uf/db (assoc state :ui/connecting? true)
+           :uf/fxs [[:popup/fx.connect port]]})))
+
+    :popup/ax.cancel-connect
+    {:uf/db (assoc state :ui/connecting? false)}
+
+    :popup/ax.connect-finished
+    {:uf/db (assoc state :ui/connecting? false)}
 
     :popup/ax.check-status
     {:uf/fxs [[:popup/fx.check-status (:ports/ws state)]]}

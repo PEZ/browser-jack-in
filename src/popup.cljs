@@ -22,6 +22,7 @@
   (atom {:ports/nrepl "3339"
          :ports/ws "3340"
          :ui/reveal-highlight-script-name nil ; Temporary highlight when revealing a script
+         :ui/connecting? false
          :ui/sections-collapsed (or (.-sectionsCollapsed config)
                                     {:repl-connect false
                                      :manual-scripts false
@@ -121,6 +122,42 @@
   [scripts _notify-type]
   (save-scripts! scripts))
 
+(def ^:private connect-cancel-signal #js {:cancelled false})
+
+(defn- send-connect-tab-message
+  "Send a connect-tab message to the background and return a Promise of the response."
+  [tab port]
+  (js/Promise.
+   (fn [resolve reject]
+     (js/chrome.runtime.sendMessage
+      #js {:type "connect-tab"
+           :tabId (.-id tab)
+           :wsPort port}
+      (fn [response]
+        (if js/chrome.runtime.lastError
+          (reject (js/Error. (.-message js/chrome.runtime.lastError)))
+          (resolve response)))))))
+
+(defn- retry-connect!
+  "Retry connecting to the REPL server until success or cancellation.
+   Uses the module-level connect-cancel-signal to detect cancellation."
+  [dispatch tab port tab-title tab-favicon]
+  (js/Promise.
+   (fn [resolve]
+     (letfn [(attempt []
+               (if (.-cancelled connect-cancel-signal)
+                 (resolve)
+                 (-> (send-connect-tab-message tab port)
+                     (.then (fn [resp]
+                              (if (and resp (.-success resp))
+                                (do (dispatch [[:popup/ax.connect-finished]
+                                               [:popup/ax.show-system-banner "success" (str "Connected to \"" tab-title "\"") {:favicon tab-favicon} "connection"]])
+                                    (resolve))
+                                (js/setTimeout attempt 1500))))
+                     (.catch (fn [_err]
+                               (js/setTimeout attempt 1500))))))]
+       (attempt)))))
+
 ;; ============================================================
 ;; Uniflow Dispatch
 ;; ============================================================
@@ -146,26 +183,9 @@
           tab (js-await (get-active-tab))
           tab-title (or (.-title tab) "tab")
           tab-favicon (.-favIconUrl tab)]
-      (dispatch [[:popup/ax.show-system-banner "info" (str "Connecting to \"" tab-title "\"...") {:favicon tab-favicon} "connection"]])
-      (try
-        (let [resp (js-await
-                    (js/Promise.
-                     (fn [resolve reject]
-                       (js/chrome.runtime.sendMessage
-                        #js {:type "connect-tab"
-                             :tabId (.-id tab)
-                             :wsPort port}
-                        (fn [response]
-                          (if js/chrome.runtime.lastError
-                            (reject (js/Error. (.-message js/chrome.runtime.lastError)))
-                            (resolve response)))))))]
-          (if (and resp (.-success resp))
-            ;; Success - show banner with same category to replace "Connecting..."
-            (dispatch [[:popup/ax.show-system-banner "success" (str "Connected to \"" tab-title "\"") {:favicon tab-favicon} "connection"]])
-            ;; Failure from background worker
-            (dispatch [[:popup/ax.show-system-banner "error" (str "Failed: " (or (and resp (.-error resp)) "Connect failed")) {:favicon tab-favicon} "connection"]])))
-        (catch :default err
-          (dispatch [[:popup/ax.show-system-banner "error" (str "Failed: " (.-message err)) {:favicon tab-favicon} "connection"]]))))
+      (set! (.-cancelled connect-cancel-signal) false)
+      (dispatch [[:popup/ax.show-system-banner "info" (str "Waiting for server on :" port "...") {:favicon tab-favicon} "connection"]])
+      (js-await (retry-connect! dispatch tab port tab-title tab-favicon)))
 
     :popup/fx.check-status
     (let [[_ws-port] args
@@ -1109,14 +1129,26 @@
         [command-box {:command (generate-server-cmd state)}]]
        [:div.step
         [:div.step-header "2. Connect browser to server"]
-        [:div.connect-row
-         [:span.connect-target (str "ws://localhost:" ws)]
-         [view-elements/action-button
-          {:button/variant :primary
-           :button/id "connect"
-           :button/title "Connect this tab to the REPL server"
-           :button/on-click #(dispatch! [[:popup/ax.connect]])}
-          "Connect"]]]
+        (if (:ui/connecting? state)
+          [:div.connect-row.connecting
+           [:span.connect-status (str "Waiting for server on :" ws "...")]
+           [view-elements/action-button
+            {:button/variant :secondary
+             :button/id "cancel-connect"
+             :button/title "Cancel connection"
+             :button/on-click (fn [_e]
+                                (set! (.-cancelled connect-cancel-signal) true)
+                                (dispatch! [[:popup/ax.cancel-connect]
+                                            [:popup/ax.show-system-banner "info" "Connection cancelled" {} "connection"]]))}
+            "Cancel"]]
+          [:div.connect-row
+           [:span.connect-target (str "ws://localhost:" ws)]
+           [view-elements/action-button
+            {:button/variant :primary
+             :button/id "connect"
+             :button/title "Connect this tab to the REPL server"
+             :button/on-click #(dispatch! [[:popup/ax.connect]])}
+            "Connect"]])]
        [:div.step
         [:div.step-header "3. Connect editor to browser (via server)"]
         [:div.connect-row

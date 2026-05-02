@@ -11,6 +11,7 @@
   {:ports/nrepl "3339"
    :ports/ws "3340"
    :ui/status nil
+   :ui/connecting? false
    :ui/copy-feedback nil
    :ui/has-connected false
    :ui/sections-collapsed {:repl-connect false
@@ -110,6 +111,29 @@
 
 ;; Load actions
 
+(defn- test-connect-sets-connecting-state []
+  (let [result (popup-actions/handle-action initial-state uf-data [:popup/ax.connect])]
+    (-> (expect (:ui/connecting? (:uf/db result)))
+        (.toBe true))))
+
+(defn- test-connect-returns-nil-when-already-connecting []
+  (let [state (assoc initial-state :ui/connecting? true)
+        result (popup-actions/handle-action state uf-data [:popup/ax.connect])]
+    (-> (expect result)
+        (.toBeFalsy))))
+
+(defn- test-cancel-connect-clears-connecting-state []
+  (let [state (assoc initial-state :ui/connecting? true)
+        result (popup-actions/handle-action state uf-data [:popup/ax.cancel-connect])]
+    (-> (expect (:ui/connecting? (:uf/db result)))
+        (.toBe false))))
+
+(defn- test-connect-finished-clears-connecting-state []
+  (let [state (assoc initial-state :ui/connecting? true)
+        result (popup-actions/handle-action state uf-data [:popup/ax.connect-finished])]
+    (-> (expect (:ui/connecting? (:uf/db result)))
+        (.toBe false))))
+
 (defn- test-check-status-triggers-effect []
   (let [result (popup-actions/handle-action initial-state uf-data [:popup/ax.check-status])
         [fx-name ws-port] (first (:uf/fxs result))]
@@ -178,6 +202,10 @@
             (test ":popup/ax.connect passes parsed port" test-connect-passes-parsed-port)
             (test ":popup/ax.connect returns nil for invalid port" test-connect-returns-nil-for-invalid-port)
             (test ":popup/ax.connect returns nil for out of range port" test-connect-returns-nil-for-out-of-range-port)
+            (test ":popup/ax.connect sets connecting state" test-connect-sets-connecting-state)
+            (test ":popup/ax.connect returns nil when already connecting" test-connect-returns-nil-when-already-connecting)
+            (test ":popup/ax.cancel-connect clears connecting state" test-cancel-connect-clears-connecting-state)
+            (test ":popup/ax.connect-finished clears connecting state" test-connect-finished-clears-connecting-state)
 
             ;; Load actions
             (test ":popup/ax.check-status triggers effect" test-check-status-triggers-effect)
