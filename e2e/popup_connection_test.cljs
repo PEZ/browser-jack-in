@@ -63,28 +63,42 @@
 ;; Popup User Journey: Connection Status Feedback
 ;; =============================================================================
 
-(defn- ^:async test_connection_failure_shows_error_status []
+(defn- ^:async test_connection_retry_shows_waiting_and_can_cancel []
   (let [context (js-await (launch-browser))
         ext-id (js-await (get-extension-id context))]
     (try
-      ;; Navigate to a test page
       (let [page (js-await (.newPage context))]
         (js-await (.goto page "http://localhost:18080/basic.html" #js {:timeout 1000}))
 
         (let [popup (js-await (create-popup-page context ext-id))]
           (js-await (wait-for-popup-ready popup))
 
-          ;; Click Connect - will fail (permissions issue with UI-based connect)
+          ;; Click Connect - no server running, so retry loop starts
           (let [connect-btn (.locator popup "#connect")]
             (js-await (.click connect-btn)))
 
-          ;; Should show failure in system banner (filter to error banner with "Failed")
-          (let [banner (.locator popup ".system-banner:has-text(\"Failed\")")]
-            (js-await (-> (expect banner)
+          ;; Should show "Waiting for server" in system banner
+          (let [waiting-banner (.locator popup ".system-banner:has-text(\"Waiting for server\")")]
+            (js-await (-> (expect waiting-banner)
+                          (.toBeVisible #js {:timeout 2000}))))
+
+          ;; Cancel button should be visible
+          (let [cancel-btn (.locator popup "#cancel-connect")]
+            (js-await (-> (expect cancel-btn)
                           (.toBeVisible #js {:timeout 500})))
-            ;; Failed status should have error banner class
-            (js-await (-> (expect banner)
-                          (.toHaveClass #"error-banner"))))
+
+            ;; Click Cancel to stop retry
+            (js-await (.click cancel-btn)))
+
+          ;; Should show "cancelled" in system banner
+          (let [cancelled-banner (.locator popup ".system-banner:has-text(\"cancelled\")")]
+            (js-await (-> (expect cancelled-banner)
+                          (.toBeVisible #js {:timeout 500}))))
+
+          ;; Connect button should be back
+          (let [connect-btn (.locator popup "#connect")]
+            (js-await (-> (expect connect-btn)
+                          (.toBeVisible #js {:timeout 500}))))
 
           (js-await (assert-no-errors! popup))
           (js-await (.close popup)))
@@ -136,8 +150,8 @@
              (test "Popup Connection: connection tracking displays connected tabs with reveal buttons"
                    test_connection_tracking_displays_connected_tabs)
 
-             (test "Popup Connection: connection failure shows error status near Connect button"
-                   test_connection_failure_shows_error_status)
+             (test "Popup Connection: connection retry shows waiting status and can be cancelled"
+                   test_connection_retry_shows_waiting_and_can_cancel)
 
              (test "Popup Connection: successful connection via API updates UI correctly"
                    test_successful_connection_via_api_updates_ui)))
