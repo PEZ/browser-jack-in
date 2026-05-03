@@ -80,7 +80,7 @@
         (js-await (.goto bg-page popup-url #js {:waitUntil "networkidle"}))
         (js-await (.waitForLoadState bg-page "domcontentloaded"))
         (js/console.log "Popup page loaded")
-        (js-await (.waitForSelector bg-page "#nrepl-port" #js {:timeout 500}))
+        (js-await (.waitForSelector bg-page "#ws-port" #js {:timeout 500}))
         (js/console.log "Starting find-tab-id call...")
 
         ;; Find test page tab

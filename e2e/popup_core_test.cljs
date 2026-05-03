@@ -21,11 +21,21 @@
                      (str "{" (str/join "\n " meta-parts) "}\n\n"))]
     (str meta-block code)))
 
+(defn- ^:async switch-to-relay-mode
+  "Switch popup to Relay mode to access nREPL port and command box.
+   Direct mode (default) only shows WebSocket port."
+  [popup]
+  (let [relay-btn (.locator popup ".connect-mode-toggle button:has-text(\"Relay\")")]
+    (js-await (.click relay-btn))
+    (js-await (-> (expect (.locator popup "#nrepl-port"))
+                  (.toBeVisible #js {:timeout 1000})))))
+
 (defn- ^:async test_repl_connection_setup []
   (let [context (js-await (launch-browser))
         ext-id (js-await (get-extension-id context))]
     (try
       (let [popup (js-await (create-popup-page context ext-id))]
+        (js-await (switch-to-relay-mode popup))
         ;; Port inputs render
         (js-await (-> (expect (.locator popup "#nrepl-port")) (.toBeVisible)))
         (js-await (-> (expect (.locator popup "#ws-port")) (.toBeVisible)))
@@ -167,6 +177,7 @@
         (js-await (clear-storage popup))
         (js-await (.reload popup))
         (js-await (wait-for-popup-ready popup))
+        (js-await (switch-to-relay-mode popup))
 
         ;; Verify initial connect ports match hardcoded defaults (3339/3340)
         (js-await (-> (expect (.locator popup "#nrepl-port"))
@@ -198,6 +209,7 @@
         (js-await (clear-storage popup))
         (js-await (.reload popup))
         (js-await (wait-for-popup-ready popup))
+        (js-await (switch-to-relay-mode popup))
 
         ;; Set custom defaults
         (js-await (expand-settings-section popup))
@@ -218,6 +230,7 @@
         (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 200))))
         (js-await (.reload popup))
         (js-await (wait-for-popup-ready popup))
+        (js-await (switch-to-relay-mode popup))
 
         ;; Connect ports should still show override after reload
         (js-await (-> (expect (.locator popup "#nrepl-port"))
@@ -250,6 +263,7 @@
         (js-await (clear-storage popup))
         (js-await (.reload popup))
         (js-await (wait-for-popup-ready popup))
+        (js-await (switch-to-relay-mode popup))
 
         ;; Set custom defaults
         (js-await (expand-settings-section popup))
@@ -268,6 +282,7 @@
         (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 200))))
         (js-await (.reload popup))
         (js-await (wait-for-popup-ready popup))
+        (js-await (switch-to-relay-mode popup))
         (js-await (-> (expect (.locator popup "#nrepl-port"))
                       (.toHaveValue "7777" #js {:timeout 2000})))
 
@@ -279,6 +294,7 @@
         (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 200))))
         (js-await (.reload popup))
         (js-await (wait-for-popup-ready popup))
+        (js-await (switch-to-relay-mode popup))
 
         ;; After reload, connect ports should show defaults (no override persisted)
         (js-await (-> (expect (.locator popup "#nrepl-port"))
@@ -308,6 +324,7 @@
         (js-await (clear-storage popup))
         (js-await (.reload popup))
         (js-await (wait-for-popup-ready popup))
+        (js-await (switch-to-relay-mode popup))
 
         ;; Set custom defaults
         (js-await (expand-settings-section popup))
@@ -328,6 +345,7 @@
         ;; Reload popup
         (js-await (.reload popup))
         (js-await (wait-for-popup-ready popup))
+        (js-await (switch-to-relay-mode popup))
 
         ;; Connect ports should reflect the override (not the defaults)
         (js-await (-> (expect (.locator popup "#nrepl-port"))

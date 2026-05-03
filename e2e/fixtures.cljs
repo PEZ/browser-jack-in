@@ -176,8 +176,8 @@
   (let [popup-page (js-await (.newPage context))
         popup-url (str "chrome-extension://" ext-id "/popup.html")]
     (js-await (.goto popup-page popup-url #js {:timeout 3000}))
-    ;; Wait for popup to be fully initialized - nrepl-port input indicates JS has loaded
-    (js-await (-> (expect (.locator popup-page "#nrepl-port"))
+    ;; Wait for popup to be fully initialized - ws-port input indicates JS has loaded
+    (js-await (-> (expect (.locator popup-page "#ws-port"))
                   (.toBeVisible #js {:timeout 3000})))
     popup-page))
 
