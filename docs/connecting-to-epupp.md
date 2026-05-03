@@ -7,30 +7,25 @@ The REPL client (your editor or AI harness) needs to support [nREPL](https://nre
 To create a predictable and Epupp-friendly environment for these instructions, we will assume that you have your copy of **my-epupp-hq** cloned to your computer. You also need [Babashka](https://babashka.org).
 
 0. From the https://github.com/PEZ/my-epupp-hq page click **Use this Template** and clone your copy of that reporsitory to your computer.
-0. Install [Babashka](https://babashka.org)
 
 ## VS Code with Calva
 
 This project has [VS Code](https://code.visualstudio.com/) and [Calva](https://calva.io) configuration for starting and connecting multiple browser-nrepl relays to some common sites.
 
 0. Open your copy of **my-epupp-hq** in VS Code
-0. Run the default Build Task: <kbd>cmd/ctrl</kbd>+<kbd>b</kbd>, this starts the relays, one of them is for the default Epupp port 3339.
-0. Connect the browser tab to browser-nrepl: Click **Connect** in the Epupp extension's popup UI.
-1. In VS Code, install the Calva extension
-1. Click the REPL button that appears in the VS Code status bar and select **Connect to a running REPL in your project**
+1. Connect the browser tab to browser-nrepl: Click **Connect** in the Epupp extension's popup UI.
+1. Click the REPL button in the VS Code status bar and select **Connect to a running REPL in your project**
 1. Select **my-epupp-hq** in the Project Root menu
-1. Select **Epupp REPL** from the **Project Type** menu
+1. Select **epupp** from the **Project Type** menu
 
 That's it. You should see a green session indicator with `epupp-default` in the status bar. To convince yourself that you really have VS Code connected to the tab:
 
 1. In the `userscripts/hq/hello_world.cljs` place the cursor in/near the code you want to evaluate and press <kbd>alt</kbd>+<kbd>enter</kbd>
 1. Check in the browser what happened
 
-The configuration leverages the fact that Epupp can be made to use different ports per domain. If you edit the REPL Connect ports to values that differ from the defaults (set in Settings), Epupp remembers those ports as an override for the current domain. The configuration lives in two files:
-* [.vscode/tasks.json](.vscode/tasks.json). The browser-nrepl tasks for: GitHub, GitLab, YouTube, Ebay, and a default (all other sites).
-* [.vscode/settings.json](.vscode/settings.json). The Calva REPL Connect sequences for these tasks.
+The configuration leverages the fact that Epupp can be made to use different ports per domain. If you edit the REPL Connect ports to values that differ from the defaults (set in Settings), Epupp remembers those ports as an override for the current domain. The configuration lives in [.vscode/settings.json](.vscode/settings.json); some Calva REPL Connect sequences using some different websocket ports.
 
-To use these as provided, check `tasks.json` for the ports used and enter them in the Epupp popup UI per site. But really, they are just suggestions. Add config for your favorite sites and use whatever ports you think make sense. Note that the nREPL port needs to be synced between `tasks.json` and `settings.json`.
+The default sequences are just suggestions. Add config for your favorite sites and use whatever ports you think make sense.
 
 Please see [calva.io](https://calva.io) for how to get started and use Calva.
 
@@ -52,6 +47,12 @@ In addition to the build task and REPL connect sequences, the myepupp-hq project
 * **Upload current userscript**: With a userscript active in the editor, and the REPL FS Sync enabled in Epupp for the connected tab, this will save the script to Epupp, overwriting any existing script with the same name.
 
 To use them, press <kbd>ctrl+alt+space</kbd> twice and select the commands from the menu.
+
+## Not using Calva?
+
+Epupp provides UI for copying out a **Babaska** command that starts a browser-nrepl relay that you connect Epupp and your REPL client/editor to. So first step is:
+
+0. Install [Babashka](https://babashka.org)
 
 ### VS Code/Cursor with [ECA](https://github.com/editor-code-assistant/eca)
 

@@ -19,7 +19,9 @@
 				"name": "Squint REPL",
 				"projectType": "squint",
 				"fallbackPort": 1888,
-				"projectRootPath": ["../epupp"],
+				"projectRootPath": [
+					"../epupp"
+				],
 				"replSessionNames": {
 					"primary": "squint-repl"
 				}
@@ -28,7 +30,9 @@
 				"name": "Babashka REPL",
 				"projectType": "babashka",
 				"fallbackPort": 1664,
-				"projectRootPath": ["../epupp"],
+				"projectRootPath": [
+					"../epupp"
+				],
 				"replSessionNames": {
 					"primary": "babashka-repl"
 				}
@@ -37,7 +41,9 @@
 				"name": "Scittle Dev REPL",
 				"projectType": "scittle",
 				"webSocketPort": 31338,
-				"projectRootPath": ["../epupp"],
+				"projectRootPath": [
+					"../epupp"
+				],
 				"replSessionNames": {
 					"primary": "scittle-dev-repl"
 				}
@@ -51,9 +57,8 @@
 				},
 				"replSessionFilePatterns": {
 					"primary": [
-						"test-data/tampers/*.clj*",
-						"test-data/tampers/*.edn",
-						"extension/userscripts/**/*.{cljs,edn}"
+						"userscripts/*.cljs",
+						"live-tampers/*.cljs",
 					]
 				}
 			},
@@ -66,24 +71,22 @@
 				},
 				"replSessionFilePatterns": {
 					"primary": [
-						"test-data/tampers/*.clj*",
-						"test-data/tampers/*.edn",
-						"extension/userscripts/**/*.{cljs,edn}"
+						"userscripts/*.cljs",
+						"live-tampers/*.cljs",
 					]
 				}
 			},
 			{
 				"name": "Epupp GitHub REPL",
 				"projectType": "scittle",
-				"webSocketPort": 11332,
+				"webSocketPort": 11338,
 				"replSessionNames": {
 					"primary": "epupp-github"
 				},
 				"replSessionFilePatterns": {
 					"primary": [
-						"test-data/tampers/*.clj*",
-						"test-data/tampers/*.edn",
-						"extension/userscripts/**/*.{cljs,edn}"
+						"userscripts/*.cljs",
+						"live-tampers/*.cljs",
 					]
 				}
 			},
@@ -98,16 +101,15 @@
 					"primary": [
 						"epupp/*.clj*",
 						"epupp/*.edn",
-						"test-data/tampers/*.clj*",
-						"test-data/tampers/*.edn",
-						"extension/userscripts/**/*.{cljs,edn}"
+						"userscripts/*.cljs",
+						"live-tampers/*.cljs",
 					]
 				}
 			},
 			{
 				"name": "Epupp Ebay REPL",
 				"projectType": "scittle",
-				"webSocketPort": 23398,
+				"webSocketPort": 13342,
 				"replSessionNames": {
 					"primary": "epupp-ebay"
 				},
@@ -115,9 +117,8 @@
 					"primary": [
 						"epupp/*.clj*",
 						"epupp/*.edn",
-						"test-data/tampers/*.clj*",
-						"test-data/tampers/*.edn",
-						"extension/userscripts/**/*.{cljs,edn}"
+						"userscripts/*.cljs",
+						"live-tampers/*.cljs",
 					]
 				}
 			}

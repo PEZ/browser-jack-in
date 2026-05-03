@@ -110,13 +110,12 @@ Create a userscript and run it in some different ways:
 
 While the Epupp panel let's you script the page, Live Tampering comes to life when you are powered by your favorite development environment, which could be a code editor, an AI agent harness, or both. As the creator of [Calva](https://calva.io) I choose to describe how it can be done using [VS Code](https://code.visualstudio.com) + Calva, and with [VS Code Copilot](https://github.com/features/copilot) and [Calva Backseat Driver](https://github.com/BetterThanTomorrow/calva-backseat-driver). Please see [connecting-to-epupp](docs/connecting-to-epupp.md) README for info about connecting editors and AIs.
 
-0. Install [Babashka](https://babashka.org) and VS Code. In VS Code, install the Calva extension
-1. On a GitHub page (this one will do fine), open the Epupp popup and, copy the browser-nrepl command line, using the default ports
-1. Paste the command line in a terminal and run it
-1. From the Epupp popup, click **Connect**
+![Epupp REPL Connect](docs/browser-jack-in-screenshot.png)
+
+1. On a GitHub page (this one will do fine), open the Epupp popup and click **Connect**
 1. In VS Code create a file `hello_world.cljs`
 1. Click the REPL button in the VS Code status bar and select **Connect to a running REPL in your project**
-1. Select **scittle** from the Project Types menu
+1. Select **epupp** from the Project Types menu
 1. In the file, type:
    ```clojure
    (js/alert "Hello World!")
