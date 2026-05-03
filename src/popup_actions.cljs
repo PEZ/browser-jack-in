@@ -83,6 +83,10 @@
     :popup/ax.connect-finished
     {:uf/db (assoc state :ui/connecting? false)}
 
+    :popup/ax.set-connect-mode
+    (let [[mode] args]
+      {:uf/db (assoc state :ui/connect-mode mode)})
+
     :popup/ax.check-status
     {:uf/fxs [[:popup/fx.check-status (:ports/ws state)]]}
 

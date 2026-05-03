@@ -186,6 +186,17 @@
     (-> (expect (first (first (:uf/fxs result))))
         (.toBe :popup/fx.load-default-ports-setting))))
 
+(defn- test-set-connect-mode-updates-state []
+  (let [result (popup-actions/handle-action initial-state uf-data [:popup/ax.set-connect-mode "relay"])]
+    (-> (expect (:ui/connect-mode (:uf/db result)))
+        (.toBe "relay"))))
+
+(defn- test-set-connect-mode-to-direct []
+  (let [state (assoc initial-state :ui/connect-mode "relay")
+        result (popup-actions/handle-action state uf-data [:popup/ax.set-connect-mode "direct"])]
+    (-> (expect (:ui/connect-mode (:uf/db result)))
+        (.toBe "direct"))))
+
 (describe "popup connection actions"
           (fn []
             ;; Port actions
@@ -206,6 +217,10 @@
             (test ":popup/ax.connect returns nil when already connecting" test-connect-returns-nil-when-already-connecting)
             (test ":popup/ax.cancel-connect clears connecting state" test-cancel-connect-clears-connecting-state)
             (test ":popup/ax.connect-finished clears connecting state" test-connect-finished-clears-connecting-state)
+
+            ;; Connect mode
+            (test ":popup/ax.set-connect-mode updates state to relay" test-set-connect-mode-updates-state)
+            (test ":popup/ax.set-connect-mode updates state to direct" test-set-connect-mode-to-direct)
 
             ;; Load actions
             (test ":popup/ax.check-status triggers effect" test-check-status-triggers-effect)

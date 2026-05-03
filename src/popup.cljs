@@ -23,6 +23,7 @@
          :ports/ws "3340"
          :ui/reveal-highlight-script-name nil ; Temporary highlight when revealing a script
          :ui/connecting? false
+         :ui/connect-mode "direct"
          :ui/sections-collapsed (or (.-sectionsCollapsed config)
                                     {:repl-connect false
                                      :manual-scripts false
@@ -1111,49 +1112,97 @@
 
 (defn repl-connect-content
   [{:ports/keys [nrepl ws] :as state}]
-  (let [is-connected (current-tab-connected? state)]
+  (let [is-connected (current-tab-connected? state)
+        mode (or (:ui/connect-mode state) "direct")
+        direct? (= mode "direct")]
     [:div
      [:div.connect-setup {:class (when is-connected "connected")}
       [:div.connect-setup-inner
-       [:div.step
-        [:div.step-header "1. Start the browser-nrepl server"]
-        [:div.port-row
-         [port-input {:id "nrepl-port"
-                      :label "nREPL:"
-                      :value nrepl
-                      :on-change #(dispatch! [[:popup/ax.set-nrepl-port %]])}]
-         [port-input {:id "ws-port"
-                      :label "WebSocket:"
-                      :value ws
-                      :on-change #(dispatch! [[:popup/ax.set-ws-port %]])}]]
-        [command-box {:command (generate-server-cmd state)}]]
-       [:div.step
-        [:div.step-header "2. Connect browser to server"]
-        (if (:ui/connecting? state)
-          [:div.connect-row.connecting
-           [:span.connect-status
-            (str "Waiting for server on :" ws "...")]
-           [view-elements/action-button
-            {:button/variant :secondary
-             :button/id "cancel-connect"
-             :button/title "Cancel connection"
-             :button/on-click (fn [_e]
-                                (set! (.-cancelled connect-cancel-signal) true)
-                                (dispatch! [[:popup/ax.cancel-connect]
-                                            [:popup/ax.show-system-banner "info" "Connection cancelled" {} "connection"]]))}
-            "Cancel"]]
-          [:div.connect-row
-           [:span.connect-target (str "ws://localhost:" ws)]
-           [view-elements/action-button
-            {:button/variant :primary
-             :button/id "connect"
-             :button/title "Connect this tab to the REPL server"
-             :button/on-click #(dispatch! [[:popup/ax.connect]])}
-            "Connect"]])]
-       [:div.step
-        [:div.step-header "3. Connect editor to browser (via server)"]
-        [:div.connect-row
-         [:span.connect-target (str "nrepl://localhost:" nrepl)]]]]]
+       [:div.connect-mode-toggle
+        [:button {:class (when direct? "active")
+                  :on-click (when-not direct?
+                              #(dispatch! [[:popup/ax.set-connect-mode "direct"]]))}
+         "Direct"]
+        [:button {:class (when-not direct? "active")
+                  :on-click (when direct?
+                              #(dispatch! [[:popup/ax.set-connect-mode "relay"]]))}
+         "Relay"]]
+       (if direct?
+         ;; Direct mode: Calva WebSocket, no relay needed
+         [:div
+          [:div.connect-mode-hint "Connect in Calva/editor first, then connect browser here"]
+          [:div.step
+           [:div.step-header "1. Configure WebSocket port"]
+           [:div.port-row
+            [port-input {:id "ws-port"
+                         :label "WebSocket:"
+                         :value ws
+                         :on-change #(dispatch! [[:popup/ax.set-ws-port %]])}]]]
+          [:div.step
+           [:div.step-header "2. Connect browser to editor"]
+           (if (:ui/connecting? state)
+             [:div.connect-row.connecting
+              [:span.connect-status
+               (str "Waiting for server on :" ws "...")]
+              [view-elements/action-button
+               {:button/variant :secondary
+                :button/id "cancel-connect"
+                :button/title "Cancel connection"
+                :button/on-click (fn [_e]
+                                   (set! (.-cancelled connect-cancel-signal) true)
+                                   (dispatch! [[:popup/ax.cancel-connect]
+                                               [:popup/ax.show-system-banner "info" "Connection cancelled" {} "connection"]]))}
+               "Cancel"]]
+             [:div.connect-row
+              [:span.connect-target (str "ws://localhost:" ws)]
+              [view-elements/action-button
+               {:button/variant :primary
+                :button/id "connect"
+                :button/title "Connect this tab to the REPL server"
+                :button/on-click #(dispatch! [[:popup/ax.connect]])}
+               "Connect"]])]]
+         ;; Relay mode: bb browser-nrepl with both ports
+         [:div
+          [:div.connect-mode-hint "For editors without built-in WebSocket support"]
+          [:div.step
+           [:div.step-header "1. Start the browser-nrepl relay"]
+           [:div.port-row
+            [port-input {:id "nrepl-port"
+                         :label "nREPL:"
+                         :value nrepl
+                         :on-change #(dispatch! [[:popup/ax.set-nrepl-port %]])}]
+            [port-input {:id "ws-port"
+                         :label "WebSocket:"
+                         :value ws
+                         :on-change #(dispatch! [[:popup/ax.set-ws-port %]])}]]
+           [command-box {:command (generate-server-cmd state)}]]
+          [:div.step
+           [:div.step-header "2. Connect browser to relay"]
+           (if (:ui/connecting? state)
+             [:div.connect-row.connecting
+              [:span.connect-status
+               (str "Waiting for server on :" ws "...")]
+              [view-elements/action-button
+               {:button/variant :secondary
+                :button/id "cancel-connect"
+                :button/title "Cancel connection"
+                :button/on-click (fn [_e]
+                                   (set! (.-cancelled connect-cancel-signal) true)
+                                   (dispatch! [[:popup/ax.cancel-connect]
+                                               [:popup/ax.show-system-banner "info" "Connection cancelled" {} "connection"]]))}
+               "Cancel"]]
+             [:div.connect-row
+              [:span.connect-target (str "ws://localhost:" ws)]
+              [view-elements/action-button
+               {:button/variant :primary
+                :button/id "connect"
+                :button/title "Connect this tab to the REPL server"
+                :button/on-click #(dispatch! [[:popup/ax.connect]])}
+               "Connect"]])]
+          [:div.step
+           [:div.step-header "3. Connect editor to relay"]
+           [:div.connect-row
+            [:span.connect-target (str "nrepl://localhost:" nrepl)]]]])]]
      (into [:div.connected-repl-settings {:class (when is-connected "visible")}]
            (repl-settings-toggles state {:id-prefix "connect-"}))
      [:div.step

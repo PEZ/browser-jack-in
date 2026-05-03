@@ -208,6 +208,49 @@ body.ready .connected-repl-settings {
 }
 
 /* Connect section */
+
+/* Mode pill toggle */
+.connect-mode-toggle {
+  display: flex;
+  gap: 0;
+  background: var(--color-bg-base);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 2px;
+  margin-bottom: 12px;
+}
+
+.connect-mode-toggle button {
+  flex: 1;
+  padding: 5px 12px;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  border: none;
+  border-radius: calc(var(--radius-md) - 2px);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background-color var(--transition-snappy) var(--ease-out-expo),
+              color var(--transition-snappy) var(--ease-out-expo);
+}
+
+.connect-mode-toggle button:hover:not(.active) {
+  color: var(--color-text-primary);
+  background: color-mix(in oklch, var(--color-bg-base), var(--color-border) 30%);
+}
+
+.connect-mode-toggle button.active {
+  background: var(--clojure-blue);
+  color: #fff;
+  cursor: default;
+}
+
+.connect-mode-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  margin-bottom: 8px;
+}
+
 .connect-row {
   display: flex;
   align-items: center;
