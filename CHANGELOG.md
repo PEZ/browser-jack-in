@@ -6,7 +6,10 @@ Changes to Epupp
 
 ## [Unreleased]
 
+## [0.0.19] - 2026-05-03
+
 - Connecting a tab waits for a server to respond (instead of giving up on no response)
+
 
 ## [0.0.18] - 2026-04-23
 
