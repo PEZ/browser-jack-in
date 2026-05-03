@@ -1131,7 +1131,8 @@
         [:div.step-header "2. Connect browser to server"]
         (if (:ui/connecting? state)
           [:div.connect-row.connecting
-           [:span.connect-status (str "Waiting for server on :" ws "...")]
+           [:span.connect-status
+            (str "Waiting for server on :" ws "...")]
            [view-elements/action-button
             {:button/variant :secondary
              :button/id "cancel-connect"
