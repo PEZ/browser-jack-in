@@ -1086,6 +1086,7 @@
 
 (defn connected-tabs-section [{:repl/keys [connections] :scripts/keys [current-tab-id]}]
   [:div.connected-tabs-section
+   [:h2 "Connected tabs"]
    (if (seq connections)
      (let [current-tab-id-str (str current-tab-id)
            sorted-connections (sort-by
@@ -1130,40 +1131,36 @@
        (if direct?
          ;; Direct mode: Calva WebSocket, no relay needed
          [:div
-          [:div.connect-mode-hint "Connect in Calva/editor first, then connect browser here"]
-          [:div.step
-           [:div.step-header "1. Configure WebSocket port"]
-           [:div.port-row
-            [port-input {:id "ws-port"
-                         :label "WebSocket:"
-                         :value ws
-                         :on-change #(dispatch! [[:popup/ax.set-ws-port %]])}]]]
-          [:div.step
-           [:div.step-header "2. Connect browser to editor"]
-           (if (:ui/connecting? state)
-             [:div.connect-row.connecting
-              [:span.connect-status
-               (str "Waiting for server on :" ws "...")]
-              [view-elements/action-button
-               {:button/variant :secondary
-                :button/id "cancel-connect"
-                :button/title "Cancel connection"
-                :button/on-click (fn [_e]
-                                   (set! (.-cancelled connect-cancel-signal) true)
-                                   (dispatch! [[:popup/ax.cancel-connect]
-                                               [:popup/ax.show-system-banner "info" "Connection cancelled" {} "connection"]]))}
-               "Cancel"]]
-             [:div.connect-row
-              [:span.connect-target (str "ws://localhost:" ws)]
-              [view-elements/action-button
-               {:button/variant :primary
-                :button/id "connect"
-                :button/title "Connect this tab to the REPL server"
-                :button/on-click #(dispatch! [[:popup/ax.connect]])}
-               "Connect"]])]]
+          [:div.connect-mode-hint "Connect a scittle.nrepl compliant REPL Client (such as Calva)"]
+          [:div.port-row
+           [port-input {:id "ws-port"
+                        :label "WebSocket:"
+                        :value ws
+                        :on-change #(dispatch! [[:popup/ax.set-ws-port %]])}]]
+          (if (:ui/connecting? state)
+            [:div.connect-row.connecting
+             [:span.connect-status
+              (str "Waiting for server on :" ws "...")]
+             [view-elements/action-button
+              {:button/variant :secondary
+               :button/id "cancel-connect"
+               :button/title "Cancel connection"
+               :button/on-click (fn [_e]
+                                  (set! (.-cancelled connect-cancel-signal) true)
+                                  (dispatch! [[:popup/ax.cancel-connect]
+                                              [:popup/ax.show-system-banner "info" "Connection cancelled" {} "connection"]]))}
+              "Cancel"]]
+            [:div.connect-row
+             [:span.connect-target (str "ws://localhost:" ws)]
+             [view-elements/action-button
+              {:button/variant :primary
+               :button/id "connect"
+               :button/title "Connect this tab to the REPL server"
+               :button/on-click #(dispatch! [[:popup/ax.connect]])}
+              "Connect"]])]
          ;; Relay mode: bb browser-nrepl with both ports
          [:div
-          [:div.connect-mode-hint "For editors without built-in WebSocket support"]
+          [:div.connect-mode-hint "For REPOL clients/editors without built-in scittle.nrepl support"]
           [:div.step
            [:div.step-header "1. Start the browser-nrepl relay"]
            [:div.port-row
@@ -1205,9 +1202,7 @@
             [:span.connect-target (str "nrepl://localhost:" nrepl)]]]])]]
      (into [:div.connected-repl-settings {:class (when is-connected "visible")}]
            (repl-settings-toggles state {:id-prefix "connect-"}))
-     [:div.step
-      [:div.step-header "Connected Tabs"]
-      [connected-tabs-section state]]]))
+     [connected-tabs-section state]]))
 
 ;; ============================================================
 ;; FS Confirmation UI

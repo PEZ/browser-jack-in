@@ -37,7 +37,7 @@
     }
   },
   "manifest_version": 3,
-  "version": "0.0.19.10",
+  "version": "0.0.19.17",
   "web_accessible_resources": [
     {
       "resources": [

@@ -76,7 +76,7 @@ body {
 }
 
 /* Steps */
-.step {
+.step:not(:last-child) {
   margin-bottom: 18px;
 }
 
@@ -1074,10 +1074,6 @@ body.ready .script-item {
   display: flex;
   flex-direction: column;
   margin-top: 4px;
-}
-
-.setting:last-child {
-  margin-bottom: 10px;
 }
 
 .checkbox-label {
