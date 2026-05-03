@@ -244,12 +244,15 @@ button#connect:active {
   transition-duration: 0.05s;
 }
 
-/* Connecting / retry state — traveling border + spinner */
+/* Connecting / retry state — traveling border + breathing tint */
 .connect-row.connecting {
   position: relative;
   border-color: transparent;
   background:
-    linear-gradient(var(--color-bg-base), var(--color-bg-base)) padding-box,
+    linear-gradient(
+      color-mix(in oklch, var(--color-bg-base), var(--clojure-blue) var(--connect-tint, 0%)),
+      color-mix(in oklch, var(--color-bg-base), var(--clojure-blue) var(--connect-tint, 0%))
+    ) padding-box,
     conic-gradient(
       from var(--connect-border-angle, 0deg),
       transparent 0deg,
@@ -257,7 +260,9 @@ button#connect:active {
       var(--clojure-blue-light) 120deg,
       transparent 180deg
     ) border-box;
-  animation: connect-border-spin 1.8s linear infinite;
+  animation:
+    connect-border-spin 1.8s linear infinite,
+    connect-breathe 2.4s ease-in-out infinite;
 }
 
 @property --connect-border-angle {
@@ -266,8 +271,19 @@ button#connect:active {
   initial-value: 0deg;
 }
 
+@property --connect-tint {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 0%;
+}
+
 @keyframes connect-border-spin {
   to { --connect-border-angle: 360deg; }
+}
+
+@keyframes connect-breathe {
+  0%, 100% { --connect-tint: 4%; }
+  50% { --connect-tint: 12%; }
 }
 
 .connect-row.connecting .connect-status {
@@ -277,20 +293,6 @@ button#connect:active {
   font-size: var(--font-size-sm);
   font-family: ui-monospace, SFMono-Regular, monospace;
   color: var(--color-text-secondary);
-}
-
-.connect-row.connecting .connect-spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--color-border);
-  border-top-color: var(--clojure-blue);
-  border-radius: 50%;
-  animation: connect-spin 0.8s linear infinite;
-  flex-shrink: 0;
-}
-
-@keyframes connect-spin {
-  to { transform: rotate(360deg); }
 }
 
 /* Status */
@@ -1290,7 +1292,6 @@ button#connect:focus-visible,
   button#cancel-connect,
   .connect-status,
   .connect-row.connecting,
-  .connect-row.connecting .connect-spinner,
   .icon-button,
   .section-header,
   .script-delete,
