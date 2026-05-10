@@ -372,80 +372,22 @@
 ;; Settings Components
 ;; ============================================================
 
-(defn manual-scripts-section [{:scripts/keys [current-url]
-                               :ui/keys [scripts-shadow reveal-highlight-script-name recently-modified-scripts]
-                               :runtime/keys [errors]}]
-  (let [manual-shadow (->> scripts-shadow
-                           (filterv (fn [{:keys [item]}]
-                                     (and (not (script-utils/special-script? item))
-                                          (not (script-utils/library-script? item))
-                                          (empty? (:script/match item)))))
-                           (sort-by (fn [{:keys [item]}]
-                                      [(if (script-utils/builtin-script? item) 1 0)
-                                       (str/lower-case (or (:script/name item) ""))])))
-        modified-set (or recently-modified-scripts #{})
-        errors (or errors {})]
-    [:div.script-list
-     (if (seq manual-shadow)
-       (for [{:keys [item] :ui/keys [entering? leaving?]} manual-shadow
-             :let [script item]]
-         ^{:key (:script/id script)}
-         [script-item script current-url
-          {:reveal-highlight? (= (:script/name script) reveal-highlight-script-name)
-           :recently-modified? (contains? modified-set (:script/name script))
-           :leaving? leaving?
-           :entering? entering?
-           :runtime-error (get errors (:script/name script))}])
-       [:div.no-scripts
-        "No manual scripts."
-        [:div.no-scripts-hint
-         "Scripts without auto-run patterns appear here."]])]))
-
-(defn libraries-section [{:scripts/keys [current-url]
-                          :ui/keys [scripts-shadow reveal-highlight-script-name recently-modified-scripts]
-                          :runtime/keys [errors]}]
-  (let [library-shadow (->> scripts-shadow
-                            (filterv (fn [{:keys [item]}]
-                                       (and (script-utils/library-script? item)
-                                            (not (script-utils/special-script? item))
-                                            (empty? (:script/match item)))))
-                            (sort-by (fn [{:keys [item]}]
-                                       [(if (script-utils/builtin-script? item) 1 0)
-                                        (str/lower-case (or (:script/name item) ""))])))
-        modified-set (or recently-modified-scripts #{})
-        errors (or errors {})]
-    [:div.script-list
-     (if (seq library-shadow)
-       (for [{:keys [item] :ui/keys [entering? leaving?]} library-shadow
-             :let [script item]]
-         ^{:key (:script/id script)}
-         [script-item script current-url
-          {:reveal-highlight? (= (:script/name script) reveal-highlight-script-name)
-           :recently-modified? (contains? modified-set (:script/name script))
-           :leaving? leaving?
-           :entering? entering?
-           :runtime-error (get errors (:script/name script))}])
-       [:div.no-scripts
-        "No library scripts."
-        [:div.no-scripts-hint
-         "Scripts with :epupp/library? true appear here."]])]))
-
-(defn other-scripts-section [{:scripts/keys [current-url]
-                              :ui/keys [scripts-shadow reveal-highlight-script-name recently-modified-scripts]
-                              :runtime/keys [errors]}]
-  (let [other-shadow (->> scripts-shadow
-                          (filterv (fn [{:keys [item]}]
-                                    (and (not (script-utils/special-script? item))
-                                         (seq (:script/match item))
-                                         (not (script-utils/get-matching-pattern current-url item)))))
-                          (sort-by (fn [{:keys [item]}]
+(defn- filtered-script-section
+  [{:scripts/keys [current-url]
+    :ui/keys [scripts-shadow reveal-highlight-script-name recently-modified-scripts]
+    :runtime/keys [errors]}
+   {:keys [filter-fn sort-fn empty-text empty-hint]}]
+  (let [filtered (->> scripts-shadow
+                      (filterv filter-fn)
+                      (sort-by (or sort-fn
+                                   (fn [{:keys [item]}]
                                      [(if (script-utils/builtin-script? item) 1 0)
-                                      (str/lower-case (or (:script/name item) ""))])))
+                                      (str/lower-case (or (:script/name item) ""))]))))
         modified-set (or recently-modified-scripts #{})
         errors (or errors {})]
     [:div.script-list
-     (if (seq other-shadow)
-       (for [{:keys [item] :ui/keys [entering? leaving?]} other-shadow
+     (if (seq filtered)
+       (for [{:keys [item] :ui/keys [entering? leaving?]} filtered
              :let [script item]]
          ^{:key (:script/id script)}
          [script-item script current-url
@@ -455,35 +397,45 @@
            :entering? entering?
            :runtime-error (get errors (:script/name script))}])
        [:div.no-scripts
-        "No auto-run scripts for other pages."
-        [:div.no-scripts-hint
-         "Scripts with match patterns that don't match this page appear here."]])]))
+        empty-text
+        [:div.no-scripts-hint empty-hint]])]))
 
-(defn special-scripts-section [{:scripts/keys [current-url]
-                                :ui/keys [scripts-shadow reveal-highlight-script-name recently-modified-scripts]
-                                :runtime/keys [errors]}]
-  (let [special-shadow (->> scripts-shadow
-                            (filterv (fn [{:keys [item]}]
-                                       (script-utils/special-script? item)))
-                            (sort-by (fn [{:keys [item]}]
-                                       (str/lower-case (or (:script/name item) "")))))
-        modified-set (or recently-modified-scripts #{})
-        errors (or errors {})]
-    [:div.script-list
-     (if (seq special-shadow)
-       (for [{:keys [item] :ui/keys [entering? leaving?]} special-shadow
-             :let [script item]]
-         ^{:key (:script/id script)}
-         [script-item script current-url
-          {:reveal-highlight? (= (:script/name script) reveal-highlight-script-name)
-           :recently-modified? (contains? modified-set (:script/name script))
-           :leaving? leaving?
-           :entering? entering?
-           :runtime-error (get errors (:script/name script))}])
-       [:div.no-scripts
-        "No special scripts."
-        [:div.no-scripts-hint
-         "Background-managed scripts appear here."]])]))
+(defn manual-scripts-section [state]
+  [filtered-script-section state
+   {:filter-fn (fn [{:keys [item]}]
+                 (and (not (script-utils/special-script? item))
+                      (not (script-utils/library-script? item))
+                      (empty? (:script/match item))))
+    :empty-text "No manual scripts."
+    :empty-hint "Scripts without auto-run patterns appear here."}])
+
+(defn libraries-section [state]
+  [filtered-script-section state
+   {:filter-fn (fn [{:keys [item]}]
+                 (and (script-utils/library-script? item)
+                      (not (script-utils/special-script? item))
+                      (empty? (:script/match item))))
+    :empty-text "No library scripts."
+    :empty-hint "Scripts with :epupp/library? true appear here."}])
+
+(defn other-scripts-section [state]
+  (let [current-url (:scripts/current-url state)]
+    [filtered-script-section state
+     {:filter-fn (fn [{:keys [item]}]
+                   (and (not (script-utils/special-script? item))
+                        (seq (:script/match item))
+                        (not (script-utils/get-matching-pattern current-url item))))
+      :empty-text "No auto-run scripts for other pages."
+      :empty-hint "Scripts with match patterns that don't match this page appear here."}]))
+
+(defn special-scripts-section [state]
+  [filtered-script-section state
+   {:filter-fn (fn [{:keys [item]}]
+                 (script-utils/special-script? item))
+    :sort-fn (fn [{:keys [item]}]
+               (str/lower-case (or (:script/name item) "")))
+    :empty-text "No special scripts."
+    :empty-hint "Background-managed scripts appear here."}])
 
 (defn- repl-settings-toggles
   "Returns a vector of three REPL setting toggle elements.
