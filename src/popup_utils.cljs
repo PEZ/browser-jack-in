@@ -61,3 +61,27 @@
        (js/chrome.tabs.query
         #js {:active true :currentWindow true}
         (fn [tabs] (resolve (first tabs))))))))
+
+(defn current-tab-connected?
+  "Check if current tab is in the connections list"
+  [{:repl/keys [connections] :scripts/keys [current-tab-id]}]
+  (let [current-tab-id-str (str current-tab-id)]
+    (some #(= (:tab-id %) current-tab-id-str) connections)))
+
+(defn parse-domain-ports [saved]
+  (when saved
+    (let [nrepl (.-nreplPort saved)
+          ws (.-wsPort saved)]
+      (when (or (some? nrepl) (some? ws))
+        (cond-> {}
+          (some? nrepl) (assoc :nrepl (str nrepl))
+          (some? ws) (assoc :ws (str ws)))))))
+
+(defn default-ports-changed? [changes area]
+  (and (= area "local")
+       (or (aget changes "defaultNreplPort")
+           (aget changes "defaultWsPort"))))
+
+(defn parse-new-defaults [result]
+  {:nrepl (str (or (aget result "defaultNreplPort") "3339"))
+   :ws (str (or (aget result "defaultWsPort") "3340"))})

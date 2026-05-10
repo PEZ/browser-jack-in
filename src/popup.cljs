@@ -7,6 +7,7 @@
             [manifest-parser :as mp]
             [script-utils :as script-utils]
             [popup-utils :as popup-utils]
+            [popup-scripts :as popup-scripts]
             [popup-actions :as popup-actions]
             [popup-effects.port-effects :as port-effects]
             [popup-effects.connection-effects :as connection-effects]
@@ -17,8 +18,7 @@
             [log :as log]
             [storage :as storage]
             [view-elements :as view-elements]
-            [test-logger :as test-logger]
-            [clojure.string :as str]))
+            [test-logger :as test-logger]))
 
 ;; EXTENSION_CONFIG is injected by esbuild at bundle time from config/*.edn
 ;; Shape: {"dev": boolean, "depsString": string, "sectionsCollapsed": {...}}
@@ -183,188 +183,6 @@
       [:span.section-badge badge-count])]
    (into [:div.section-content {:style (when (and expanded? max-height) {:max-height max-height})}] children)])
 
-(defn- run-at-badge
-  "Returns a badge component for non-default run-at timings."
-  [run-at]
-  (case run-at
-    "document-start" [:span.run-at-badge {:title "Runs at document-start (before page loads)"}
-                      [icons/rocket {:size 16}]]
-    "document-end" [:span.run-at-badge {:title "Runs with document-end timing (wait explicitly if you need DOM-ready behavior)"}
-                    [icons/flag {:size 16}]]
-    ;; document-idle (default) - no badge
-    nil))
-
-(defn- safe-pattern-display
-  "Safely extract a displayable string from a pattern value.
-   Handles malformed data (nested arrays, nil) defensively."
-  [pattern]
-  (cond
-    (nil? pattern) nil
-    (string? pattern) pattern
-    ;; Vector/array - extract first element recursively
-    (or (vector? pattern) (array? pattern))
-    (safe-pattern-display (first pattern))
-    ;; Fallback for unexpected types
-    :else (str pattern)))
-
-(defn- script-item-classes [{:keys [builtin? reveal-highlight? recently-modified? leaving? entering?]}]
-  (str (when builtin? "script-item-builtin ")
-       (when reveal-highlight? "script-item-reveal-highlight ")
-       (when (and recently-modified? (not leaving?)) "script-item-fs-modified ")
-       (when entering? "entering ")
-       (when leaving? "leaving")))
-
-(defn- script-name-row [{:script/keys [name] script-id :script/id :as script} runtime-error]
-  (let [builtin? (script-utils/builtin-script? script)]
-    [:div.script-row-header
-     [:span.script-name
-      (when builtin?
-        [:span.builtin-indicator {:title "Built-in script"}
-         [icons/package]])
-      [:span.script-name-text {:title name} name]
-      (when runtime-error
-        [:span.script-error-indicator
-         {:title (or (:error/message runtime-error) "Resolution error")
-          :data-e2e "script-error"}
-         [icons/warning {:size 14}]])]
-     [:div.script-actions
-      [view-elements/action-button
-       {:button/variant :secondary
-        :button/class "script-inspect"
-        :button/size :md
-        :button/icon icons/eye
-        :button/title "Inspect script"
-        :button/on-click #(dispatch! [[:popup/ax.inspect-script script-id]])}
-       nil]
-      (when-not builtin?
-        [view-elements/action-button
-         {:button/variant :danger
-          :button/class "script-delete"
-          :button/size :md
-          :button/icon icons/trash
-          :button/title "Delete script"
-          :button/on-click #(when (js/confirm "Delete this script?")
-                              (dispatch! [[:popup/ax.delete-script script-id]]))}
-         nil])]]))
-
-(defn- show-auto-run-checkbox? [script]
-  (and (or (seq (:script/match script))
-           (:script/web-installer-scan script))
-       (not (:script/always-enabled? script))))
-
-(defn- script-match-text [patterns-text script]
-  (cond
-    patterns-text patterns-text
-    (:script/web-installer-scan script) "Injected when Userscripts are detected"
-    :else "No auto-run (manual only)"))
-
-(defn- script-pattern-row
-  [{:script/keys [enabled run-at]
-    script-id :script/id :as script}
-   matching-pattern patterns-display patterns-tooltip]
-  [:div.script-row-pattern
-   (when (show-auto-run-checkbox? script)
-     [:input.pattern-checkbox {:type "checkbox"
-                               :checked enabled
-                               :title (if enabled "Auto-run enabled" "Auto-run disabled")
-                               :on-change #(dispatch! [[:popup/ax.toggle-script script-id matching-pattern]])}])
-   (when run-at
-     (run-at-badge run-at))
-   [:span.script-match {:title (script-match-text patterns-tooltip script)}
-    (script-match-text patterns-display script)]])
-
-(defn script-item [{:script/keys [name match description]
-                    script-id :script/id
-                    :as script}
-                   current-url
-                   {:keys [reveal-highlight? recently-modified? leaving? entering? runtime-error]}]
-  (let [matching-pattern (script-utils/get-matching-pattern current-url script)
-        builtin? (script-utils/builtin-script? script)
-        patterns-display (when (seq match)
-                           (->> match
-                                (mapv safe-pattern-display)
-                                (filterv some?)
-                                (str/join " ")))
-        patterns-tooltip (when (seq match)
-                           (->> match
-                                (mapv safe-pattern-display)
-                                (filterv some?)
-                                (str/join "\n")))]
-    [:div.script-item {:data-script-name name
-                       :data-e2e-script-id script-id
-                       :class (script-item-classes {:builtin? builtin?
-                                                    :reveal-highlight? reveal-highlight?
-                                                    :recently-modified? recently-modified?
-                                                    :leaving? leaving?
-                                                    :entering? entering?})}
-     [:div.script-button-column
-      [view-elements/action-button
-       {:button/variant :secondary
-        :button/class "script-run"
-        :button/size :md
-        :button/icon icons/play
-        :button/title "Run script"
-        :button/on-click #(dispatch! [[:popup/ax.evaluate-script script-id]])}
-       nil]]
-     [:div.script-content-column
-      [script-name-row script runtime-error]
-      [script-pattern-row script matching-pattern patterns-display patterns-tooltip]
-      (when (seq description)
-        [:div.script-row-description
-         [:span.script-description {:title description}
-          description]])]]))
-
-(defn- matching-scripts-empty-state [no-user-scripts? example-pattern]
-  [:div.no-scripts
-   (if no-user-scripts?
-     "No userscripts yet!"
-     "No scripts auto-run for this page.")
-   [:div.no-scripts-hint
-    (if no-user-scripts?
-      "Create your first script in DevTools → Epupp panel."
-      (if example-pattern
-        [:span "Auto-run patterns look like " [:code example-pattern]]
-        "Check your script patterns in DevTools → Epupp panel."))]])
-
-(defn- default-script-sort [{:keys [item]}]
-  [(if (script-utils/builtin-script? item) 1 0)
-   (str/lower-case (or (:script/name item) ""))])
-
-(defn- render-script-items [items current-url opts]
-  (let [{:keys [highlight-name modified-set errors]} opts]
-    (for [{:keys [item] :ui/keys [entering? leaving?]} items
-          :let [script item]]
-      ^{:key (:script/id script)}
-      [script-item script current-url
-       {:reveal-highlight? (= (:script/name script) highlight-name)
-        :recently-modified? (contains? modified-set (:script/name script))
-        :leaving? leaving?
-        :entering? entering?
-        :runtime-error (get errors (:script/name script))}])))
-
-(defn- matching-url-shadow? [current-url shadow-item]
-  (and (not (script-utils/special-script? (:item shadow-item)))
-       (script-utils/get-matching-pattern current-url (:item shadow-item))))
-
-(defn matching-scripts-section [{:scripts/keys [list current-url]
-                                 :ui/keys [scripts-shadow reveal-highlight-script-name recently-modified-scripts]
-                                 :runtime/keys [errors]}]
-  (let [matching-shadow (->> scripts-shadow
-                             (filterv (partial matching-url-shadow? current-url))
-                             (sort-by default-script-sort))
-        user-scripts (filterv #(not (script-utils/builtin-script? %)) list)
-        no-user-scripts? (empty? user-scripts)
-        example-pattern (script-utils/url-to-match-pattern current-url {:wildcard-scheme? true})
-        modified-set (or recently-modified-scripts #{})
-        error-map (or errors {})]
-    [:div.script-list
-     (if (seq matching-shadow)
-       (render-script-items matching-shadow current-url
-                            {:highlight-name reveal-highlight-script-name
-                             :modified-set modified-set
-                             :errors error-map})
-       [matching-scripts-empty-state no-user-scripts? example-pattern])]))
-
 ;; =============================================================================
 ;; Dev Tools Section (only shown in dev/test mode)
 ;; =============================================================================
@@ -396,64 +214,6 @@
 ;; ============================================================
 ;; Settings Components
 ;; ============================================================
-
-(defn- filtered-script-section
-  [{:scripts/keys [current-url]
-    :ui/keys [scripts-shadow reveal-highlight-script-name recently-modified-scripts]
-    :runtime/keys [errors]}
-   {:keys [filter-fn sort-fn empty-text empty-hint]}]
-  (let [sort-comparator (or sort-fn default-script-sort)
-        filtered (->> scripts-shadow
-                      (filterv filter-fn)
-                      (sort-by sort-comparator))
-        modified-set (or recently-modified-scripts #{})
-        error-map (or errors {})]
-    [:div.script-list
-     (if (seq filtered)
-       (render-script-items filtered current-url
-                            {:highlight-name reveal-highlight-script-name
-                             :modified-set modified-set
-                             :errors error-map})
-       [:div.no-scripts
-        empty-text
-        [:div.no-scripts-hint empty-hint]])]))
-
-(defn manual-scripts-section [state]
-  [filtered-script-section state
-   {:filter-fn (fn [{:keys [item]}]
-                 (and (not (script-utils/special-script? item))
-                      (not (script-utils/library-script? item))
-                      (empty? (:script/match item))))
-    :empty-text "No manual scripts."
-    :empty-hint "Scripts without auto-run patterns appear here."}])
-
-(defn libraries-section [state]
-  [filtered-script-section state
-   {:filter-fn (fn [{:keys [item]}]
-                 (and (script-utils/library-script? item)
-                      (not (script-utils/special-script? item))
-                      (empty? (:script/match item))))
-    :empty-text "No library scripts."
-    :empty-hint "Scripts with :epupp/library? true appear here."}])
-
-(defn other-scripts-section [state]
-  (let [current-url (:scripts/current-url state)]
-    [filtered-script-section state
-     {:filter-fn (fn [{:keys [item]}]
-                   (and (not (script-utils/special-script? item))
-                        (seq (:script/match item))
-                        (not (script-utils/get-matching-pattern current-url item))))
-      :empty-text "No auto-run scripts for other pages."
-      :empty-hint "Scripts with match patterns that don't match this page appear here."}]))
-
-(defn special-scripts-section [state]
-  [filtered-script-section state
-   {:filter-fn (fn [{:keys [item]}]
-                 (script-utils/special-script? item))
-    :sort-fn (fn [{:keys [item]}]
-               (str/lower-case (or (:script/name item) "")))
-    :empty-text "No special scripts."
-    :empty-hint "Background-managed scripts appear here."}])
 
 (defn- reconnect-toggle [state prefix auto-connect-active?]
   [:div.setting (when auto-connect-active?
@@ -606,12 +366,6 @@
 ;; ============================================================;; Main View
 ;; ============================================================
 
-(defn- current-tab-connected?
-  "Check if current tab is in the connections list"
-  [{:repl/keys [connections] :scripts/keys [current-tab-id]}]
-  (let [current-tab-id-str (str current-tab-id)]
-    (some #(= (:tab-id %) current-tab-id-str) connections)))
-
 (defn- connect-controls [state ws]
   (if (:ui/connecting? state)
     [:div.connect-row.connecting
@@ -681,7 +435,7 @@
 
 (defn repl-connect-content
   [{:ports/keys [ws] :as state}]
-  (let [is-connected (current-tab-connected? state)
+  (let [is-connected (popup-utils/current-tab-connected? state)
         mode (or (:ui/connect-mode state) "direct")
         direct? (= mode "direct")]
     [:div
@@ -695,32 +449,6 @@
            (repl-settings-toggles state {:id-prefix "connect-"}))
      [connected-tabs-section state]]))
 
-;; ============================================================
-;; FS Confirmation UI
-;; ============================================================
-
-
-
-(defn- categorize-scripts [scripts current-url]
-  {:special (->> scripts (filterv script-utils/special-script?))
-   :matching (->> scripts
-                  (filterv #(and (not (script-utils/special-script? %))
-                                 (script-utils/get-matching-pattern current-url %))))
-   :other-autorun (->> scripts
-                       (filterv (fn [s]
-                                  (and (not (script-utils/special-script? s))
-                                       (seq (:script/match s))
-                                       (not (script-utils/get-matching-pattern current-url s))))))
-   :manual (->> scripts
-                (filterv #(and (not (script-utils/special-script? %))
-                               (not (script-utils/library-script? %))
-                               (empty? (:script/match %)))))
-   :library (->> scripts
-                 (filterv (fn [s]
-                            (and (script-utils/library-script? s)
-                                 (not (script-utils/special-script? s))
-                                 (empty? (:script/match s))))))})
-
 (defn- scripts-section [state {:keys [id title scripts component]}]
   [collapsible-section {:id id
                         :title title
@@ -733,7 +461,7 @@
   [view-elements/app-header
    {:elements/wrapper-class "popup-header-wrapper"
     :elements/header-class "popup-header"
-    :elements/icon [icons/epupp-logo {:size 28 :connected? (current-tab-connected? state)}]
+    :elements/icon [icons/epupp-logo {:size 28 :connected? (popup-utils/current-tab-connected? state)}]
     :elements/sponsor-status (storage/sponsor-active? state)
     :elements/on-sponsor-click #(dispatch! [[:popup/ax.check-sponsor]])
     :elements/permanent-banner [:div
@@ -756,23 +484,23 @@
                  :scripts/keys [list current-url]
                  :repl/keys [connections]
                  :as state}]
-  (let [{:keys [special matching other-autorun manual library]} (categorize-scripts list current-url)
+  (let [{:keys [special matching other-autorun manual library]} (popup-scripts/categorize-scripts list current-url)
         settings-max-height 700]
     [:div
      [popup-header state]
      [collapsible-section {:id :repl-connect
                            :title "REPL Connect"
                            :expanded? (not (:repl-connect sections-collapsed))
-                           :max-height (str (+ (if (current-tab-connected? state) 400 500)
+                           :max-height (str (+ (if (popup-utils/current-tab-connected? state) 400 500)
                                                (* 35 (count connections))) "px")
                            :data-attrs {:data-e2e-connection-count (count connections)}}
       [repl-connect-content state]]
-     [scripts-section state {:id :manual-scripts :title "Manual/On-demand scripts" :scripts manual :component manual-scripts-section}]
-     [scripts-section state {:id :matching-scripts :title "Auto-run for this page" :scripts matching :component matching-scripts-section}]
-     [scripts-section state {:id :other-scripts :title "Auto-run not matching this page" :scripts other-autorun :component other-scripts-section}]
-     [scripts-section state {:id :libraries :title "Libraries" :scripts library :component libraries-section}]
+     [scripts-section state {:id :manual-scripts :title "Manual/On-demand scripts" :scripts manual :component popup-scripts/manual-scripts-section}]
+     [scripts-section state {:id :matching-scripts :title "Auto-run for this page" :scripts matching :component popup-scripts/matching-scripts-section}]
+     [scripts-section state {:id :other-scripts :title "Auto-run not matching this page" :scripts other-autorun :component popup-scripts/other-scripts-section}]
+     [scripts-section state {:id :libraries :title "Libraries" :scripts library :component popup-scripts/libraries-section}]
      (when (seq special)
-       [scripts-section state {:id :special :title "Special" :scripts special :component special-scripts-section}])
+       [scripts-section state {:id :special :title "Special" :scripts special :component popup-scripts/special-scripts-section}])
      [collapsible-section {:id :settings
                            :title "Settings"
                            :expanded? (not (:settings sections-collapsed))
@@ -844,38 +572,21 @@
                      checked-change
                      (conj [:db/ax.assoc :sponsor/checked-at (.-newValue checked-change)])))))))
 
-(defn- parse-domain-ports [saved]
-  (when saved
-    (let [nrepl (.-nreplPort saved)
-          ws (.-wsPort saved)]
-      (when (or (some? nrepl) (some? ws))
-        (cond-> {}
-          (some? nrepl) (assoc :nrepl (str nrepl))
-          (some? ws) (assoc :ws (str ws)))))))
-
-(defn- default-ports-changed? [changes area]
-  (and (= area "local")
-       (or (aget changes "defaultNreplPort")
-           (aget changes "defaultWsPort"))))
-
-(defn- parse-new-defaults [result]
-  {:nrepl (str (or (aget result "defaultNreplPort") "3339"))
-   :ws (str (or (aget result "defaultWsPort") "3340"))})
-
 (defn- handle-default-ports-change [changes area]
-  (when (default-ports-changed? changes area)
+  (when (popup-utils/default-ports-changed? changes area)
     (.then (popup-utils/get-active-tab)
            (fn [tab]
              (let [key (port-effects/storage-key tab)]
                (js/chrome.storage.local.get
                 #js ["defaultNreplPort" "defaultWsPort" key]
                 (fn [result]
-                  (let [new-defaults (parse-new-defaults result)
-                        domain-ports (parse-domain-ports (aget result key))]
+                  (let [new-defaults (popup-utils/parse-new-defaults result)
+                        domain-ports (popup-utils/parse-domain-ports (aget result key))]
                     (dispatch! [[:popup/ax.on-default-ports-changed new-defaults domain-ports]])))))))))
 
 (defn init! []
   (log/info "Popup" "Init!")
+  (popup-scripts/set-dispatch! dispatch!)
   (test-logger/install-global-error-handlers! "popup" js/window)
   (add-watch !state :popup/render (fn [_ _ _ _] (render!)))
   (dispatch! [[:popup/ax.set-brave-detected (some? (.-brave js/navigator))]])
