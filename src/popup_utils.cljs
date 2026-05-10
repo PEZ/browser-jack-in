@@ -44,3 +44,20 @@
         sort-by-name #(vec (sort-by (fn [s] (.toLowerCase (:script/name s))) %))]
     (concat (sort-by-name user-scripts)
             (sort-by-name builtin-scripts))))
+
+;; ============================================================
+;; Tab helpers (browser-dependent)
+;; ============================================================
+
+(defn get-active-tab
+  "Gets the active tab. In tests, checks for window.__scittle_tamper_test_url
+   and window.__scittle_tamper_test_tab_id overrides."
+  []
+  (js/Promise.
+   (fn [resolve]
+     (if-let [test-url js/window.__scittle_tamper_test_url]
+       (let [test-tab-id (or js/window.__scittle_tamper_test_tab_id -1)]
+         (resolve #js {:id test-tab-id :url test-url}))
+       (js/chrome.tabs.query
+        #js {:active true :currentWindow true}
+        (fn [tabs] (resolve (first tabs))))))))

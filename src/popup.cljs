@@ -8,6 +8,12 @@
             [script-utils :as script-utils]
             [popup-utils :as popup-utils]
             [popup-actions :as popup-actions]
+            [popup-effects.port-effects :as port-effects]
+            [popup-effects.connection-effects :as connection-effects]
+            [popup-effects.script-effects :as script-effects]
+            [popup-effects.settings-effects :as settings-effects]
+            [popup-effects.sponsor-effects :as sponsor-effects]
+            [popup-effects.ui-effects :as ui-effects]
             [log :as log]
             [storage :as storage]
             [view-elements :as view-elements]
@@ -70,547 +76,64 @@
                                     :ws-port ws}))
 
 ;; ============================================================
-;; Tab and storage helpers
-;; =============================================================
-
-(defn get-active-tab
-  "Gets the active tab. In tests, checks for window.__scittle_tamper_test_url
-   and window.__scittle_tamper_test_tab_id overrides."
-  []
-  (js/Promise.
-   (fn [resolve]
-     ;; Test override: if window.__scittle_tamper_test_url is set, return a mock tab
-     (if-let [test-url js/window.__scittle_tamper_test_url]
-       (let [test-tab-id (or js/window.__scittle_tamper_test_tab_id -1)]
-         (resolve #js {:id test-tab-id :url test-url}))
-       ;; Normal: query Chrome tabs API
-       (js/chrome.tabs.query
-        #js {:active true :currentWindow true}
-        (fn [tabs] (resolve (first tabs))))))))
-
-(defn get-hostname [tab]
-  (try
-    (.-hostname (js/URL. (.-url tab)))
-    (catch :default _ "default")))
-
-(defn storage-key [tab]
-  (str "ports_" (get-hostname tab)))
-
-;; ============================================================
-;; Script storage helpers
-;; ============================================================
-
-(defn- save-scripts! [scripts]
-  (js/chrome.storage.local.set
-   #js {:scripts (clj->js (mapv script-utils/script->js scripts))}))
-
-
-
-;; ============================================================
-;; Effect helpers (side-effecting, but factored for clarity)
-;; ============================================================
-
-(defn ^:async save-ports-to-storage!
-  "Persist port configuration to chrome.storage.local."
-  [{:ports/keys [nrepl ws]}]
-  (let [tab (js-await (get-active-tab))
-        key (storage-key tab)]
-    (js/chrome.storage.local.set
-     (clj->js {key {:nreplPort nrepl :wsPort ws}}))))
-
-(defn persist-and-notify-scripts!
-  "Save scripts to storage."
-  [scripts _notify-type]
-  (save-scripts! scripts))
-
-(def ^:private connect-cancel-signal #js {:cancelled false})
-
-(defn- send-connect-tab-message
-  "Send a connect-tab message to the background and return a Promise of the response."
-  [tab port]
-  (js/Promise.
-   (fn [resolve reject]
-     (js/chrome.runtime.sendMessage
-      #js {:type "connect-tab"
-           :tabId (.-id tab)
-           :wsPort port}
-      (fn [response]
-        (if js/chrome.runtime.lastError
-          (reject (js/Error. (.-message js/chrome.runtime.lastError)))
-          (resolve response)))))))
-
-(defn- retry-connect!
-  "Retry connecting to the REPL server until success or cancellation.
-   Uses the module-level connect-cancel-signal to detect cancellation."
-  [dispatch tab port tab-title tab-favicon]
-  (js/Promise.
-   (fn [resolve]
-     (letfn [(attempt []
-               (if (.-cancelled connect-cancel-signal)
-                 (resolve)
-                 (-> (send-connect-tab-message tab port)
-                     (.then (fn [resp]
-                              (if (and resp (.-success resp))
-                                (do (dispatch [[:popup/ax.connect-finished]
-                                               [:popup/ax.show-system-banner "success" (str "Connected to \"" tab-title "\"") {:favicon tab-favicon} "connection"]])
-                                    (resolve))
-                                (js/setTimeout attempt 1500))))
-                     (.catch (fn [_err]
-                               (js/setTimeout attempt 1500))))))]
-       (attempt)))))
-
-;; ============================================================
 ;; Uniflow Dispatch
 ;; ============================================================
 
+(def ^:private effect-router
+  {:popup/fx.save-ports port-effects/save-ports!
+   :popup/fx.clear-domain-ports port-effects/clear-domain-ports!
+   :popup/fx.load-saved-ports port-effects/load-saved-ports!
+   :popup/fx.init-ports port-effects/init-ports!
+   :popup/fx.load-default-ports-setting port-effects/load-default-ports-setting!
+   :popup/fx.save-default-ports-setting port-effects/save-default-ports-setting!
+   :popup/fx.run-port-migration port-effects/run-port-migration!
+   :popup/fx.remove-storage-keys port-effects/remove-storage-keys!
+   :popup/fx.set-storage-key port-effects/set-storage-key!
+   :popup/fx.connect connection-effects/connect!
+   :popup/fx.check-status connection-effects/check-status!
+   :popup/fx.disconnect-tab connection-effects/disconnect-tab!
+   :popup/fx.load-current-url connection-effects/load-current-url!
+   :popup/fx.load-connections connection-effects/load-connections!
+   :popup/fx.load-runtime-status connection-effects/load-runtime-status!
+   :popup/fx.load-scripts script-effects/load-scripts!
+   :popup/fx.toggle-script script-effects/toggle-script!
+   :popup/fx.delete-script script-effects/delete-script!
+   :popup/fx.inspect-script script-effects/inspect-script!
+   :popup/fx.evaluate-script script-effects/evaluate-script!
+   :popup/fx.export-scripts script-effects/export-scripts!
+   :popup/fx.trigger-import script-effects/trigger-import!
+   :popup/fx.import-scripts script-effects/import-scripts!
+   :popup/fx.load-auto-connect-level settings-effects/load-auto-connect-level!
+   :popup/fx.save-auto-connect-level settings-effects/save-auto-connect-level!
+   :popup/fx.load-auto-reconnect-setting settings-effects/load-auto-reconnect-setting!
+   :popup/fx.save-auto-reconnect-setting settings-effects/save-auto-reconnect-setting!
+   :popup/fx.load-fs-sync-status settings-effects/load-fs-sync-status!
+   :popup/fx.toggle-fs-sync settings-effects/toggle-fs-sync!
+   :popup/fx.load-debug-logging-setting settings-effects/load-debug-logging-setting!
+   :popup/fx.save-debug-logging-setting settings-effects/save-debug-logging-setting!
+   :popup/fx.check-sponsor sponsor-effects/check-sponsor!
+   :popup/fx.load-sponsor-status sponsor-effects/load-sponsor-status!
+   :popup/fx.set-dev-sponsor-username sponsor-effects/set-dev-sponsor-username!
+   :popup/fx.reset-sponsor-status sponsor-effects/reset-sponsor-status!
+   :popup/fx.load-dev-sponsor-username sponsor-effects/load-dev-sponsor-username!
+   :popup/fx.copy-command ui-effects/copy-command!
+   :popup/fx.reveal-script ui-effects/reveal-script!
+   :popup/fx.reveal-tab ui-effects/reveal-tab!
+   :popup/fx.dump-dev-log ui-effects/dump-dev-log!
+   :popup/fx.log-system-banner ui-effects/log-system-banner!
+   :popup/fx.check-page-scriptability ui-effects/check-page-scriptability!
+   :popup/fx.check-host-permission ui-effects/check-host-permission!
+   :popup/fx.request-host-permission ui-effects/request-host-permission!})
+
 (defn ^:async perform-effect! [dispatch [effect & args]]
-  (case effect
-    :popup/fx.save-ports
-    (let [[ports] args]
-      (save-ports-to-storage! ports))
-
-    :popup/fx.clear-domain-ports
-    (let [tab (js-await (get-active-tab))
-          key (storage-key tab)]
-      (js/chrome.storage.local.remove #js [key]))
-
-    :popup/fx.copy-command
-    (let [[cmd] args]
-      (js-await (js/navigator.clipboard.writeText cmd))
-      (dispatch [[:popup/ax.show-system-banner "success" "browser-nrepl command copied to your clipboard." {} nil]]))
-
-    :popup/fx.connect
-    (let [[port] args
-          tab (js-await (get-active-tab))
-          tab-title (or (.-title tab) "tab")
-          tab-favicon (.-favIconUrl tab)]
-      (set! (.-cancelled connect-cancel-signal) false)
-      (dispatch [[:popup/ax.show-system-banner "info" (str "Waiting for server on :" port "...") {:favicon tab-favicon} "connection"]])
-      (js-await (retry-connect! dispatch tab port tab-title tab-favicon)))
-
-    :popup/fx.check-status
-    (let [[_ws-port] args
-          tab (js-await (get-active-tab))]
-      (try
-        (js/Promise.
-         (fn [resolve reject]
-           (js/chrome.runtime.sendMessage
-            #js {:type "check-status"
-                 :tabId (.-id tab)}
-            (fn [response]
-              (if js/chrome.runtime.lastError
-                (reject (js/Error. (.-message js/chrome.runtime.lastError)))
-                (resolve response))))))
-        (catch :default _err
-          nil)))
-
-    :popup/fx.load-saved-ports
-    (let [[nrepl-port ws-port] args
-          tab (js-await (get-active-tab))
-          key (storage-key tab)]
-      (js/chrome.storage.local.get
-       #js [key]
-       (fn [result]
-         (let [saved (aget result key)]
-           (if saved
-             ;; Per-hostname ports found - use them
-             (let [actions (cond-> []
-                             (.-nreplPort saved)
-                             (conj [:db/ax.assoc :ports/nrepl (str (.-nreplPort saved))])
-                             (.-wsPort saved)
-                             (conj [:db/ax.assoc :ports/ws (str (.-wsPort saved))]))]
-               (when (seq actions)
-                 (dispatch actions)))
-             ;; No per-hostname ports - fall back to default settings
-             (let [actions [[:db/ax.assoc
-                             :ports/nrepl nrepl-port
-                             :ports/ws ws-port]]]
-               (dispatch actions)))))))
-
-    :popup/fx.init-ports
-    (let [tab (js-await (get-active-tab))
-          key (storage-key tab)]
-      (js/chrome.storage.local.get
-       #js ["defaultNreplPort" "defaultWsPort" key]
-       (fn [result]
-         (let [stored-nrepl (aget result "defaultNreplPort")
-               stored-ws (aget result "defaultWsPort")
-               stored-defaults (when (or (some? stored-nrepl) (some? stored-ws))
-                                 (cond-> {}
-                                   (some? stored-nrepl) (assoc :nrepl (str stored-nrepl))
-                                   (some? stored-ws) (assoc :ws (str stored-ws))))
-               saved (aget result key)
-               domain-ports (when saved
-                              (let [nrepl (.-nreplPort saved)
-                                    ws (.-wsPort saved)]
-                                (when (or (some? nrepl) (some? ws))
-                                  (cond-> {}
-                                    (some? nrepl) (assoc :nrepl (str nrepl))
-                                    (some? ws) (assoc :ws (str ws))))))]
-           (dispatch [[:popup/ax.apply-init-ports {:stored-defaults stored-defaults
-                                                   :domain-ports domain-ports}]])))))
-
-    :popup/fx.load-scripts
-    ;; chrome.storage.local.get uses callback API, keep as-is
-    (js/chrome.storage.local.get
-     #js ["scripts"]
-     (fn [result]
-       (let [scripts (script-utils/parse-scripts (.-scripts result) {:extract-manifest mp/extract-manifest})]
-         (dispatch [[:db/ax.assoc :scripts/list scripts]]))))
-
-    :popup/fx.toggle-script
-    (let [[scripts script-id _matching-pattern] args
-          updated (popup-utils/toggle-script-in-list scripts script-id)]
-      (persist-and-notify-scripts! updated :refresh)
-      (dispatch [[:db/ax.assoc :scripts/list updated]]))
-
-    :popup/fx.delete-script
-    (let [[scripts script-id] args
-          updated (popup-utils/remove-script-from-list scripts script-id)]
-      (save-scripts! updated)
-      (dispatch [[:db/ax.assoc :scripts/list updated]]))
-
-    :popup/fx.inspect-script
-    (let [[script] args]
-      ;; Store script for panel to pick up
-      (js/chrome.storage.local.set
-       #js {:editingScript #js {:id (:script/id script)
-                                :name (:script/name script)
-                                :match (first (:script/match script))
-                                :code (:script/code script)
-                                :description (:script/description script)}}))
-
-    :uf/fx.defer-dispatch
-    (let [[actions timeout] args]
-      (js/setTimeout #(dispatch actions) timeout))
-
-    :popup/fx.load-current-url
-    (let [tab (js-await (get-active-tab))]
-      (dispatch [[:db/ax.assoc
-                  :scripts/current-url (.-url tab)
-                  :scripts/current-tab-id (.-id tab)]
-                 [:popup/ax.load-runtime-status]]))
-
-    :popup/fx.evaluate-script
-    (let [[script] args
-          tab (js-await (get-active-tab))]
-      (js/chrome.runtime.sendMessage
-       #js {:type "evaluate-script"
-            :tabId (.-id tab)
-            :scriptId (:script/id script)
-            :code (:script/code script)
-            :inject (clj->js (:script/inject script))}))
-
-    :popup/fx.load-auto-connect-level
-    (js/chrome.storage.local.get
-     #js ["autoConnectLevel" "autoConnectRepl"]
-     (fn [result]
-       (let [level (.-autoConnectLevel result)]
-         (if (some? level)
-           (dispatch [[:db/ax.assoc :settings/auto-connect-level level]])
-           ;; Legacy migration: autoConnectRepl boolean -> level string
-           (let [legacy (.-autoConnectRepl result)
-                 migrated (if legacy "all-pages" "off")]
-             (dispatch [[:db/ax.assoc :settings/auto-connect-level migrated]]))))))
-
-    :popup/fx.save-auto-connect-level
-    (let [[level] args]
-      (js/chrome.storage.local.set #js {:autoConnectLevel level})
-      ;; Clean up legacy key on first save
-      (js/chrome.storage.local.remove #js ["autoConnectRepl"]))
-
-    :popup/fx.load-auto-reconnect-setting
-    (js/chrome.storage.local.get
-     #js ["autoReconnectRepl"]
-     (fn [result]
-       (let [enabled (if (some? (.-autoReconnectRepl result))
-                       (.-autoReconnectRepl result)
-                       true)]  ; Default to true
-         (dispatch [[:db/ax.assoc :settings/auto-reconnect-repl enabled]]))))
-
-    :popup/fx.save-auto-reconnect-setting
-    (let [[enabled] args]
-      (js/chrome.storage.local.set #js {:autoReconnectRepl enabled}))
-
-    :popup/fx.load-fs-sync-status
-    (js/chrome.runtime.sendMessage
-     #js {:type "get-fs-sync-status"}
-     (fn [response]
-       (when response
-         (dispatch [[:db/ax.assoc :fs/sync-tab-id (.-fsSyncTabId response)]]))))
-
-    :popup/fx.toggle-fs-sync
-    (let [[tab-id enabled] args]
-      (js/chrome.runtime.sendMessage
-       #js {:type "toggle-fs-sync" :tabId tab-id :enabled enabled}
-       (fn [_response]
-         (when js/chrome.runtime.lastError nil))))
-
-    :popup/fx.load-debug-logging-setting
-    (js/chrome.storage.local.get
-     #js ["settings/debug-logging"]
-     (fn [result]
-       (let [enabled (if (some? (aget result "settings/debug-logging"))
-                       (aget result "settings/debug-logging")
-                       false)]
-         (dispatch [[:db/ax.assoc :settings/debug-logging enabled]]))))
-
-    :popup/fx.save-debug-logging-setting
-    (let [[enabled] args]
-      (js/chrome.storage.local.set (clj->js {"settings/debug-logging" enabled})))
-
-    :popup/fx.load-default-ports-setting
-    (js/chrome.storage.local.get
-     #js ["defaultNreplPort" "defaultWsPort"]
-     (fn [result]
-       (let [nrepl-port (aget result "defaultNreplPort")
-             ws-port (aget result "defaultWsPort")
-             actions (cond-> []
-                       (some? nrepl-port)
-                       (conj [:db/ax.assoc :settings/default-nrepl-port (str nrepl-port)])
-                       (some? ws-port)
-                       (conj [:db/ax.assoc :settings/default-ws-port (str ws-port)]))]
-         (when (seq actions)
-           (dispatch actions)))))
-
-    :popup/fx.save-default-ports-setting
-    (let [[ports] args]
-      (js/chrome.storage.local.set
-       #js {:defaultNreplPort (:settings/default-nrepl-port ports)
-            :defaultWsPort (:settings/default-ws-port ports)}))
-
-    :popup/fx.dump-dev-log
-    ;; Fetch test events from storage and console.log with a marker
-    ;; Playwright can capture this via page.on('console')
-    (js/chrome.storage.local.get
-     #js ["test-events"]
-     (fn [result]
-       ;; Use aget for hyphenated key access (.-test-events becomes .test_events in Squint)
-       (let [events (or (aget result "test-events") #js [])]
-         ;; Use a unique marker that Playwright can identify
-         (js/console.log "__EPUPP_DEV_LOG__" (js/JSON.stringify events)))))
-
-    :popup/fx.export-scripts
-    ;; Export user scripts (not built-ins) as JSON file download
-    (js/chrome.storage.local.get
-     #js ["scripts"]
-     (fn [result]
-       (let [all-scripts (or (.-scripts result) #js [])
-             ;; Filter out built-in scripts using native JS filter
-             user-scripts (.filter all-scripts
-                                   (fn [s]
-                                     (let [id (.-id s)]
-                                       (not (and id (.startsWith id "epupp-builtin-"))))))
-             json-str (js/JSON.stringify user-scripts nil 2)
-             blob (js/Blob. #js [json-str] #js {:type "application/json"})
-             url (js/URL.createObjectURL blob)
-             link (js/document.createElement "a")
-             filename (str "epupp-scripts-" (.toISOString (js/Date.)) ".json")]
-         (set! (.-href link) url)
-         (set! (.-download link) filename)
-         (js/document.body.appendChild link)
-         (.click link)
-         (js/document.body.removeChild link)
-         (js/URL.revokeObjectURL url))))
-
-    :popup/fx.trigger-import
-    ;; Create a hidden file input and trigger click
-    (let [input (js/document.createElement "input")]
-      (set! (.-type input) "file")
-      (set! (.-accept input) ".json")
-      (set! (.-onchange input)
-            (fn [e]
-              (when-let [file (aget (.. e -target -files) 0)]
-                (let [reader (js/FileReader.)]
-                  (set! (.-onload reader)
-                        (fn [e]
-                          (try
-                            (let [json-str (.. e -target -result)
-                                  scripts (js/JSON.parse json-str)]
-                              (dispatch [[:popup/ax.handle-import scripts]]))
-                            (catch :default err
-                              (js/alert (str "Failed to parse JSON: " (.-message err)))))))
-                  (.readAsText reader file)))))
-      (.click input))
-
-    :popup/fx.import-scripts
-    ;; Import scripts, preserving built-in scripts from current storage
-    (let [[imported-scripts] args]
-      (js/chrome.storage.local.get
-       #js ["scripts"]
-       (fn [result]
-         (let [current-scripts (or (.-scripts result) #js [])
-               ;; Keep only built-in scripts from current storage
-               builtin-scripts (.filter current-scripts
-                                        (fn [s]
-                                          (let [id (.-id s)]
-                                            (and id (.startsWith id "epupp-builtin-")))))
-               ;; Filter out any built-ins from imported (safety)
-               user-scripts (.filter imported-scripts
-                                     (fn [s]
-                                       (let [id (.-id s)]
-                                         (not (and id (.startsWith id "epupp-builtin-"))))))
-               ;; Merge: imported user scripts + current built-ins
-               merged-scripts (.concat user-scripts builtin-scripts)]
-           (js/chrome.storage.local.set
-            #js {:scripts merged-scripts}
-            (fn []
-              (js/alert "Scripts imported successfully! Reloading...")
-              (dispatch [[:popup/ax.load-scripts]])))))))
-
-    :popup/fx.load-connections
-    (js/chrome.runtime.sendMessage
-     #js {:type "get-connections"}
-     (fn [response]
-       (when (and response (.-success response))
-         ;; In Squint, data is already JS - no js->clj needed
-         ;; Keywords are strings, so {:keys [tab-id]} works with "tab-id" keys
-         (let [connections (.-connections response)]
-           (dispatch [[:db/ax.assoc :repl/connections connections]])))))
-
-    :popup/fx.load-runtime-status
-    (let [[tab-id] args]
-      (when tab-id
-        (js/chrome.runtime.sendMessage
-         #js {:type "get-runtime-status" :tabId tab-id}
-         (fn [response]
-           (when (and response (.-success response))
-             (dispatch [[:popup/ax.handle-runtime-status
-                         {:tab-id tab-id
-                          :errors (.-errors response)}]]))))))
-
-    :popup/fx.reveal-script
-    (let [[script-name] args
-          el (js/document.querySelector (str ".script-item[data-script-name='" script-name "']"))]
-      (when el
-        (.scrollIntoView el #js {:block "center"}))
-      nil)
-
-    :popup/fx.reveal-tab
-    (let [[tab-id] args
-          ;; Tab IDs from state are strings in Squint, convert to number for Chrome API
-          numeric-tab-id (js/parseInt tab-id 10)]
-      (js/chrome.tabs.update numeric-tab-id #js {:active true}
-                             (fn [_tab]
-                               (when-not js/chrome.runtime.lastError
-                                 ;; Also focus the window containing the tab
-                                 (js/chrome.tabs.get numeric-tab-id
-                                                     (fn [tab]
-                                                       (when-not js/chrome.runtime.lastError
-                                                         (js/chrome.windows.update (.-windowId tab) #js {:focused true}))))))))
-
-    :popup/fx.disconnect-tab
-    (let [[tab-id] args
-          numeric-tab-id (js/parseInt tab-id 10)]
-      (js/chrome.runtime.sendMessage
-       #js {:type "disconnect-tab" :tabId numeric-tab-id}))
-
-    :popup/fx.check-sponsor
-    (let [[username] args]
-      (js/chrome.tabs.create #js {:url (str "https://github.com/sponsors/" username) :active true}))
-
-    :popup/fx.load-sponsor-status
-    (js/chrome.storage.local.get
-     #js ["sponsorStatus" "sponsorCheckedAt"]
-     (fn [result]
-       (let [status (boolean (.-sponsorStatus result))
-             checked-at (.-sponsorCheckedAt result)]
-         (dispatch [[:db/ax.assoc
-                     :sponsor/status status
-                     :sponsor/checked-at checked-at]]))))
-
-    :popup/fx.set-dev-sponsor-username
-    (let [[username] args]
-      (js/chrome.storage.local.set
-       (js-obj "sponsor/sponsored-username" username)))
-
-    :popup/fx.reset-sponsor-status
-    (js/chrome.storage.local.remove
-     #js ["sponsorStatus" "sponsorCheckedAt"])
-
-    :popup/fx.load-dev-sponsor-username
-    (js/chrome.storage.local.get
-     #js ["sponsor/sponsored-username"]
-     (fn [result]
-       (let [username (aget result "sponsor/sponsored-username")]
-         (when username
-           (dispatch [[:db/ax.assoc :sponsor/sponsored-username username]])))))
-
-    :popup/fx.log-system-banner
-    ;; TODO: Move to log module when it supports targeting specific consoles (page vs extension)
-    (let [[message bulk-op? bulk-final? bulk-names] args]
-      (if (and bulk-op? bulk-final? (seq bulk-names))
-        (js/console.info "[Epupp:FS]" message (clj->js {:files bulk-names}))
-        (js/console.info "[Epupp:FS]" message)))
-
-    :popup/fx.check-page-scriptability
-    (let [tab (js-await (get-active-tab))
-          url (.-url tab)
-          browser-type (script-utils/detect-browser-type)
-          scriptability (script-utils/check-page-scriptability url browser-type)]
-      (dispatch [[:db/ax.assoc
-                  :browser/type browser-type
-                  :ui/page-banner (when-not (:scriptable? scriptability)
-                                    {:type "info" :message (:message scriptability)})]]))
-
-    :popup/fx.check-host-permission
-    (if (= "safari" (script-utils/detect-browser-type))
-      ;; Safari manages permissions per-website through its own UI, not the Permissions API
-      (dispatch [[:db/ax.assoc :permissions/host-granted? true]])
-      (try
-        (js/chrome.permissions.contains
-         #js {:origins #js ["<all_urls>"]}
-         (fn [result]
-           (dispatch [[:db/ax.assoc :permissions/host-granted? (boolean result)]])))
-        (catch :default _
-          (dispatch [[:db/ax.assoc :permissions/host-granted? true]]))))
-
-    :popup/fx.request-host-permission
-    (let [[tab-id] args]
-      (try
-        (js/chrome.permissions.request
-         #js {:origins #js ["<all_urls>"]}
-         (fn [granted]
-           (dispatch [[:db/ax.assoc :permissions/host-granted? (boolean granted)]])
-           (when (and granted tab-id)
-             (js/chrome.runtime.sendMessage
-              #js {:type "permission-granted" :tabId tab-id}
-              (fn [_] (when js/chrome.runtime.lastError nil))))))
-        (catch :default _
-          nil)))
-
-    :popup/fx.run-port-migration
-    (js/chrome.storage.local.get
-     nil ;; null gets all keys
-     (fn [result]
-       (let [marker (aget result "epupp_migration_ports_normalized_v1")]
-         (when-not marker
-           (let [all-keys (js/Object.keys result)
-                 port-keys (filterv #(.startsWith % "ports_") all-keys)
-                 defaults {:nrepl (str (or (aget result "defaultNreplPort") "3339"))
-                           :ws (str (or (aget result "defaultWsPort") "3340"))}
-                 port-entries (reduce (fn [acc k]
-                                        (let [v (aget result k)
-                                              nrepl (.-nreplPort v)
-                                              ws (.-wsPort v)]
-                                          (assoc acc k (cond-> {}
-                                                         (some? nrepl) (assoc :nrepl (str nrepl))
-                                                         (some? ws) (assoc :ws (str ws))))))
-                                      {}
-                                      port-keys)]
-             (dispatch [[:popup/ax.apply-port-migration {:defaults defaults
-                                                         :port-entries port-entries}]]))))))
-
-    :popup/fx.remove-storage-keys
-    (let [[keys-to-remove] args]
-      (when (seq keys-to-remove)
-        (js/chrome.storage.local.remove (clj->js keys-to-remove))))
-
-    :popup/fx.set-storage-key
-    (let [[k v] args]
-      (js/chrome.storage.local.set (clj->js {k v})))
-
-    :uf/unhandled-fx))
+  (let [handler (get effect-router effect)]
+    (if handler
+      (js-await (apply handler dispatch args))
+      (case effect
+        :uf/fx.defer-dispatch
+        (let [[actions timeout] args]
+          (js/setTimeout #(dispatch actions) timeout))
+        :uf/unhandled-fx))))
 
 (defn- make-uf-data []
   {:config/deps-string (.-depsString config)})
@@ -1146,7 +669,7 @@
                :button/id "cancel-connect"
                :button/title "Cancel connection"
                :button/on-click (fn [_e]
-                                  (set! (.-cancelled connect-cancel-signal) true)
+                                  (set! (.-cancelled connection-effects/connect-cancel-signal) true)
                                   (dispatch! [[:popup/ax.cancel-connect]
                                               [:popup/ax.show-system-banner "info" "Connection cancelled" {} "connection"]]))}
               "Cancel"]]
@@ -1184,7 +707,7 @@
                 :button/id "cancel-connect"
                 :button/title "Cancel connection"
                 :button/on-click (fn [_e]
-                                   (set! (.-cancelled connect-cancel-signal) true)
+                                   (set! (.-cancelled connection-effects/connect-cancel-signal) true)
                                    (dispatch! [[:popup/ax.cancel-connect]
                                                [:popup/ax.show-system-banner "info" "Connection cancelled" {} "connection"]]))}
                "Cancel"]]
@@ -1391,9 +914,9 @@
      (when (and (= area "local")
                 (or (aget changes "defaultNreplPort")
                     (aget changes "defaultWsPort")))
-       (.then (get-active-tab)
+       (.then (popup-utils/get-active-tab)
               (fn [tab]
-                (let [key (storage-key tab)]
+                (let [key (port-effects/storage-key tab)]
                   ;; Re-read all port data to get consistent state
                   (js/chrome.storage.local.get
                    #js ["defaultNreplPort" "defaultWsPort" key]
