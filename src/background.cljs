@@ -22,7 +22,12 @@
             [utils :as utils]
             [background-effects.ws-effects :as ws-effects]
             [background-effects.icon-effects :as icon-effects]
-            [background-effects.alarm-effects :as alarm-effects]))
+            [background-effects.alarm-effects :as alarm-effects]
+            [background-effects.storage-effects :as storage-effects]
+            [background-effects.fs-effects :as fs-effects]
+            [background-effects.sponsor-effects :as sponsor-effects]
+            [background-effects.banner-effects :as banner-effects]
+            [background-effects.runtime-effects :as runtime-effects]))
 
 (def ^:private config js/EXTENSION_CONFIG)
 
@@ -996,6 +1001,11 @@
       "ws" (ws-effects/perform-effect! dispatch! effect args)
       "icon" (icon-effects/perform-effect! dispatch! effect args)
       "alarm" (alarm-effects/perform-effect! dispatch! effect args)
+      "storage" (storage-effects/perform-effect! dispatch! effect args)
+      "fs" (fs-effects/perform-effect! dispatch! effect args)
+      "sponsor" (sponsor-effects/perform-effect! dispatch! effect args)
+      "banner" (banner-effects/perform-effect! dispatch! effect args)
+      "runtime" (runtime-effects/perform-effect! dispatch! effect args)
       ;; Remaining effects handled inline
       (case effect
         :init/fx.await-promise
@@ -1009,7 +1019,6 @@
                (js-await (test-logger/init-test-mode!))
                (js-await (storage/init!))
                (js-await (dispatch! [[:storage/ax.set-ext-dep-cache (storage/get-ext-dep-cache)]]))
-               ;; Load debug logging setting and apply it
                (js-await (js/Promise.
                           (fn [res]
                             (js/chrome.storage.local.get
@@ -1019,7 +1028,6 @@
                                  (log/set-debug-enabled! enabled)
                                  (res true)))))))
                (js-await (registration/sync-registrations!))
-               ;; Cold-start: resolve any uncached ext-dep URLs
                (let [all-scripts (storage/get-scripts)
                      all-inject-urls (mapcat :script/inject all-scripts)
                      ext-urls (ext-dep/extract-ext-dep-urls (vec all-inject-urls))]
@@ -1153,36 +1161,6 @@
              (let [events (js-await (test-logger/get-test-events))]
                (send-response #js {:success true :events events})))))
 
-        :storage/fx.get-local-storage
-        (let [[key] args]
-          (try
-            (let [result (js-await (js/chrome.storage.local.get #js [key]))]
-              {:success true :key key :value (aget result key)})
-            (catch :default err
-              {:success false :key key :error (.-message err)})))
-
-        :storage/fx.set-local-storage
-        (let [[key value] args]
-          (try
-            (js-await (js/Promise.
-                       (fn [resolve]
-                         (js/chrome.storage.local.set
-                          (js-obj key value)
-                          resolve))))
-            (when (= "extDepCache" key)
-              (swap! storage/!db assoc
-                     :storage/ext-dep-cache (or value {})))
-            {:success true :key key :value value}
-            (catch :default err
-              {:success false :error (.-message err)})))
-
-        :storage/fx.persist!
-        (storage/persist!)
-
-        :storage/fx.persist-ext-dep-cache!
-        (let [[cache] args]
-          (storage/persist-ext-dep-cache! cache))
-
         :ext-dep/fx.fetch-deps
         (let [[uncached-urls existing-cache] args]
           (js-await (ext-dep/resolve-and-fetch!
@@ -1239,92 +1217,6 @@
         :nav/fx.process-navigation
         (let [[tab-id url icon-state] args]
           (js-await (process-navigation! dispatch! tab-id url icon-state)))
-
-        :sponsor/fx.handle-status-result
-        (let [[{:keys [pending? tab-url send-response]}] args]
-          ((^:async fn []
-             (try
-               (let [storage-result (js-await (js/chrome.storage.local.get #js ["sponsor/sponsored-username"]))
-                     username (or (aget storage-result "sponsor/sponsored-username") "PEZ")]
-                 (if (and pending?
-                          (bg-utils/sponsor-url-matches? tab-url username))
-                   (do (swap! storage/!db assoc
-                              :sponsor/status true
-                              :sponsor/checked-at (js/Date.now))
-                       (js-await (storage/persist!))
-                       (send-response #js {:success true}))
-                   (send-response #js {:success false
-                                       :error (if pending? "URL mismatch" "No pending sponsor check")})))
-               (catch :default err
-                 (send-response #js {:success false :error (.-message err)}))))))
-
-        :fs/fx.broadcast-sync-status!
-        (let [[sync-tab-id] args]
-          (js/chrome.runtime.sendMessage
-           #js {:type "fs-sync-status-changed"
-                :fsSyncTabId sync-tab-id}
-           (fn [_response]
-             (when js/chrome.runtime.lastError nil))))
-
-        :fs/fx.parse-and-save
-        (let [[send-response raw-data] args
-              {:keys [code enabled force? bulk-id bulk-index bulk-count script-source]} raw-data]
-          (try
-            (let [{:keys [raw-script-name script-name auto-run-match inject run-at]}
-                  (manifest-parser/extract-manifest code)
-                  raw-name (or raw-script-name script-name)
-                  name-error (script-utils/validate-script-name raw-name)
-                  run-at (script-utils/normalize-run-at run-at)]
-              (cond
-                (nil? raw-name)
-                (send-response #js {:success false :error "Missing :epupp/script-name in manifest"})
-
-                name-error
-                (send-response #js {:success false :error name-error})
-
-                :else
-                (let [crypto (.-crypto js/globalThis)
-                      script-id (if (and crypto (.-randomUUID crypto))
-                                  (str "script-" (.randomUUID crypto))
-                                  (str "script-" (.now js/Date) "-" (.random js/Math)))
-                      script (cond-> {:script/id script-id
-                                      :script/name raw-name
-                                      :script/code code
-                                      :script/match (cond
-                                                      (nil? auto-run-match) []
-                                                      (vector? auto-run-match) auto-run-match
-                                                      :else [auto-run-match])
-                                      :script/inject (or inject [])
-                                      :script/enabled enabled
-                                      :script/run-at run-at
-                                      :script/force? force?}
-                               (some? script-source) (assoc :script/source script-source)
-                               (some? bulk-id) (assoc :script/bulk-id bulk-id)
-                               (some? bulk-index) (assoc :script/bulk-index bulk-index)
-                               (some? bulk-count) (assoc :script/bulk-count bulk-count))]
-                  (fs-dispatch/dispatch-fs-action! send-response [:fs/ax.save-script script]))))
-            (catch :default err
-              (send-response #js {:success false :error (str "Parse error: " (.-message err))}))))
-
-        :fs/fx.dispatch-action
-        (let [[send-response action] args]
-          (fs-dispatch/dispatch-fs-action! send-response action))
-
-        :banner/fx.broadcast-system
-        (let [[event] args]
-          (bg-icon/broadcast-system-banner! event))
-
-        :runtime/fx.broadcast-tab-status
-        (let [[tab-id errors] args]
-          (js/chrome.runtime.sendMessage
-           #js {:type "runtime-status"
-                :tab-id tab-id
-                :errors (clj->js errors)}
-           (fn [_] (when js/chrome.runtime.lastError nil))))
-
-        :runtime/fx.set-tab-errors
-        (let [[tab-id errors] args]
-          (dispatch! [[:runtime/ax.set-tab-errors tab-id errors]]))
 
         :msg/fx.handle-permission-granted
         (let [[tab-id icon-state] args]
