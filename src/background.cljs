@@ -27,7 +27,10 @@
             [background-effects.fs-effects :as fs-effects]
             [background-effects.sponsor-effects :as sponsor-effects]
             [background-effects.banner-effects :as banner-effects]
-            [background-effects.runtime-effects :as runtime-effects]))
+            [background-effects.runtime-effects :as runtime-effects]
+            [background-effects.msg-effects :as msg-effects]
+            [background-effects.script-effects :as script-effects]
+            [background-effects.ext-dep-effects :as ext-dep-effects]))
 
 (def ^:private config js/EXTENSION_CONFIG)
 
@@ -996,243 +999,145 @@
 ;; ============================================================
 
 (defn ^:async perform-effect! [dispatch! [effect & args]]
-  (let [ns (utils/kw-namespace effect)]
-    (case ns
-      "ws" (ws-effects/perform-effect! dispatch! effect args)
-      "icon" (icon-effects/perform-effect! dispatch! effect args)
-      "alarm" (alarm-effects/perform-effect! dispatch! effect args)
-      "storage" (storage-effects/perform-effect! dispatch! effect args)
-      "fs" (fs-effects/perform-effect! dispatch! effect args)
-      "sponsor" (sponsor-effects/perform-effect! dispatch! effect args)
-      "banner" (banner-effects/perform-effect! dispatch! effect args)
-      "runtime" (runtime-effects/perform-effect! dispatch! effect args)
-      ;; Remaining effects handled inline
-      (case effect
-        :init/fx.await-promise
-        (let [[promise] args]
-          (js-await promise))
+  (case effect
+    ;; Effects requiring local helpers - kept inline
+    :init/fx.await-promise
+    (let [[promise] args]
+      (js-await promise))
 
-        :init/fx.initialize
-        (let [[resolve reject] args]
-          ((^:async fn []
-             (try
-               (js-await (test-logger/init-test-mode!))
-               (js-await (storage/init!))
-               (js-await (dispatch! [[:storage/ax.set-ext-dep-cache (storage/get-ext-dep-cache)]]))
-               (js-await (js/Promise.
-                          (fn [res]
-                            (js/chrome.storage.local.get
-                             #js ["settings/debug-logging"]
-                             (fn [result]
-                               (let [enabled (boolean (aget result "settings/debug-logging"))]
-                                 (log/set-debug-enabled! enabled)
-                                 (res true)))))))
-               (js-await (registration/sync-registrations!))
-               (let [all-scripts (storage/get-scripts)
-                     all-inject-urls (mapcat :script/inject all-scripts)
-                     ext-urls (ext-dep/extract-ext-dep-urls (vec all-inject-urls))]
-                 (when (seq ext-urls)
-                   (dispatch! [[:ext-dep/ax.resolve-uncached-urls ext-urls]])))
-               (log/info "Background" "Initialization complete")
-               (js-await (test-logger/log-event! "EXTENSION_STARTED"
-                                                 {:version (.-version (.getManifest js/chrome.runtime))}))
-               (resolve true)
-               (catch :default err
-                 (log/error "Background" "Initialization failed:" err)
-                 (dispatch! [[:init/ax.clear-promise]])
-                 (reject err))))))
+    :init/fx.initialize
+    (let [[resolve reject] args]
+      ((^:async fn []
+         (try
+           (js-await (test-logger/init-test-mode!))
+           (js-await (storage/init!))
+           (js-await (dispatch! [[:storage/ax.set-ext-dep-cache (storage/get-ext-dep-cache)]]))
+           (js-await (js/Promise.
+                      (fn [res]
+                        (js/chrome.storage.local.get
+                         #js ["settings/debug-logging"]
+                         (fn [result]
+                           (let [enabled (boolean (aget result "settings/debug-logging"))]
+                             (log/set-debug-enabled! enabled)
+                             (res true)))))))
+           (js-await (registration/sync-registrations!))
+           (let [all-scripts (storage/get-scripts)
+                 all-inject-urls (mapcat :script/inject all-scripts)
+                 ext-urls (ext-dep/extract-ext-dep-urls (vec all-inject-urls))]
+             (when (seq ext-urls)
+               (dispatch! [[:ext-dep/ax.resolve-uncached-urls ext-urls]])))
+           (log/info "Background" "Initialization complete")
+           (js-await (test-logger/log-event! "EXTENSION_STARTED"
+                                             {:version (.-version (.getManifest js/chrome.runtime))}))
+           (resolve true)
+           (catch :default err
+             (log/error "Background" "Initialization failed:" err)
+             (dispatch! [[:init/ax.clear-promise]])
+             (reject err))))))
 
-        :repl/fx.connect-tab
-        (let [[tab-id ws-port icon-state] args]
-          (try
-            (js-await (connect-tab! dispatch! tab-id ws-port icon-state))
-            {:success true}
-            (catch :default err
-              {:success false :error (.-message err)})))
+    :repl/fx.connect-tab
+    (let [[tab-id ws-port icon-state] args]
+      (try
+        (js-await (connect-tab! dispatch! tab-id ws-port icon-state))
+        {:success true}
+        (catch :default err
+          {:success false :error (.-message err)})))
 
-        :page/fx.check-status
-        (let [[tab-id] args]
-          (try
-            (let [status (js-await (bg-inject/execute-in-page tab-id check-status-fn))]
-              {:success true :status status})
-            (catch :default err
-              {:success false :error (.-message err)})))
+    :page/fx.check-status
+    (let [[tab-id] args]
+      (try
+        (let [status (js-await (bg-inject/execute-in-page tab-id check-status-fn))]
+          {:success true :status status})
+        (catch :default err
+          {:success false :error (.-message err)})))
 
-        :msg/fx.ensure-scittle
-        (let [[send-response tab-id icon-state] args]
-          ((^:async fn []
-             (try
-               (js-await (bg-inject/ensure-scittle! dispatch! tab-id icon-state))
-               (dispatch! [[:msg/ax.ensure-scittle-result send-response {:ok? true}]])
-               (catch :default err
-                 (dispatch! [[:msg/ax.ensure-scittle-result send-response {:ok? false
-                                                                           :error (.-message err)}]]))))))
+    :tabs/fx.find-by-url-pattern
+    (let [[url-pattern] args]
+      (try
+        (let [found-tab-id (js-await (find-tab-id-by-url-pattern! url-pattern))]
+          (if found-tab-id
+            {:success true :tabId found-tab-id}
+            {:success false :error "No tab found"}))
+        (catch :default err
+          {:success false :error (.-message err)})))
 
-        :msg/fx.ensure-scittle-tab
-        (let [[tab-id icon-state] args]
-          (bg-inject/ensure-scittle! dispatch! tab-id icon-state))
+    :nav/fx.gather-auto-connect-context
+    (let [[tab-id url history] args]
+      (js-await (ensure-initialized! dispatch!))
+      (js-await (test-logger/log-event! "NAVIGATION_STARTED" {:tab-id tab-id :url url}))
+      (let [{:keys [enabled?]} (js-await (get-auto-connect-settings))
+            auto-reconnect? (js-await (get-auto-reconnect-setting))
+            auto-connect-level (js-await (get-auto-connect-level enabled?))
+            saved-port (js-await (get-saved-ws-port tab-id))
+            in-history? (bg-utils/tab-in-history? history tab-id)
+            history-port (when in-history? (bg-utils/get-history-port history tab-id))]
+        {:nav/tab-id tab-id
+         :nav/url url
+         :nav/auto-connect-enabled? (boolean enabled?)
+         :nav/auto-reconnect-enabled? (boolean auto-reconnect?)
+         :nav/auto-connect-level auto-connect-level
+         :nav/in-history? in-history?
+         :nav/history-port history-port
+         :nav/saved-port saved-port}))
 
-        :msg/fx.execute-plan
-        (let [[tab-id plan] args]
-          (bg-inject/execute-plan! tab-id plan))
+    :nav/fx.connect
+    (let [[tab-id port icon-state] args]
+      (try
+        (js-await (test-logger/log-event! "NAV_AUTO_CONNECT"
+                                          {:tab-id tab-id
+                                           :port port}))
+        (js-await (connect-tab! dispatch! tab-id port icon-state))
+        (log/info "Background:AutoConnect" "Successfully connected REPL to tab:" tab-id)
+        {:success true}
+        (catch :default err
+          (log/warn "Background:AutoConnect" "Failed to connect REPL:" (.-message err))
+          {:success false :error (.-message err)})))
 
-        :script/fx.evaluate
-        (let [[tab-id script icon-state ext-dep-cache] args]
-          (when (= bg-utils/sponsor-script-id (:script/id script))
-            (dispatch! [[:sponsor/ax.set-pending tab-id]]))
-          (try
-            (let [all-scripts (storage/get-scripts)
-                  plan (dep-resolver/resolve-execution-plan [script] all-scripts ext-dep-cache)
-                  errors (:plan/errors plan)]
-              (when (seq errors)
-                (dispatch! [[:banner/ax.broadcast-resolution-errors errors]
-                            [:runtime/ax.set-tab-errors tab-id errors]]))
-              (js-await (bg-inject/ensure-scittle! dispatch! tab-id icon-state))
-              (js-await (bg-inject/execute-plan! tab-id plan))
-              {:success true})
-            (catch :default err
-              {:success false :error (.-message err)})))
+    :nav/fx.process-navigation
+    (let [[tab-id url icon-state] args]
+      (js-await (process-navigation! dispatch! tab-id url icon-state)))
 
-        :msg/fx.list-scripts
-        (let [[send-response include-hidden?] args
-              scripts (storage/get-scripts)]
-          (dispatch! [[:msg/ax.list-scripts-result send-response {:include-hidden? include-hidden?
-                                                                  :scripts scripts}]]))
+    :visibility/fx.gather-reconnect-context
+    (let [[tab-id history] args
+          {:keys [enabled?]} (js-await (get-auto-connect-settings))
+          auto-connect-level (js-await (get-auto-connect-level enabled?))
+          in-history? (bg-utils/tab-in-history? history tab-id)
+          history-port (when in-history? (bg-utils/get-history-port history tab-id))
+          saved-port (js-await (get-saved-ws-port tab-id))]
+      {:visibility/tab-id tab-id
+       :visibility/auto-connect-level auto-connect-level
+       :visibility/history-port history-port
+       :visibility/saved-port saved-port})
 
-        :msg/fx.inject-bridge
-        (let [[tab-id] args]
-          (bg-inject/inject-content-script tab-id "content-bridge.js"))
+    :msg/fx.handle-permission-granted
+    (let [[tab-id icon-state] args]
+      ((^:async fn []
+         (try
+           (js-await (ensure-initialized! dispatch!))
+           (let [tab (js-await (js/chrome.tabs.get tab-id))
+                 url (.-url tab)]
+             (when (and url
+                        (:scriptable? (script-utils/check-page-scriptability
+                                       url (script-utils/detect-browser-type))))
+               (js-await (process-navigation! dispatch! tab-id url icon-state))
+               (js-await (maybe-inject-installer! dispatch! tab-id url))))
+           (catch :default err
+             (log/warn "Background" "Permission-granted handling failed:" (.-message err)))))))
 
-        :msg/fx.wait-bridge-ready
-        (let [[tab-id] args]
-          (bg-inject/wait-for-bridge-ready tab-id))
-
-        :msg/fx.inject-lib-file
-        (let [[tab-id file] args]
-          (bg-inject/inject-libs-sequentially! tab-id [file]))
-
-        :msg/fx.inject-script-code
-        (let [[tab-id script-id code] args]
-          (bg-inject/send-tab-message tab-id {:type "inject-userscript"
-                                              :id (str "userscript-" script-id)
-                                              :code code}))
-
-        :msg/fx.trigger-scittle
-        (let [[tab-id] args]
-          (bg-inject/execute-in-page tab-id bg-inject/trigger-scittle-fn))
-
-        :msg/fx.log-resolution-error
-        (let [[error-envelope] args]
-          (log/error "Background:Resolve" (:error/message error-envelope)))
-
-        :msg/fx.send-response
-        (let [[send-response response-data] args]
-          (send-response (clj->js response-data)))
-
-        :msg/fx.get-script
-        (let [[send-response script-name] args
-              script (storage/get-script-by-name script-name)]
-          (dispatch! [[:msg/ax.get-script-result send-response {:script-name script-name
-                                                                :script script}]]))
-
-        :msg/fx.get-connections
-        (let [[send-response connections] args
-              display-list (bg-utils/connections->display-list connections)]
-          (test-logger/log-event! "GET_CONNECTIONS_RESPONSE"
-                                  {:raw-connection-count (count (keys connections))
-                                   :display-list-count (count display-list)
-                                   :connections-keys (vec (keys connections))})
-          (send-response (clj->js {:success true
-                                   :connections display-list})))
-
-        :tabs/fx.find-by-url-pattern
-        (let [[url-pattern] args]
-          (try
-            (let [found-tab-id (js-await (find-tab-id-by-url-pattern! url-pattern))]
-              (if found-tab-id
-                {:success true :tabId found-tab-id}
-                {:success false :error "No tab found"}))
-            (catch :default err
-              {:success false :error (.-message err)})))
-
-        :msg/fx.e2e-get-test-events
-        (let [[send-response] args]
-          ((^:async fn []
-             (let [events (js-await (test-logger/get-test-events))]
-               (send-response #js {:success true :events events})))))
-
-        :ext-dep/fx.fetch-deps
-        (let [[uncached-urls existing-cache] args]
-          (js-await (ext-dep/resolve-and-fetch!
-                     {:inject-urls uncached-urls
-                      :ext-dep-cache existing-cache
-                      :fetch-fn fetch-text!
-                      :parse-manifest-fn manifest-parser/extract-manifest
-                      :now (.now js/Date)})))
-
-        :nav/fx.gather-auto-connect-context
-        (let [[tab-id url history] args]
-          (js-await (ensure-initialized! dispatch!))
-          (js-await (test-logger/log-event! "NAVIGATION_STARTED" {:tab-id tab-id :url url}))
-          (let [{:keys [enabled?]} (js-await (get-auto-connect-settings))
-                auto-reconnect? (js-await (get-auto-reconnect-setting))
-                auto-connect-level (js-await (get-auto-connect-level enabled?))
-                saved-port (js-await (get-saved-ws-port tab-id))
-                in-history? (bg-utils/tab-in-history? history tab-id)
-                history-port (when in-history? (bg-utils/get-history-port history tab-id))]
-            {:nav/tab-id tab-id
-             :nav/url url
-             :nav/auto-connect-enabled? (boolean enabled?)
-             :nav/auto-reconnect-enabled? (boolean auto-reconnect?)
-             :nav/auto-connect-level auto-connect-level
-             :nav/in-history? in-history?
-             :nav/history-port history-port
-             :nav/saved-port saved-port}))
-
-        :visibility/fx.gather-reconnect-context
-        (let [[tab-id history] args
-              {:keys [enabled?]} (js-await (get-auto-connect-settings))
-              auto-connect-level (js-await (get-auto-connect-level enabled?))
-              in-history? (bg-utils/tab-in-history? history tab-id)
-              history-port (when in-history? (bg-utils/get-history-port history tab-id))
-              saved-port (js-await (get-saved-ws-port tab-id))]
-          {:visibility/tab-id tab-id
-           :visibility/auto-connect-level auto-connect-level
-           :visibility/history-port history-port
-           :visibility/saved-port saved-port})
-
-        :nav/fx.connect
-        (let [[tab-id port icon-state] args]
-          (try
-            (js-await (test-logger/log-event! "NAV_AUTO_CONNECT"
-                                              {:tab-id tab-id
-                                               :port port}))
-            (js-await (connect-tab! dispatch! tab-id port icon-state))
-            (log/info "Background:AutoConnect" "Successfully connected REPL to tab:" tab-id)
-            {:success true}
-            (catch :default err
-              (log/warn "Background:AutoConnect" "Failed to connect REPL:" (.-message err))
-              {:success false :error (.-message err)})))
-
-        :nav/fx.process-navigation
-        (let [[tab-id url icon-state] args]
-          (js-await (process-navigation! dispatch! tab-id url icon-state)))
-
-        :msg/fx.handle-permission-granted
-        (let [[tab-id icon-state] args]
-          ((^:async fn []
-             (try
-               (js-await (ensure-initialized! dispatch!))
-               (let [tab (js-await (js/chrome.tabs.get tab-id))
-                     url (.-url tab)]
-                 (when (and url
-                            (:scriptable? (script-utils/check-page-scriptability
-                                           url (script-utils/detect-browser-type))))
-                   (js-await (process-navigation! dispatch! tab-id url icon-state))
-                   (js-await (maybe-inject-installer! dispatch! tab-id url))))
-               (catch :default err
-                 (log/warn "Background" "Permission-granted handling failed:" (.-message err)))))))
-
+    ;; All other effects routed by namespace to domain modules
+    (let [ns (utils/kw-namespace effect)]
+      (case ns
+        "ws" (ws-effects/perform-effect! dispatch! effect args)
+        "icon" (icon-effects/perform-effect! dispatch! effect args)
+        "alarm" (alarm-effects/perform-effect! dispatch! effect args)
+        "storage" (storage-effects/perform-effect! dispatch! effect args)
+        "fs" (fs-effects/perform-effect! dispatch! effect args)
+        "sponsor" (sponsor-effects/perform-effect! dispatch! effect args)
+        "banner" (banner-effects/perform-effect! dispatch! effect args)
+        "runtime" (runtime-effects/perform-effect! dispatch! effect args)
+        "msg" (msg-effects/perform-effect! dispatch! effect args)
+        "script" (script-effects/perform-effect! dispatch! effect args)
+        "ext-dep" (ext-dep-effects/perform-effect! dispatch! effect args)
         :uf/unhandled-fx))))
 
 (defn dispatch!
