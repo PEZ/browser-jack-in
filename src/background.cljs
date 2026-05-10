@@ -840,24 +840,7 @@
     (catch :default err
       (log/warn "Background" "Installer scan failed for tab" tab-id ":" (.-message err)))))
 
-(defn- ^:async activate!
-  [dispatch!]
-
-  (log/info "Background" "Service worker started")
-
-  ;; Install global error handlers early so we catch all errors in test mode
-  (test-logger/install-global-error-handlers! "background" js/self)
-
-  ;; Prune stale icon states from previous session on service worker wake
-  (js-await (bg-icon/prune-icon-states! dispatch!))
-
-  ;; ============================================================
-  ;; Message Handlers
-  ;; ============================================================
-
-  (add-on-message-handler dispatch!)
-
-  ;; Clean up when tab is closed
+(defn- register-tab-listeners! [dispatch!]
   (.addListener js/chrome.tabs.onRemoved
                 (fn [tab-id _remove-info]
                   (log/debug "Background" "Tab closed, cleaning up:" tab-id)
@@ -875,10 +858,9 @@
                                               (not (.startsWith url "about:")))
                                      (dispatch! [[:icon/ax.refresh-toolbar tab-id]
                                                  [:visibility/ax.handle-tab-visible tab-id]])))))
-                        (.catch (fn [_] nil))))))
+                        (.catch (fn [_] nil)))))))
 
-  ;; Close WebSocket when page starts navigating (reload, navigation to new URL)
-  ;; This ensures the connection list updates immediately when a page reloads
+(defn- register-navigation-listeners! [dispatch!]
   (.addListener js/chrome.webNavigation.onBeforeNavigate
                 (fn [details]
                   (when (zero? (.-frameId details))
@@ -888,110 +870,91 @@
 
   (.addListener js/chrome.webNavigation.onCompleted
                 (fn [details]
-                  ;; Only handle main frame (not iframes)
-                  ;; Skip non-scriptable pages (extension pages, about:blank, etc.)
                   (let [url (.-url details)]
                     (when (and (zero? (.-frameId details))
                                (:scriptable? (script-utils/check-page-scriptability
                                               url (script-utils/detect-browser-type))))
-                      ;; Dispatch navigation action (gather-then-decide pattern)
                       (dispatch! [[:nav/ax.handle-navigation (.-tabId details) url]])
-                      ;; Scan for userscript blocks and conditionally inject installer
                       (maybe-inject-installer! dispatch! (.-tabId details) url)))))
 
   (.addListener js/chrome.webNavigation.onHistoryStateUpdated
                 (fn [details]
                   (when (zero? (.-frameId details))
                     (maybe-inject-installer! dispatch! (.-tabId details)
-                                             (.-url details)))))
+                                             (.-url details))))))
 
-  ;; ============================================================
-  ;; Alarm Handlers
-  ;; ============================================================
-
-  ;; Keepalive alarm fires every 30s (Chrome 120+) or 60s (older)
-  ;; to prevent service worker idle-termination while connections exist
+(defn- register-alarm-listener! [dispatch!]
   (.addListener js/chrome.alarms.onAlarm
                 (fn [alarm]
                   (when (= "ws-keepalive" (.-name alarm))
-                    (dispatch! [[:alarm/ax.tick]]))))
+                    (dispatch! [[:alarm/ax.tick]])))))
 
-  ;; ============================================================
-  ;; Alarm Handlers
-  ;; ============================================================
+(defn- handle-storage-change! [dispatch! changes]
+  (when-let [scripts-change (.-scripts changes)]
+    (log/debug "Background" "Scripts changed, syncing registrations")
+    ((^:async fn []
+       (js-await (ensure-initialized! dispatch!))
+       (js-await (registration/sync-registrations!))
+       (let [all-scripts (script-utils/parse-scripts
+                            (.-newValue scripts-change)
+                            {:extract-manifest manifest-parser/extract-manifest})
+             all-inject-urls (mapcat :script/inject all-scripts)
+             ext-urls (ext-dep/extract-ext-dep-urls (vec all-inject-urls))]
+         (dispatch! (if (seq ext-urls)
+                      [[:ext-dep/ax.resolve-uncached-urls
+                        ext-urls
+                        [[:runtime/ax.re-resolve-on-change all-scripts]]]]
+                      [[:runtime/ax.re-resolve-on-change all-scripts]]))))))
+  (when (aget changes "extDepCache")
+    (log/debug "Background" "Ext dep cache changed, re-resolving")
+    ((^:async fn []
+       (js-await (ensure-initialized! dispatch!))
+       (let [change (aget changes "extDepCache")
+             new-cache (or (.-newValue change) {})
+             all-scripts (storage/get-scripts)]
+         (dispatch! [[:storage/ax.set-ext-dep-cache new-cache]
+                     [:runtime/ax.re-resolve-on-change all-scripts]])))))
+  (when (aget changes "settings/debug-logging")
+    (let [change (aget changes "settings/debug-logging")
+          enabled (boolean (.-newValue change))]
+      (log/set-debug-enabled! enabled)))
+  (when (aget changes "sponsor/sponsored-username")
+    (let [change (aget changes "sponsor/sponsored-username")
+          new-username (or (.-newValue change) "PEZ")]
+      ((^:async fn []
+         (js-await (ensure-initialized! dispatch!))
+         (js-await (update-sponsor-script-match! new-username)))))))
 
-  ;; Keepalive alarm fires every 30s (Chrome 120+) or 60s (older)
-  ;; to prevent service worker idle-termination while connections exist
-  (.addListener js/chrome.alarms.onAlarm
-                (fn [alarm]
-                  (when (= "ws-keepalive" (.-name alarm))
-                    (dispatch! [[:alarm/ax.tick]]))))
-
-  ;; ============================================================
-  ;; Lifecycle Events
-  ;; ============================================================
-
-  ;; These ensure initialization happens on browser/extension lifecycle events.
-  ;; The ensure-initialized! pattern guarantees we only init once even if
-  ;; multiple events fire.
-
-  ;; Sync registrations when scripts change, and update debug-logging setting
+(defn- register-storage-listener! [dispatch!]
   (.addListener js/chrome.storage.onChanged
                 (fn [changes area]
                   (when (= area "local")
-                    (when-let [scripts-change (.-scripts changes)]
-                      (log/debug "Background" "Scripts changed, syncing registrations")
-                      ((^:async fn []
-                         (js-await (ensure-initialized! dispatch!))
-                         (js-await (registration/sync-registrations!))
-                         ;; Read scripts from the change payload, not the mirror.
-                         ;; This listener is registered before storage/init!, so the
-                         ;; mirror may not be updated yet when we fire.
-                         (let [all-scripts (script-utils/parse-scripts
-                                           (.-newValue scripts-change)
-                                           {:extract-manifest manifest-parser/extract-manifest})
-                               all-inject-urls (mapcat :script/inject all-scripts)
-                               ext-urls (ext-dep/extract-ext-dep-urls (vec all-inject-urls))]
-                           (dispatch! (if (seq ext-urls)
-                                        [[:ext-dep/ax.resolve-uncached-urls
-                                          ext-urls
-                                          [[:runtime/ax.re-resolve-on-change all-scripts]]]]
-                                        [[:runtime/ax.re-resolve-on-change all-scripts]]))))))
-                    (when (aget changes "extDepCache")
-                      (log/debug "Background" "Ext dep cache changed, re-resolving")
-                      ((^:async fn []
-                         (js-await (ensure-initialized! dispatch!))
-                         (let [change (aget changes "extDepCache")
-                               new-cache (or (.-newValue change) {})
-                               all-scripts (storage/get-scripts)]
-                           (dispatch! [[:storage/ax.set-ext-dep-cache new-cache]
-                                       [:runtime/ax.re-resolve-on-change all-scripts]])))))
-                    (when (aget changes "settings/debug-logging")
-                      (let [change (aget changes "settings/debug-logging")
-                            enabled (boolean (.-newValue change))]
-                        (log/set-debug-enabled! enabled)))
-                    (when (aget changes "sponsor/sponsored-username")
-                      (let [change (aget changes "sponsor/sponsored-username")
-                            new-username (or (.-newValue change) "PEZ")]
-                        ((^:async fn []
-                           (js-await (ensure-initialized! dispatch!))
-                           (js-await (update-sponsor-script-match! new-username)))))))))
+                    (handle-storage-change! dispatch! changes)))))
 
+(defn- register-lifecycle-listeners! [dispatch!]
   (.addListener js/chrome.runtime.onInstalled
                 (fn [details]
                   (log/info "Background" "onInstalled:" (.-reason details))
-                  ;; Reset dev sponsor username on install/update so it defaults back to PEZ
                   (js/chrome.storage.local.remove #js ["sponsor/sponsored-username"])
                   (ensure-initialized! dispatch!)))
 
   (.addListener js/chrome.runtime.onStartup
                 (fn []
                   (log/info "Background" "onStartup")
-                  (ensure-initialized! dispatch!)))
+                  (ensure-initialized! dispatch!))))
 
-  ;; Start initialization immediately for service worker wake scenarios
+(defn- ^:async activate!
+  [dispatch!]
+  (log/info "Background" "Service worker started")
+  (test-logger/install-global-error-handlers! "background" js/self)
+  (js-await (bg-icon/prune-icon-states! dispatch!))
+  (add-on-message-handler dispatch!)
+  (register-tab-listeners! dispatch!)
+  (register-navigation-listeners! dispatch!)
+  (register-alarm-listener! dispatch!)
+  (register-storage-listener! dispatch!)
+  (register-lifecycle-listeners! dispatch!)
   (ensure-initialized! dispatch!)
-
   (log/info "Background" "Listeners registered"))
 
 ;; ============================================================
