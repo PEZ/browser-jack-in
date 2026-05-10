@@ -720,6 +720,24 @@
   (log/debug "Background" "Unknown message type:" msg-type)
   false)
 
+(defn- handle-e2e-message
+  "Route e2e test messages. Only available in dev mode."
+  [msg-type message dispatch! send-response]
+  (if (.-dev config)
+    (case msg-type
+      "e2e/find-tab-id" (handle-e2e-find-tab-id message dispatch! send-response)
+      "e2e/get-test-events" (handle-e2e-get-test-events dispatch! send-response)
+      "e2e/get-storage" (handle-e2e-get-storage message dispatch! send-response)
+      "e2e/set-storage" (handle-e2e-set-storage message dispatch! send-response)
+      "e2e/activate-tab" (handle-e2e-activate-tab message send-response)
+      "e2e/update-icon" (handle-e2e-update-icon message dispatch! send-response)
+      "e2e/get-icon-display-state" (handle-e2e-get-icon-display-state message dispatch! send-response)
+      "e2e/ensure-builtin" (handle-e2e-ensure-builtin dispatch! send-response)
+      "e2e/simulate-tab-visible" (handle-e2e-simulate-tab-visible message dispatch! send-response)
+      (handle-unknown-message msg-type))
+    (do (send-response #js {:success false :error "Not available"})
+        false)))
+
 (defn- add-on-message-handler [dispatch!]
   (.addListener js/chrome.runtime.onMessage
                 (fn [message sender send-response]
@@ -753,42 +771,6 @@
                       "get-fs-sync-status"
                       (do (dispatch! [[:fs/ax.get-sync-status send-response]])
                           true)
-                      "e2e/find-tab-id" (if (.-dev config)
-                                          (handle-e2e-find-tab-id message dispatch! send-response)
-                                          (do (send-response #js {:success false :error "Not available"})
-                                              false))
-                      "e2e/get-test-events" (if (.-dev config)
-                                              (handle-e2e-get-test-events dispatch! send-response)
-                                              (do (send-response #js {:success false :error "Not available"})
-                                                  false))
-                      "e2e/get-storage" (if (.-dev config)
-                                          (handle-e2e-get-storage message dispatch! send-response)
-                                          (do (send-response #js {:success false :error "Not available"})
-                                              false))
-                      "e2e/set-storage" (if (.-dev config)
-                                          (handle-e2e-set-storage message dispatch! send-response)
-                                          (do (send-response #js {:success false :error "Not available"})
-                                              false))
-                      "e2e/activate-tab" (if (.-dev config)
-                                           (handle-e2e-activate-tab message send-response)
-                                           (do (send-response #js {:success false :error "Not available"})
-                                               false))
-                      "e2e/update-icon" (if (.-dev config)
-                                          (handle-e2e-update-icon message dispatch! send-response)
-                                          (do (send-response #js {:success false :error "Not available"})
-                                              false))
-                      "e2e/get-icon-display-state" (if (.-dev config)
-                                                     (handle-e2e-get-icon-display-state message dispatch! send-response)
-                                                     (do (send-response #js {:success false :error "Not available"})
-                                                         false))
-                      "e2e/ensure-builtin" (if (.-dev config)
-                                             (handle-e2e-ensure-builtin dispatch! send-response)
-                                             (do (send-response #js {:success false :error "Not available"})
-                                                 false))
-                      "e2e/simulate-tab-visible" (if (.-dev config)
-                                                   (handle-e2e-simulate-tab-visible message dispatch! send-response)
-                                                   (do (send-response #js {:success false :error "Not available"})
-                                                       false))
                       "capture-element" (handle-capture-element message sender send-response)
                       "ensure-scittle" (handle-ensure-scittle message dispatch! send-response)
                       "inject-libs" (handle-inject-libs message dispatch! send-response)
@@ -796,7 +778,10 @@
                       "sponsor-status" (handle-sponsor-status message sender dispatch! send-response)
                       "get-sponsored-username" (handle-get-sponsored-username message send-response)
                       "permission-granted" (handle-permission-granted message dispatch!)
-                      (handle-unknown-message msg-type))))))
+                      ;; Default: e2e test messages or unknown
+                      (if (.startsWith msg-type "e2e/")
+                        (handle-e2e-message msg-type message dispatch! send-response)
+                        (handle-unknown-message msg-type)))))))
 
 (defn- ^:async scan-for-userscripts-with-retry!
   "Try scanning for userscript blocks with bounded retry delays.
