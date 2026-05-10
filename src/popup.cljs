@@ -207,14 +207,76 @@
     ;; Fallback for unexpected types
     :else (str pattern)))
 
-(defn script-item [{:script/keys [name match enabled description run-at always-enabled?]
+(defn- script-item-classes [{:keys [builtin? reveal-highlight? recently-modified? leaving? entering?]}]
+  (str (when builtin? "script-item-builtin ")
+       (when reveal-highlight? "script-item-reveal-highlight ")
+       (when (and recently-modified? (not leaving?)) "script-item-fs-modified ")
+       (when entering? "entering ")
+       (when leaving? "leaving")))
+
+(defn- script-name-row [{:script/keys [name] script-id :script/id :as script} runtime-error]
+  (let [builtin? (script-utils/builtin-script? script)]
+    [:div.script-row-header
+     [:span.script-name
+      (when builtin?
+        [:span.builtin-indicator {:title "Built-in script"}
+         [icons/package]])
+      [:span.script-name-text {:title name} name]
+      (when runtime-error
+        [:span.script-error-indicator
+         {:title (or (:error/message runtime-error) "Resolution error")
+          :data-e2e "script-error"}
+         [icons/warning {:size 14}]])]
+     [:div.script-actions
+      [view-elements/action-button
+       {:button/variant :secondary
+        :button/class "script-inspect"
+        :button/size :md
+        :button/icon icons/eye
+        :button/title "Inspect script"
+        :button/on-click #(dispatch! [[:popup/ax.inspect-script script-id]])}
+       nil]
+      (when-not builtin?
+        [view-elements/action-button
+         {:button/variant :danger
+          :button/class "script-delete"
+          :button/size :md
+          :button/icon icons/trash
+          :button/title "Delete script"
+          :button/on-click #(when (js/confirm "Delete this script?")
+                              (dispatch! [[:popup/ax.delete-script script-id]]))}
+         nil])]]))
+
+(defn- script-pattern-row
+  [{:script/keys [match enabled run-at always-enabled?]
+    script-id :script/id :as script}
+   matching-pattern patterns-display patterns-tooltip]
+  [:div.script-row-pattern
+   (when (and (or (seq match)
+                  (:script/web-installer-scan script))
+              (not always-enabled?))
+     [:input.pattern-checkbox {:type "checkbox"
+                               :checked enabled
+                               :title (if enabled "Auto-run enabled" "Auto-run disabled")
+                               :on-change #(dispatch! [[:popup/ax.toggle-script script-id matching-pattern]])}])
+   (when run-at
+     (run-at-badge run-at))
+   [:span.script-match {:title (cond
+                                 patterns-tooltip patterns-tooltip
+                                 (:script/web-installer-scan script) "Injected when Userscripts are detected"
+                                 :else "No auto-run (manual only)")}
+    (cond
+      patterns-display patterns-display
+      (:script/web-installer-scan script) "Injected when Userscripts are detected"
+      :else "No auto-run (manual only)")]])
+
+(defn script-item [{:script/keys [name match description]
                     script-id :script/id
                     :as script}
                    current-url
                    {:keys [reveal-highlight? recently-modified? leaving? entering? runtime-error]}]
   (let [matching-pattern (script-utils/get-matching-pattern current-url script)
         builtin? (script-utils/builtin-script? script)
-        ;; All patterns for display - join for single row, newlines for tooltip
         patterns-display (when (seq match)
                            (->> match
                                 (mapv safe-pattern-display)
@@ -227,12 +289,11 @@
                                 (str/join "\n")))]
     [:div.script-item {:data-script-name name
                        :data-e2e-script-id script-id
-                       :class (str (when builtin? "script-item-builtin ")
-                                   (when reveal-highlight? "script-item-reveal-highlight ")
-                                   (when (and recently-modified? (not leaving?)) "script-item-fs-modified ")
-                                   (when entering? "entering ")
-                                   (when leaving? "leaving"))}
-     ;; Column 1: Button column (play button only)
+                       :class (script-item-classes {:builtin? builtin?
+                                                    :reveal-highlight? reveal-highlight?
+                                                    :recently-modified? recently-modified?
+                                                    :leaving? leaving?
+                                                    :entering? entering?})}
      [:div.script-button-column
       [view-elements/action-button
        {:button/variant :secondary
@@ -242,59 +303,9 @@
         :button/title "Run script"
         :button/on-click #(dispatch! [[:popup/ax.evaluate-script script-id]])}
        nil]]
-     ;; Column 2: Content column (name/actions, pattern, description)
      [:div.script-content-column
-      ;; Row 1: Name and actions
-      [:div.script-row-header
-       [:span.script-name
-        (when builtin?
-          [:span.builtin-indicator {:title "Built-in script"}
-           [icons/package]])
-        [:span.script-name-text {:title name} name]
-        (when runtime-error
-          [:span.script-error-indicator
-           {:title (or (:error/message runtime-error) "Resolution error")
-            :data-e2e "script-error"}
-           [icons/warning {:size 14}]])]
-       [:div.script-actions
-        [view-elements/action-button
-         {:button/variant :secondary
-          :button/class "script-inspect"
-          :button/size :md
-          :button/icon icons/eye
-          :button/title "Inspect script"
-          :button/on-click #(dispatch! [[:popup/ax.inspect-script script-id]])}
-         nil]
-        (when-not builtin?
-          [view-elements/action-button
-           {:button/variant :danger
-            :button/class "script-delete"
-            :button/size :md
-            :button/icon icons/trash
-            :button/title "Delete script"
-            :button/on-click #(when (js/confirm "Delete this script?")
-                                (dispatch! [[:popup/ax.delete-script script-id]]))}
-           nil])]]
-      ;; Row 2: Pattern (single row, CSS truncated)
-      [:div.script-row-pattern
-       (when (and (or (seq match)
-                      (:script/web-installer-scan script))
-                  (not always-enabled?))
-         [:input.pattern-checkbox {:type "checkbox"
-                                   :checked enabled
-                                   :title (if enabled "Auto-run enabled" "Auto-run disabled")
-                                   :on-change #(dispatch! [[:popup/ax.toggle-script script-id matching-pattern]])}])
-       (when run-at
-         (run-at-badge run-at))
-       [:span.script-match {:title (cond
-                                     patterns-tooltip patterns-tooltip
-                                     (:script/web-installer-scan script) "Injected when Userscripts are detected"
-                                     :else "No auto-run (manual only)")}
-        (cond
-          patterns-display patterns-display
-          (:script/web-installer-scan script) "Injected when Userscripts are detected"
-          :else "No auto-run (manual only)")]]
-      ;; Row 3: Description (CSS truncated)
+      [script-name-row script runtime-error]
+      [script-pattern-row script matching-pattern patterns-display patterns-tooltip]
       (when (seq description)
         [:div.script-row-description
          [:span.script-description {:title description}
