@@ -349,6 +349,33 @@
                 (resolve (str (or default-port "3340"))))))))))))
  ; default ws port
 
+(defn- ^:async execute-idle-scripts!
+  "Execute matching idle scripts for a tab, handling resolution errors."
+  [dispatch! tab-id idle-scripts icon-state]
+  (log/debug "Background:Inject" "Found" (count idle-scripts) "document-idle scripts")
+  (js-await (test-logger/log-event! "AUTO_INJECT_START" {:count (count idle-scripts)}))
+  (when (some #(= bg-utils/sponsor-script-id (:script/id %)) idle-scripts)
+    (dispatch! [[:sponsor/ax.set-pending tab-id]]))
+  (try
+    (let [all-scripts (storage/get-scripts)
+          plan (dep-resolver/resolve-execution-plan (vec idle-scripts) all-scripts
+                                                    (storage/get-ext-dep-cache))
+          errors (:plan/errors plan)]
+      (when (seq errors)
+        (doseq [err errors]
+          (log/error "Background:Resolve" (:error/message err))
+          (js-await (test-logger/log-event! "RESOLUTION_ERROR"
+                                            {:script (:error/script-name err)
+                                             :dep (:error/dep-raw err)
+                                             :message (:error/message err)})))
+        (dispatch! [[:banner/ax.broadcast-resolution-errors errors]
+                    [:runtime/ax.set-tab-errors tab-id errors]]))
+      (js-await (bg-inject/ensure-scittle! dispatch! tab-id icon-state))
+      (js-await (bg-inject/execute-plan! tab-id plan)))
+    (catch :default err
+      (log/error "Background:Inject" "Failed:" (.-message err))
+      (js-await (test-logger/log-event! "AUTO_INJECT_ERROR" {:error (.-message err)})))))
+
 (defn ^:async process-navigation!
   "Process a navigation event after ensuring initialization is complete.
    Find matching scripts, resolve dependencies via dep-resolver, and execute the plan.
@@ -368,31 +395,7 @@
                                            :all-scripts-count (count matching-scripts)
                                            :idle-scripts-count (count idle-scripts)}))
         (when (seq idle-scripts)
-          (log/debug "Background:Inject" "Found" (count idle-scripts) "document-idle scripts for" url)
-          (js-await (test-logger/log-event! "AUTO_INJECT_START" {:count (count idle-scripts)}))
-          (when (some #(= bg-utils/sponsor-script-id (:script/id %)) idle-scripts)
-            (dispatch! [[:sponsor/ax.set-pending tab-id]]))
-          (try
-            (let [all-scripts (storage/get-scripts)
-                  plan (dep-resolver/resolve-execution-plan (vec idle-scripts) all-scripts
-                                                           (storage/get-ext-dep-cache))
-                  errors (:plan/errors plan)]
-              ;; Handle resolution errors: log and broadcast, but continue with resolved scripts
-              (when (seq errors)
-                (doseq [err errors]
-                  (log/error "Background:Resolve" (:error/message err))
-                  (js-await (test-logger/log-event! "RESOLUTION_ERROR"
-                                                    {:script (:error/script-name err)
-                                                     :dep (:error/dep-raw err)
-                                                     :message (:error/message err)})))
-                (dispatch! [[:banner/ax.broadcast-resolution-errors errors]
-                            [:runtime/ax.set-tab-errors tab-id errors]]))
-              ;; Execute the plan (which excludes errored subtrees)
-              (js-await (bg-inject/ensure-scittle! dispatch! tab-id icon-state))
-              (js-await (bg-inject/execute-plan! tab-id plan)))
-            (catch :default err
-              (log/error "Background:Inject" "Failed:" (.-message err))
-              (js-await (test-logger/log-event! "AUTO_INJECT_ERROR" {:error (.-message err)}))))))
+          (js-await (execute-idle-scripts! dispatch! tab-id idle-scripts icon-state))))
       (log/debug "Background:Inject" "Skipping navigation - host permission not granted for" url))))
 
 (defn- handle-ws-connect [message tab-id dispatch!]
@@ -783,18 +786,22 @@
                         (handle-e2e-message msg-type message dispatch! send-response)
                         (handle-unknown-message msg-type)))))))
 
+(defn- ^:async delay-ms!
+  "Wait for the given number of milliseconds. No-op for zero or negative."
+  [ms]
+  (when (pos? ms)
+    (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve ms))))))
+
 (defn- ^:async scan-for-userscripts-with-retry!
   "Try scanning for userscript blocks with bounded retry delays.
    Returns true if found, falsy if not."
   [tab-id]
   (loop [remaining bg-utils/installer-scan-delays]
     (when (seq remaining)
-      (let [delay-ms (first remaining)]
-        (when (pos? delay-ms)
-          (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve delay-ms)))))
-        (if (js-await (bg-inject/execute-in-isolated tab-id bg-inject/scan-for-userscripts-fn))
-          true
-          (recur (rest remaining)))))))
+      (js-await (delay-ms! (first remaining)))
+      (if (js-await (bg-inject/execute-in-isolated tab-id bg-inject/scan-for-userscripts-fn))
+        true
+        (recur (rest remaining))))))
 
 (defn- ^:async inject-installer-for-tab!
   "Inject the web userscript installer for a tab that has userscript blocks."
