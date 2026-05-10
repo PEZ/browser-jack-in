@@ -449,60 +449,68 @@
     :empty-text "No special scripts."
     :empty-hint "Background-managed scripts appear here."}])
 
+(defn- reconnect-toggle [state prefix auto-connect-active?]
+  [:div.setting (when auto-connect-active?
+                  {:title "Overridden by Auto-connect"})
+   [:label.checkbox-label {:class (when auto-connect-active? "disabled")}
+    [:input {:type "checkbox"
+             :id (str prefix "auto-reconnect-repl")
+             :checked (:settings/auto-reconnect-repl state)
+             :disabled auto-connect-active?
+             :on-change #(dispatch! [[:popup/ax.toggle-auto-reconnect-repl]])}]
+    "Reconnect connected tabs on navigation"]
+   [:p.description
+    "When a connected tab navigates to a new page, automatically reconnect. "
+    "REPL state is lost but the connection is restored."]])
+
+(defn- auto-connect-toggle [auto-connect-level prefix]
+  [:div.setting
+   [:label.select-label {:for (str prefix "auto-connect-level")}
+    "Auto-connect"]
+   [:div.select-wrapper
+    [:select {:id (str prefix "auto-connect-level")
+              :value auto-connect-level
+              :on-change #(dispatch! [[:popup/ax.set-auto-connect-level (.. % -target -value)]])}
+     [:option {:value "off"} "Never"]
+     [:option {:value "all-pages"} "On page load"]
+     [:option {:value "all-tabs"} "On page load + tab activation"]]]
+   [:p.description.warning
+    (case auto-connect-level
+      "all-pages" "Epupp connects a REPL to every page you load."
+      "all-tabs" "Epupp connects a REPL to every page you load, and follows your active tab."
+      "Auto-connect is disabled.")]])
+
+(defn- fs-sync-toggle [state prefix]
+  (let [current-tab-id (:scripts/current-tab-id state)
+        fs-sync-tab-id (:fs/sync-tab-id state)
+        current-tab-connected? (some #(= (:tab-id %) (str current-tab-id))
+                                     (:repl/connections state))
+        fs-sync-enabled? (and (some? current-tab-id)
+                              (= current-tab-id fs-sync-tab-id))]
+    [:div.setting
+     [:label.checkbox-label
+      [:input {:type "checkbox"
+               :id (str prefix "fs-repl-sync")
+               :checked fs-sync-enabled?
+               :disabled (not current-tab-connected?)
+               :on-change #(dispatch! [[:popup/ax.toggle-fs-sync]])}]
+      "Allow REPL FS Sync for this tab"]
+     [:p.description.warning
+      (if current-tab-connected?
+        "Only enable this on pages you trust."
+        "Connect a REPL to enable FS Sync for this tab.")]]))
+
 (defn- repl-settings-toggles
   "Returns a vector of three REPL setting toggle elements.
    Use `into` to splice into a parent container.
    id-prefix differentiates duplicate instances in the DOM."
   [state {:keys [id-prefix]}]
-  (let [{:settings/keys [auto-connect-level auto-reconnect-repl]} state
+  (let [{:settings/keys [auto-connect-level]} state
         prefix (or id-prefix "")
         auto-connect-active? (not= auto-connect-level "off")]
-    [[:div.setting (when auto-connect-active?
-                     {:title "Overridden by Auto-connect"})
-      [:label.checkbox-label {:class (when auto-connect-active? "disabled")}
-       [:input {:type "checkbox"
-                :id (str prefix "auto-reconnect-repl")
-                :checked auto-reconnect-repl
-                :disabled auto-connect-active?
-                :on-change #(dispatch! [[:popup/ax.toggle-auto-reconnect-repl]])}]
-       "Reconnect connected tabs on navigation"]
-      [:p.description
-       "When a connected tab navigates to a new page, automatically reconnect. "
-       "REPL state is lost but the connection is restored."]]
-     [:div.setting
-      [:label.select-label {:for (str prefix "auto-connect-level")}
-       "Auto-connect"]
-      [:div.select-wrapper
-       [:select {:id (str prefix "auto-connect-level")
-                 :value auto-connect-level
-                 :on-change #(dispatch! [[:popup/ax.set-auto-connect-level (.. % -target -value)]])}
-        [:option {:value "off"} "Never"]
-        [:option {:value "all-pages"} "On page load"]
-        [:option {:value "all-tabs"} "On page load + tab activation"]]]
-      [:p.description.warning
-       (case auto-connect-level
-         "all-pages" "Epupp connects a REPL to every page you load."
-         "all-tabs" "Epupp connects a REPL to every page you load, and follows your active tab."
-         "Auto-connect is disabled.")]]
-     (let [current-tab-id (:scripts/current-tab-id state)
-           fs-sync-tab-id (:fs/sync-tab-id state)
-           current-tab-connected? (some #(= (:tab-id %) (str current-tab-id))
-                                        (:repl/connections state))
-           fs-sync-enabled? (and (some? current-tab-id)
-                                 (= current-tab-id fs-sync-tab-id))]
-       [:div.setting
-        [:label.checkbox-label
-         [:input {:type "checkbox"
-                  :id (str prefix "fs-repl-sync")
-                  :checked fs-sync-enabled?
-                  :disabled (not current-tab-connected?)
-                  :on-change #(dispatch! [[:popup/ax.toggle-fs-sync]])}]
-         "Allow REPL FS Sync for this tab"]
-        [:p.description.warning
-         (if current-tab-connected?
-           "Only enable this on pages you trust."
-           "Connect a REPL to enable FS Sync for this tab.")]])]))
-
+    [[reconnect-toggle state prefix auto-connect-active?]
+     [auto-connect-toggle auto-connect-level prefix]
+     [fs-sync-toggle state prefix]]))
 (defn settings-content [{:settings/keys [debug-logging] :as state}]
   [:div.settings-content
    (into
@@ -621,8 +629,41 @@
        :button/on-click #(dispatch! [[:popup/ax.connect]])}
       "Connect"]]))
 
+(defn- direct-connect-mode [{:as state} ws]
+  [:div
+   [:div.connect-mode-hint "Connect a scittle.nrepl compliant REPL Client (such as Calva)"]
+   [:div.port-row
+    [port-input {:id "ws-port"
+                 :label "WebSocket:"
+                 :value ws
+                 :on-change #(dispatch! [[:popup/ax.set-ws-port %]])}]]
+   [connect-controls state ws]])
+
+(defn- relay-connect-mode [{:ports/keys [nrepl ws] :as state}]
+  [:div
+   [:div.connect-mode-hint "For REPOL clients/editors without built-in scittle.nrepl support"]
+   [:div.step
+    [:div.step-header "1. Start the browser-nrepl relay"]
+    [:div.port-row
+     [port-input {:id "nrepl-port"
+                  :label "nREPL:"
+                  :value nrepl
+                  :on-change #(dispatch! [[:popup/ax.set-nrepl-port %]])}]
+     [port-input {:id "ws-port"
+                  :label "WebSocket:"
+                  :value ws
+                  :on-change #(dispatch! [[:popup/ax.set-ws-port %]])}]]
+    [command-box {:command (generate-server-cmd state)}]]
+   [:div.step
+    [:div.step-header "2. Connect browser to relay"]
+    [connect-controls state ws]]
+   [:div.step
+    [:div.step-header "3. Connect editor to relay"]
+    [:div.connect-row
+     [:span.connect-target (str "nrepl://localhost:" nrepl)]]]])
+
 (defn repl-connect-content
-  [{:ports/keys [nrepl ws] :as state}]
+  [{:ports/keys [ws] :as state}]
   (let [is-connected (current-tab-connected? state)
         mode (or (:ui/connect-mode state) "direct")
         direct? (= mode "direct")]
@@ -639,37 +680,8 @@
                               #(dispatch! [[:popup/ax.set-connect-mode "relay"]]))}
          "Relay"]]
        (if direct?
-         ;; Direct mode: Calva WebSocket, no relay needed
-         [:div
-          [:div.connect-mode-hint "Connect a scittle.nrepl compliant REPL Client (such as Calva)"]
-          [:div.port-row
-           [port-input {:id "ws-port"
-                        :label "WebSocket:"
-                        :value ws
-                        :on-change #(dispatch! [[:popup/ax.set-ws-port %]])}]]
-          [connect-controls state ws]]
-         ;; Relay mode: bb browser-nrepl with both ports
-         [:div
-          [:div.connect-mode-hint "For REPOL clients/editors without built-in scittle.nrepl support"]
-          [:div.step
-           [:div.step-header "1. Start the browser-nrepl relay"]
-           [:div.port-row
-            [port-input {:id "nrepl-port"
-                         :label "nREPL:"
-                         :value nrepl
-                         :on-change #(dispatch! [[:popup/ax.set-nrepl-port %]])}]
-            [port-input {:id "ws-port"
-                         :label "WebSocket:"
-                         :value ws
-                         :on-change #(dispatch! [[:popup/ax.set-ws-port %]])}]]
-           [command-box {:command (generate-server-cmd state)}]]
-          [:div.step
-           [:div.step-header "2. Connect browser to relay"]
-           [connect-controls state ws]]
-          [:div.step
-           [:div.step-header "3. Connect editor to relay"]
-           [:div.connect-row
-            [:span.connect-target (str "nrepl://localhost:" nrepl)]]]])]]
+         [direct-connect-mode state ws]
+         [relay-connect-mode state])]]
      (into [:div.connected-repl-settings {:class (when is-connected "visible")}]
            (repl-settings-toggles state {:id-prefix "connect-"}))
      [connected-tabs-section state]]))
@@ -835,6 +847,15 @@
                      checked-change
                      (conj [:db/ax.assoc :sponsor/checked-at (.-newValue checked-change)])))))))
 
+(defn- parse-domain-ports [saved]
+  (when saved
+    (let [nrepl (.-nreplPort saved)
+          ws (.-wsPort saved)]
+      (when (or (some? nrepl) (some? ws))
+        (cond-> {}
+          (some? nrepl) (assoc :nrepl (str nrepl))
+          (some? ws) (assoc :ws (str ws)))))))
+
 (defn- handle-default-ports-change [changes area]
   (when (and (= area "local")
              (or (aget changes "defaultNreplPort")
@@ -848,13 +869,7 @@
                   (let [new-defaults {:nrepl (str (or (aget result "defaultNreplPort") "3339"))
                                       :ws (str (or (aget result "defaultWsPort") "3340"))}
                         saved (aget result key)
-                        domain-ports (when saved
-                                       (let [nrepl (.-nreplPort saved)
-                                             ws (.-wsPort saved)]
-                                         (when (or (some? nrepl) (some? ws))
-                                           (cond-> {}
-                                             (some? nrepl) (assoc :nrepl (str nrepl))
-                                             (some? ws) (assoc :ws (str ws))))))]
+                        domain-ports (parse-domain-ports saved)]
                     (dispatch! [[:popup/ax.on-default-ports-changed new-defaults domain-ports]])))))))))
 
 (defn init! []
