@@ -807,16 +807,20 @@
   (when (pos? ms)
     (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve ms))))))
 
+(defn- ^:async scan-with-delay!
+  "Wait, then scan for userscript blocks. Returns truthy if found."
+  [tab-id delay-ms]
+  (js-await (delay-ms! delay-ms))
+  (js-await (bg-inject/execute-in-isolated tab-id bg-inject/scan-for-userscripts-fn)))
+
 (defn- ^:async scan-for-userscripts-with-retry!
   "Try scanning for userscript blocks with bounded retry delays.
    Returns true if found, falsy if not."
   [tab-id]
   (loop [remaining bg-utils/installer-scan-delays]
     (when (seq remaining)
-      (js-await (delay-ms! (first remaining)))
-      (if (js-await (bg-inject/execute-in-isolated tab-id bg-inject/scan-for-userscripts-fn))
-        true
-        (recur (rest remaining))))))
+      (or (js-await (scan-with-delay! tab-id (first remaining)))
+          (recur (rest remaining))))))
 
 (defn- ^:async inject-installer-for-tab!
   "Inject the web userscript installer for a tab that has userscript blocks."
@@ -903,41 +907,53 @@
                   (when (= "ws-keepalive" (.-name alarm))
                     (dispatch! [[:alarm/ax.tick]])))))
 
+(defn- handle-scripts-changed! [dispatch! scripts-change]
+  (log/debug "Background" "Scripts changed, syncing registrations")
+  ((^:async fn []
+     (js-await (ensure-initialized! dispatch!))
+     (js-await (registration/sync-registrations!))
+     (let [all-scripts (script-utils/parse-scripts
+                        (.-newValue scripts-change)
+                        {:extract-manifest manifest-parser/extract-manifest})
+           all-inject-urls (mapcat :script/inject all-scripts)
+           ext-urls (ext-dep/extract-ext-dep-urls (vec all-inject-urls))]
+       (dispatch! (if (seq ext-urls)
+                    [[:ext-dep/ax.resolve-uncached-urls
+                      ext-urls
+                      [[:runtime/ax.re-resolve-on-change all-scripts]]]]
+                    [[:runtime/ax.re-resolve-on-change all-scripts]]))))))
+
+(defn- handle-ext-dep-cache-changed! [dispatch! changes]
+  (log/debug "Background" "Ext dep cache changed, re-resolving")
+  ((^:async fn []
+     (js-await (ensure-initialized! dispatch!))
+     (let [change (aget changes "extDepCache")
+           new-cache (or (.-newValue change) {})
+           all-scripts (storage/get-scripts)]
+       (dispatch! [[:storage/ax.set-ext-dep-cache new-cache]
+                   [:runtime/ax.re-resolve-on-change all-scripts]])))))
+
+(defn- handle-debug-logging-changed! [changes]
+  (let [change (aget changes "settings/debug-logging")
+        enabled (boolean (.-newValue change))]
+    (log/set-debug-enabled! enabled)))
+
+(defn- handle-sponsor-username-changed! [dispatch! changes]
+  (let [change (aget changes "sponsor/sponsored-username")
+        new-username (or (.-newValue change) "PEZ")]
+    ((^:async fn []
+       (js-await (ensure-initialized! dispatch!))
+       (js-await (update-sponsor-script-match! new-username))))))
+
 (defn- handle-storage-change! [dispatch! changes]
   (when-let [scripts-change (.-scripts changes)]
-    (log/debug "Background" "Scripts changed, syncing registrations")
-    ((^:async fn []
-       (js-await (ensure-initialized! dispatch!))
-       (js-await (registration/sync-registrations!))
-       (let [all-scripts (script-utils/parse-scripts
-                            (.-newValue scripts-change)
-                            {:extract-manifest manifest-parser/extract-manifest})
-             all-inject-urls (mapcat :script/inject all-scripts)
-             ext-urls (ext-dep/extract-ext-dep-urls (vec all-inject-urls))]
-         (dispatch! (if (seq ext-urls)
-                      [[:ext-dep/ax.resolve-uncached-urls
-                        ext-urls
-                        [[:runtime/ax.re-resolve-on-change all-scripts]]]]
-                      [[:runtime/ax.re-resolve-on-change all-scripts]]))))))
+    (handle-scripts-changed! dispatch! scripts-change))
   (when (aget changes "extDepCache")
-    (log/debug "Background" "Ext dep cache changed, re-resolving")
-    ((^:async fn []
-       (js-await (ensure-initialized! dispatch!))
-       (let [change (aget changes "extDepCache")
-             new-cache (or (.-newValue change) {})
-             all-scripts (storage/get-scripts)]
-         (dispatch! [[:storage/ax.set-ext-dep-cache new-cache]
-                     [:runtime/ax.re-resolve-on-change all-scripts]])))))
+    (handle-ext-dep-cache-changed! dispatch! changes))
   (when (aget changes "settings/debug-logging")
-    (let [change (aget changes "settings/debug-logging")
-          enabled (boolean (.-newValue change))]
-      (log/set-debug-enabled! enabled)))
+    (handle-debug-logging-changed! changes))
   (when (aget changes "sponsor/sponsored-username")
-    (let [change (aget changes "sponsor/sponsored-username")
-          new-username (or (.-newValue change) "PEZ")]
-      ((^:async fn []
-         (js-await (ensure-initialized! dispatch!))
-         (js-await (update-sponsor-script-match! new-username)))))))
+    (handle-sponsor-username-changed! dispatch! changes)))
 
 (defn- register-storage-listener! [dispatch!]
   (.addListener js/chrome.storage.onChanged
