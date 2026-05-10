@@ -597,6 +597,29 @@
   (let [current-tab-id-str (str current-tab-id)]
     (some #(= (:tab-id %) current-tab-id-str) connections)))
 
+(defn- connect-controls [state ws]
+  (if (:ui/connecting? state)
+    [:div.connect-row.connecting
+     [:span.connect-status
+      (str "Waiting for server on :" ws "...")]
+     [view-elements/action-button
+      {:button/variant :secondary
+       :button/id "cancel-connect"
+       :button/title "Cancel connection"
+       :button/on-click (fn [_e]
+                          (set! (.-cancelled connection-effects/connect-cancel-signal) true)
+                          (dispatch! [[:popup/ax.cancel-connect]
+                                      [:popup/ax.show-system-banner "info" "Connection cancelled" {} "connection"]]))}
+      "Cancel"]]
+    [:div.connect-row
+     [:span.connect-target (str "ws://localhost:" ws)]
+     [view-elements/action-button
+      {:button/variant :primary
+       :button/id "connect"
+       :button/title "Connect this tab to the REPL server"
+       :button/on-click #(dispatch! [[:popup/ax.connect]])}
+      "Connect"]]))
+
 (defn repl-connect-content
   [{:ports/keys [nrepl ws] :as state}]
   (let [is-connected (current-tab-connected? state)
@@ -623,27 +646,7 @@
                         :label "WebSocket:"
                         :value ws
                         :on-change #(dispatch! [[:popup/ax.set-ws-port %]])}]]
-          (if (:ui/connecting? state)
-            [:div.connect-row.connecting
-             [:span.connect-status
-              (str "Waiting for server on :" ws "...")]
-             [view-elements/action-button
-              {:button/variant :secondary
-               :button/id "cancel-connect"
-               :button/title "Cancel connection"
-               :button/on-click (fn [_e]
-                                  (set! (.-cancelled connection-effects/connect-cancel-signal) true)
-                                  (dispatch! [[:popup/ax.cancel-connect]
-                                              [:popup/ax.show-system-banner "info" "Connection cancelled" {} "connection"]]))}
-              "Cancel"]]
-            [:div.connect-row
-             [:span.connect-target (str "ws://localhost:" ws)]
-             [view-elements/action-button
-              {:button/variant :primary
-               :button/id "connect"
-               :button/title "Connect this tab to the REPL server"
-               :button/on-click #(dispatch! [[:popup/ax.connect]])}
-              "Connect"]])]
+          [connect-controls state ws]]
          ;; Relay mode: bb browser-nrepl with both ports
          [:div
           [:div.connect-mode-hint "For REPOL clients/editors without built-in scittle.nrepl support"]
@@ -661,27 +664,7 @@
            [command-box {:command (generate-server-cmd state)}]]
           [:div.step
            [:div.step-header "2. Connect browser to relay"]
-           (if (:ui/connecting? state)
-             [:div.connect-row.connecting
-              [:span.connect-status
-               (str "Waiting for server on :" ws "...")]
-              [view-elements/action-button
-               {:button/variant :secondary
-                :button/id "cancel-connect"
-                :button/title "Cancel connection"
-                :button/on-click (fn [_e]
-                                   (set! (.-cancelled connection-effects/connect-cancel-signal) true)
-                                   (dispatch! [[:popup/ax.cancel-connect]
-                                               [:popup/ax.show-system-banner "info" "Connection cancelled" {} "connection"]]))}
-               "Cancel"]]
-             [:div.connect-row
-              [:span.connect-target (str "ws://localhost:" ws)]
-              [view-elements/action-button
-               {:button/variant :primary
-                :button/id "connect"
-                :button/title "Connect this tab to the REPL server"
-                :button/on-click #(dispatch! [[:popup/ax.connect]])}
-               "Connect"]])]
+           [connect-controls state ws]]
           [:div.step
            [:div.step-header "3. Connect editor to relay"]
            [:div.connect-row
@@ -696,29 +679,31 @@
 
 
 
+(defn- categorize-scripts [scripts current-url]
+  {:special (->> scripts (filterv script-utils/special-script?))
+   :matching (->> scripts
+                  (filterv #(and (not (script-utils/special-script? %))
+                                 (script-utils/get-matching-pattern current-url %))))
+   :other-autorun (->> scripts
+                       (filterv (fn [s]
+                                  (and (not (script-utils/special-script? s))
+                                       (seq (:script/match s))
+                                       (not (script-utils/get-matching-pattern current-url s))))))
+   :manual (->> scripts
+                (filterv #(and (not (script-utils/special-script? %))
+                               (not (script-utils/library-script? %))
+                               (empty? (:script/match %)))))
+   :library (->> scripts
+                 (filterv (fn [s]
+                            (and (script-utils/library-script? s)
+                                 (not (script-utils/special-script? s))
+                                 (empty? (:script/match s))))))})
+
 (defn popup-ui [{:ui/keys [sections-collapsed]
                  :scripts/keys [list current-url]
                  :repl/keys [connections]
                  :as state}]
-  (let [special-scripts (->> list
-                             (filterv script-utils/special-script?))
-        matching-scripts (->> list
-                              (filterv #(and (not (script-utils/special-script? %))
-                                             (script-utils/get-matching-pattern current-url %))))
-        other-autorun-scripts (->> list
-                                   (filterv (fn [s]
-                                              (and (not (script-utils/special-script? s))
-                                                   (seq (:script/match s))
-                                                   (not (script-utils/get-matching-pattern current-url s))))))
-        manual-scripts (->> list
-                            (filterv #(and (not (script-utils/special-script? %))
-                                           (not (script-utils/library-script? %))
-                                           (empty? (:script/match %)))))
-        library-scripts (->> list
-                             (filterv (fn [s]
-                                        (and (script-utils/library-script? s)
-                                             (not (script-utils/special-script? s))
-                                             (empty? (:script/match s))))))
+  (let [{:keys [special matching other-autorun manual library]} (categorize-scripts list current-url)
         settings-max-height 700]
     [:div
      [view-elements/app-header
@@ -745,33 +730,33 @@
      [collapsible-section {:id :manual-scripts
                            :title "Manual/On-demand scripts"
                            :expanded? (not (:manual-scripts sections-collapsed))
-                           :badge-count (count manual-scripts)
-                           :max-height (str (+ 50 (* 105 (max 1 (count manual-scripts)))) "px")}
+                           :badge-count (count manual)
+                           :max-height (str (+ 50 (* 105 (max 1 (count manual)))) "px")}
       [manual-scripts-section state]]
      [collapsible-section {:id :matching-scripts
                            :title "Auto-run for this page"
                            :expanded? (not (:matching-scripts sections-collapsed))
-                           :badge-count (count matching-scripts)
-                           :max-height (str (+ 50 (* 105 (max 1 (count matching-scripts)))) "px")}
+                           :badge-count (count matching)
+                           :max-height (str (+ 50 (* 105 (max 1 (count matching)))) "px")}
       [matching-scripts-section state]]
      [collapsible-section {:id :other-scripts
                            :title "Auto-run not matching this page"
                            :expanded? (not (:other-scripts sections-collapsed))
-                           :badge-count (count other-autorun-scripts)
-                           :max-height (str (+ 50 (* 105 (max 1 (count other-autorun-scripts)))) "px")}
+                           :badge-count (count other-autorun)
+                           :max-height (str (+ 50 (* 105 (max 1 (count other-autorun)))) "px")}
       [other-scripts-section state]]
      [collapsible-section {:id :libraries
                            :title "Libraries"
                            :expanded? (not (:libraries sections-collapsed))
-                           :badge-count (count library-scripts)
-                           :max-height (str (+ 50 (* 105 (max 1 (count library-scripts)))) "px")}
+                           :badge-count (count library)
+                           :max-height (str (+ 50 (* 105 (max 1 (count library)))) "px")}
       [libraries-section state]]
-     (when (seq special-scripts)
+     (when (seq special)
        [collapsible-section {:id :special
                              :title "Special"
                              :expanded? (not (:special sections-collapsed))
-                             :badge-count (count special-scripts)
-                             :max-height (str (+ 50 (* 105 (max 1 (count special-scripts)))) "px")}
+                             :badge-count (count special)
+                             :max-height (str (+ 50 (* 105 (max 1 (count special)))) "px")}
         [special-scripts-section state]])
      [collapsible-section {:id :settings
                            :title "Settings"
