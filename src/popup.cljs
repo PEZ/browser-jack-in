@@ -662,6 +662,17 @@
     [:div.connect-row
      [:span.connect-target (str "nrepl://localhost:" nrepl)]]]])
 
+(defn- connect-mode-toggle [direct?]
+  [:div.connect-mode-toggle
+   [:button {:class (when direct? "active")
+             :on-click (when-not direct?
+                         #(dispatch! [[:popup/ax.set-connect-mode "direct"]]))}
+    "Direct"]
+   [:button {:class (when-not direct? "active")
+             :on-click (when direct?
+                         #(dispatch! [[:popup/ax.set-connect-mode "relay"]]))}
+    "Relay"]])
+
 (defn repl-connect-content
   [{:ports/keys [ws] :as state}]
   (let [is-connected (current-tab-connected? state)
@@ -670,15 +681,7 @@
     [:div
      [:div.connect-setup {:class (when is-connected "connected")}
       [:div.connect-setup-inner
-       [:div.connect-mode-toggle
-        [:button {:class (when direct? "active")
-                  :on-click (when-not direct?
-                              #(dispatch! [[:popup/ax.set-connect-mode "direct"]]))}
-         "Direct"]
-        [:button {:class (when-not direct? "active")
-                  :on-click (when direct?
-                              #(dispatch! [[:popup/ax.set-connect-mode "relay"]]))}
-         "Relay"]]
+       [connect-mode-toggle direct?]
        (if direct?
          [direct-connect-mode state ws]
          [relay-connect-mode state])]]
@@ -856,20 +859,25 @@
           (some? nrepl) (assoc :nrepl (str nrepl))
           (some? ws) (assoc :ws (str ws)))))))
 
+(defn- default-ports-changed? [changes area]
+  (and (= area "local")
+       (or (aget changes "defaultNreplPort")
+           (aget changes "defaultWsPort"))))
+
+(defn- parse-new-defaults [result]
+  {:nrepl (str (or (aget result "defaultNreplPort") "3339"))
+   :ws (str (or (aget result "defaultWsPort") "3340"))})
+
 (defn- handle-default-ports-change [changes area]
-  (when (and (= area "local")
-             (or (aget changes "defaultNreplPort")
-                 (aget changes "defaultWsPort")))
+  (when (default-ports-changed? changes area)
     (.then (popup-utils/get-active-tab)
            (fn [tab]
              (let [key (port-effects/storage-key tab)]
                (js/chrome.storage.local.get
                 #js ["defaultNreplPort" "defaultWsPort" key]
                 (fn [result]
-                  (let [new-defaults {:nrepl (str (or (aget result "defaultNreplPort") "3339"))
-                                      :ws (str (or (aget result "defaultWsPort") "3340"))}
-                        saved (aget result key)
-                        domain-ports (parse-domain-ports saved)]
+                  (let [new-defaults (parse-new-defaults result)
+                        domain-ports (parse-domain-ports (aget result key))]
                     (dispatch! [[:popup/ax.on-default-ports-changed new-defaults domain-ports]])))))))))
 
 (defn init! []
