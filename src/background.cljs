@@ -659,34 +659,44 @@
                           :exists false}))
     false))
 
+(defn- normalize-match-pattern
+  "Normalize :epupp/auto-run-match to a vector of patterns."
+  [auto-run-match]
+  (cond
+    (nil? auto-run-match) []
+    (vector? auto-run-match) auto-run-match
+    :else [auto-run-match]))
+
+(defn- build-web-installer-script
+  "Build a script map from web installer save data.
+   Returns nil if the manifest has no script name."
+  [code manifest sender]
+  (let [{:keys [raw-script-name script-name auto-run-match inject run-at]} manifest
+        raw-name (or raw-script-name script-name)]
+    (when raw-name
+      {:script/id (str (.now js/Date))
+       :script/name raw-name
+       :script/code code
+       :script/match (normalize-match-pattern auto-run-match)
+       :script/inject (or inject [])
+       :script/enabled true
+       :script/run-at (or run-at "document-idle")
+       :script/force? true
+       :script/source (.. sender -tab -url)})))
+
 (defn- handle-web-installer-save-script [message sender _dispatch! send-response]
   (if-not (bg-utils/web-installer-origin-allowed? sender)
     (do (send-response #js {:success false :error "Domain not allowed for web installation"})
         false)
     (try
       (let [code (.-code message)
-            {:keys [raw-script-name script-name auto-run-match inject run-at]}
-            (manifest-parser/extract-manifest code)
-            raw-name (or raw-script-name script-name)]
-        (if-not raw-name
+            manifest (manifest-parser/extract-manifest code)
+            script (build-web-installer-script code manifest sender)]
+        (if script
+          (do (fs-dispatch/dispatch-fs-action! send-response [:fs/ax.save-script script])
+              true)
           (do (send-response #js {:success false :error "No script name in manifest"})
-              false)
-          (let [script-source (.. sender -tab -url)
-                script-id (str (.now js/Date))
-                script {:script/id script-id
-                        :script/name raw-name
-                        :script/code code
-                        :script/match (cond
-                                        (nil? auto-run-match) []
-                                        (vector? auto-run-match) auto-run-match
-                                        :else [auto-run-match])
-                        :script/inject (or inject [])
-                        :script/enabled true
-                        :script/run-at (or run-at "document-idle")
-                        :script/force? true
-                        :script/source script-source}]
-            (fs-dispatch/dispatch-fs-action! send-response [:fs/ax.save-script script])
-            true)))
+              false)))
       (catch :default err
         (send-response #js {:success false :error (str "Parse error: " (.-message err))})
         false))))
@@ -694,6 +704,14 @@
 (defn- handle-tab-became-visible [tab-id dispatch!]
   (dispatch! [[:visibility/ax.handle-tab-visible tab-id]])
   false)
+
+(defn- ^:async capture-visible-tab!
+  "Capture screenshot of the visible area of a tab."
+  [window-id format quality]
+  (let [capture-opts (if (= format "jpeg")
+                       #js {:format "jpeg" :quality quality}
+                       #js {:format "png"})]
+    (js-await (js/chrome.tabs.captureVisibleTab window-id capture-opts))))
 
 (defn- handle-capture-element
   "Handle capture-element message: take viewport screenshot.
@@ -706,13 +724,10 @@
           false)
       (do ((^:async fn []
              (try
-               (let [format (or (.-format message) "jpeg")
-                     quality (or (.-quality message) 75)
-                     capture-opts (if (= format "jpeg")
-                                    #js {:format "jpeg" :quality quality}
-                                    #js {:format "png"})
-                     data-url (js-await (js/chrome.tabs.captureVisibleTab
-                                         window-id capture-opts))]
+               (let [data-url (js-await (capture-visible-tab!
+                                         window-id
+                                         (or (.-format message) "jpeg")
+                                         (or (.-quality message) 75)))]
                  (send-response #js {:success true :dataUrl data-url}))
                (catch :default err
                  (send-response #js {:success false
