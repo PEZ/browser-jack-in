@@ -326,33 +326,38 @@
         [:span "Auto-run patterns look like " [:code example-pattern]]
         "Check your script patterns in DevTools → Epupp panel."))]])
 
+(defn- default-script-sort [{:keys [item]}]
+  [(if (script-utils/builtin-script? item) 1 0)
+   (str/lower-case (or (:script/name item) ""))])
+
+(defn- render-script-items [items current-url opts]
+  (let [{:keys [highlight-name modified-set errors]} opts]
+    (for [{:keys [item] :ui/keys [entering? leaving?]} items
+          :let [script item]]
+      ^{:key (:script/id script)}
+      [script-item script current-url
+       {:reveal-highlight? (= (:script/name script) highlight-name)
+        :recently-modified? (contains? modified-set (:script/name script))
+        :leaving? leaving?
+        :entering? entering?
+        :runtime-error (get errors (:script/name script))}])))
+
 (defn matching-scripts-section [{:scripts/keys [list current-url]
                                  :ui/keys [scripts-shadow reveal-highlight-script-name recently-modified-scripts]
                                  :runtime/keys [errors]}]
-  (let [;; Filter and sort shadow items by matching URL
-        matching-shadow (->> scripts-shadow
+  (let [matching-shadow (->> scripts-shadow
                              (filterv #(and (not (script-utils/special-script? (:item %)))
                                             (script-utils/get-matching-pattern current-url (:item %))))
-                             (sort-by (fn [{:keys [item]}]
-                                        [(if (script-utils/builtin-script? item) 1 0)
-                                         (str/lower-case (or (:script/name item) ""))])))
-        ;; For checking if user has any scripts (use source list)
+                             (sort-by default-script-sort))
         user-scripts (filterv #(not (script-utils/builtin-script? %)) list)
         no-user-scripts? (empty? user-scripts)
-        example-pattern (script-utils/url-to-match-pattern current-url {:wildcard-scheme? true})
-        modified-set (or recently-modified-scripts #{})
-        errors (or errors {})]
+        example-pattern (script-utils/url-to-match-pattern current-url {:wildcard-scheme? true})]
     [:div.script-list
      (if (seq matching-shadow)
-       (for [{:keys [item] :ui/keys [entering? leaving?]} matching-shadow
-             :let [script item]]
-         ^{:key (:script/id script)}
-         [script-item script current-url
-          {:reveal-highlight? (= (:script/name script) reveal-highlight-script-name)
-           :recently-modified? (contains? modified-set (:script/name script))
-           :leaving? leaving?
-           :entering? entering?
-           :runtime-error (get errors (:script/name script))}])
+       (render-script-items matching-shadow current-url
+                            {:highlight-name reveal-highlight-script-name
+                             :modified-set (or recently-modified-scripts #{})
+                             :errors (or errors {})})
        [matching-scripts-empty-state no-user-scripts? example-pattern])]))
 
 ;; =============================================================================
@@ -394,23 +399,13 @@
    {:keys [filter-fn sort-fn empty-text empty-hint]}]
   (let [filtered (->> scripts-shadow
                       (filterv filter-fn)
-                      (sort-by (or sort-fn
-                                   (fn [{:keys [item]}]
-                                     [(if (script-utils/builtin-script? item) 1 0)
-                                      (str/lower-case (or (:script/name item) ""))]))))
-        modified-set (or recently-modified-scripts #{})
-        errors (or errors {})]
+                      (sort-by (or sort-fn default-script-sort)))]
     [:div.script-list
      (if (seq filtered)
-       (for [{:keys [item] :ui/keys [entering? leaving?]} filtered
-             :let [script item]]
-         ^{:key (:script/id script)}
-         [script-item script current-url
-          {:reveal-highlight? (= (:script/name script) reveal-highlight-script-name)
-           :recently-modified? (contains? modified-set (:script/name script))
-           :leaving? leaving?
-           :entering? entering?
-           :runtime-error (get errors (:script/name script))}])
+       (render-script-items filtered current-url
+                            {:highlight-name reveal-highlight-script-name
+                             :modified-set (or recently-modified-scripts #{})
+                             :errors (or errors {})})
        [:div.no-scripts
         empty-text
         [:div.no-scripts-hint empty-hint]])]))
@@ -718,10 +713,10 @@
                                  (not (script-utils/special-script? s))
                                  (empty? (:script/match s))))))})
 
-(defn- scripts-section [sections-collapsed id title scripts component state]
+(defn- scripts-section [state {:keys [id title scripts component]}]
   [collapsible-section {:id id
                         :title title
-                        :expanded? (not (get sections-collapsed id))
+                        :expanded? (not (get (:ui/sections-collapsed state) id))
                         :badge-count (count scripts)
                         :max-height (str (+ 50 (* 105 (max 1 (count scripts)))) "px")}
    [component state]])
@@ -764,12 +759,12 @@
                                                (* 35 (count connections))) "px")
                            :data-attrs {:data-e2e-connection-count (count connections)}}
       [repl-connect-content state]]
-     [scripts-section sections-collapsed :manual-scripts "Manual/On-demand scripts" manual manual-scripts-section state]
-     [scripts-section sections-collapsed :matching-scripts "Auto-run for this page" matching matching-scripts-section state]
-     [scripts-section sections-collapsed :other-scripts "Auto-run not matching this page" other-autorun other-scripts-section state]
-     [scripts-section sections-collapsed :libraries "Libraries" library libraries-section state]
+     [scripts-section state {:id :manual-scripts :title "Manual/On-demand scripts" :scripts manual :component manual-scripts-section}]
+     [scripts-section state {:id :matching-scripts :title "Auto-run for this page" :scripts matching :component matching-scripts-section}]
+     [scripts-section state {:id :other-scripts :title "Auto-run not matching this page" :scripts other-autorun :component other-scripts-section}]
+     [scripts-section state {:id :libraries :title "Libraries" :scripts library :component libraries-section}]
      (when (seq special)
-       [scripts-section sections-collapsed :special "Special" special special-scripts-section state])
+       [scripts-section state {:id :special :title "Special" :scripts special :component special-scripts-section}])
      [collapsible-section {:id :settings
                            :title "Settings"
                            :expanded? (not (:settings sections-collapsed))
