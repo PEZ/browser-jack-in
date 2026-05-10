@@ -311,6 +311,18 @@
          [:span.script-description {:title description}
           description]])]]))
 
+(defn- matching-scripts-empty-state [no-user-scripts? example-pattern]
+  [:div.no-scripts
+   (if no-user-scripts?
+     "No userscripts yet!"
+     "No scripts auto-run for this page.")
+   [:div.no-scripts-hint
+    (if no-user-scripts?
+      "Create your first script in DevTools → Epupp panel."
+      (if example-pattern
+        [:span "Auto-run patterns look like " [:code example-pattern]]
+        "Check your script patterns in DevTools → Epupp panel."))]])
+
 (defn matching-scripts-section [{:scripts/keys [list current-url]
                                  :ui/keys [scripts-shadow reveal-highlight-script-name recently-modified-scripts]
                                  :runtime/keys [errors]}]
@@ -338,18 +350,7 @@
            :leaving? leaving?
            :entering? entering?
            :runtime-error (get errors (:script/name script))}])
-       [:div.no-scripts
-        (if no-user-scripts?
-          ;; No user scripts at all - guide to create first one
-          "No userscripts yet!"
-          ;; Scripts exist but none match
-          "No scripts auto-run for this page.")
-        [:div.no-scripts-hint
-         (if no-user-scripts?
-           "Create your first script in DevTools → Epupp panel."
-           (if example-pattern
-             [:span "Auto-run patterns look like " [:code example-pattern]]
-             "Check your script patterns in DevTools → Epupp panel."))]])]))
+       [matching-scripts-empty-state no-user-scripts? example-pattern])]))
 
 ;; =============================================================================
 ;; Dev Tools Section (only shown in dev/test mode)
@@ -805,6 +806,13 @@
                   :bulk-index (aget message "bulk-index")}]]))
   false)
 
+(defn- notify-scripts-modified! [old-scripts new-scripts]
+  (when (and old-scripts new-scripts)
+    (let [{:keys [added modified]} (script-utils/diff-scripts old-scripts new-scripts)
+          changed-names (concat added modified)]
+      (when (seq changed-names)
+        (dispatch! [[:popup/ax.mark-scripts-modified (vec changed-names)]])))))
+
 (defn- handle-scripts-storage-change [changes area]
   (when (and (= area "local") (.-scripts changes))
     (let [scripts-change (.-scripts changes)
@@ -814,11 +822,7 @@
                         (script-utils/parse-scripts (.-newValue scripts-change) {:extract-manifest mp/extract-manifest}))]
       (dispatch! [[:popup/ax.load-scripts]
                   [:popup/ax.load-runtime-status]])
-      (when (and old-scripts new-scripts)
-        (let [{:keys [added modified]} (script-utils/diff-scripts old-scripts new-scripts)
-              changed-names (concat added modified)]
-          (when (seq changed-names)
-            (dispatch! [[:popup/ax.mark-scripts-modified (vec changed-names)]])))))))
+      (notify-scripts-modified! old-scripts new-scripts))))
 
 (defn- handle-sponsor-storage-change [changes area]
   (when (= area "local")
