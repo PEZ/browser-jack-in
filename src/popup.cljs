@@ -247,28 +247,31 @@
                               (dispatch! [[:popup/ax.delete-script script-id]]))}
          nil])]]))
 
+(defn- show-auto-run-checkbox? [script]
+  (and (or (seq (:script/match script))
+           (:script/web-installer-scan script))
+       (not (:script/always-enabled? script))))
+
+(defn- script-match-text [patterns-text script]
+  (cond
+    patterns-text patterns-text
+    (:script/web-installer-scan script) "Injected when Userscripts are detected"
+    :else "No auto-run (manual only)"))
+
 (defn- script-pattern-row
-  [{:script/keys [match enabled run-at always-enabled?]
+  [{:script/keys [enabled run-at]
     script-id :script/id :as script}
    matching-pattern patterns-display patterns-tooltip]
   [:div.script-row-pattern
-   (when (and (or (seq match)
-                  (:script/web-installer-scan script))
-              (not always-enabled?))
+   (when (show-auto-run-checkbox? script)
      [:input.pattern-checkbox {:type "checkbox"
                                :checked enabled
                                :title (if enabled "Auto-run enabled" "Auto-run disabled")
                                :on-change #(dispatch! [[:popup/ax.toggle-script script-id matching-pattern]])}])
    (when run-at
      (run-at-badge run-at))
-   [:span.script-match {:title (cond
-                                 patterns-tooltip patterns-tooltip
-                                 (:script/web-installer-scan script) "Injected when Userscripts are detected"
-                                 :else "No auto-run (manual only)")}
-    (cond
-      patterns-display patterns-display
-      (:script/web-installer-scan script) "Injected when Userscripts are detected"
-      :else "No auto-run (manual only)")]])
+   [:span.script-match {:title (script-match-text patterns-tooltip script)}
+    (script-match-text patterns-display script)]])
 
 (defn script-item [{:script/keys [name match description]
                     script-id :script/id
@@ -715,6 +718,37 @@
                                  (not (script-utils/special-script? s))
                                  (empty? (:script/match s))))))})
 
+(defn- scripts-section [sections-collapsed id title scripts component state]
+  [collapsible-section {:id id
+                        :title title
+                        :expanded? (not (get sections-collapsed id))
+                        :badge-count (count scripts)
+                        :max-height (str (+ 50 (* 105 (max 1 (count scripts)))) "px")}
+   [component state]])
+
+(defn- popup-header [state]
+  [view-elements/app-header
+   {:elements/wrapper-class "popup-header-wrapper"
+    :elements/header-class "popup-header"
+    :elements/icon [icons/epupp-logo {:size 28 :connected? (current-tab-connected? state)}]
+    :elements/sponsor-status (storage/sponsor-active? state)
+    :elements/on-sponsor-click #(dispatch! [[:popup/ax.check-sponsor]])
+    :elements/permanent-banner [:div
+                                (when-not (:permissions/host-granted? state)
+                                  [permission-banner])
+                                (when-let [pb (:ui/page-banner state)]
+                                  [view-elements/page-banner pb])]
+    :elements/temporary-banner (when-let [banners (seq (:ui/system-banners state))]
+                                 [view-elements/system-banners banners])}])
+
+(defn- popup-footer [state]
+  [view-elements/app-footer {:elements/wrapper-class "popup-footer"
+                             :elements/sponsor-status (storage/sponsor-active? state)
+                             :elements/on-sponsor-click #(dispatch! [[:popup/ax.check-sponsor]])
+                             :elements/creator-menu-open? (:ui/creator-menu-open? state)
+                             :elements/on-creator-trigger-click #(dispatch! [[:popup/ax.toggle-creator-menu]])
+                             :elements/on-creator-menu-close #(dispatch! [[:popup/ax.close-creator-menu]])}])
+
 (defn popup-ui [{:ui/keys [sections-collapsed]
                  :scripts/keys [list current-url]
                  :repl/keys [connections]
@@ -722,20 +756,7 @@
   (let [{:keys [special matching other-autorun manual library]} (categorize-scripts list current-url)
         settings-max-height 700]
     [:div
-     [view-elements/app-header
-      {:elements/wrapper-class "popup-header-wrapper"
-       :elements/header-class "popup-header"
-       :elements/icon [icons/epupp-logo {:size 28 :connected? (current-tab-connected? state)}]
-       :elements/sponsor-status (storage/sponsor-active? state)
-       :elements/on-sponsor-click #(dispatch! [[:popup/ax.check-sponsor]])
-       :elements/permanent-banner [:div
-                                   (when-not (:permissions/host-granted? state)
-                                     [permission-banner])
-                                   (when-let [pb (:ui/page-banner state)]
-                                     [view-elements/page-banner pb])]
-       :elements/temporary-banner (when-let [banners (seq (:ui/system-banners state))]
-                                    [view-elements/system-banners banners])}]
-
+     [popup-header state]
      [collapsible-section {:id :repl-connect
                            :title "REPL Connect"
                            :expanded? (not (:repl-connect sections-collapsed))
@@ -743,37 +764,12 @@
                                                (* 35 (count connections))) "px")
                            :data-attrs {:data-e2e-connection-count (count connections)}}
       [repl-connect-content state]]
-     [collapsible-section {:id :manual-scripts
-                           :title "Manual/On-demand scripts"
-                           :expanded? (not (:manual-scripts sections-collapsed))
-                           :badge-count (count manual)
-                           :max-height (str (+ 50 (* 105 (max 1 (count manual)))) "px")}
-      [manual-scripts-section state]]
-     [collapsible-section {:id :matching-scripts
-                           :title "Auto-run for this page"
-                           :expanded? (not (:matching-scripts sections-collapsed))
-                           :badge-count (count matching)
-                           :max-height (str (+ 50 (* 105 (max 1 (count matching)))) "px")}
-      [matching-scripts-section state]]
-     [collapsible-section {:id :other-scripts
-                           :title "Auto-run not matching this page"
-                           :expanded? (not (:other-scripts sections-collapsed))
-                           :badge-count (count other-autorun)
-                           :max-height (str (+ 50 (* 105 (max 1 (count other-autorun)))) "px")}
-      [other-scripts-section state]]
-     [collapsible-section {:id :libraries
-                           :title "Libraries"
-                           :expanded? (not (:libraries sections-collapsed))
-                           :badge-count (count library)
-                           :max-height (str (+ 50 (* 105 (max 1 (count library)))) "px")}
-      [libraries-section state]]
+     [scripts-section sections-collapsed :manual-scripts "Manual/On-demand scripts" manual manual-scripts-section state]
+     [scripts-section sections-collapsed :matching-scripts "Auto-run for this page" matching matching-scripts-section state]
+     [scripts-section sections-collapsed :other-scripts "Auto-run not matching this page" other-autorun other-scripts-section state]
+     [scripts-section sections-collapsed :libraries "Libraries" library libraries-section state]
      (when (seq special)
-       [collapsible-section {:id :special
-                             :title "Special"
-                             :expanded? (not (:special sections-collapsed))
-                             :badge-count (count special)
-                             :max-height (str (+ 50 (* 105 (max 1 (count special)))) "px")}
-        [special-scripts-section state]])
+       [scripts-section sections-collapsed :special "Special" special special-scripts-section state])
      [collapsible-section {:id :settings
                            :title "Settings"
                            :expanded? (not (:settings sections-collapsed))
@@ -784,12 +780,7 @@
                              :title "Dev Tools"
                              :expanded? (not (:dev-tools sections-collapsed))}
         [dev-tools-section state]])
-     [view-elements/app-footer {:elements/wrapper-class "popup-footer"
-                                :elements/sponsor-status (storage/sponsor-active? state)
-                                :elements/on-sponsor-click #(dispatch! [[:popup/ax.check-sponsor]])
-                                :elements/creator-menu-open? (:ui/creator-menu-open? state)
-                                :elements/on-creator-trigger-click #(dispatch! [[:popup/ax.toggle-creator-menu]])
-                                :elements/on-creator-menu-close #(dispatch! [[:popup/ax.close-creator-menu]])}]]))
+     [popup-footer state]]))
 
 (defn render! []
   (r/render (js/document.getElementById "app")
