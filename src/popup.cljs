@@ -783,107 +783,94 @@
   (r/render (js/document.getElementById "app")
             [popup-ui @!state]))
 
+(defn- handle-runtime-message [message _sender _send-response]
+  (case (.-type message)
+    "connections-changed"
+    (dispatch! [[:db/ax.assoc :repl/connections (.-connections message)]])
+    "fs-sync-status-changed"
+    (dispatch! [[:db/ax.assoc :fs/sync-tab-id (.-fsSyncTabId message)]])
+    "runtime-status"
+    (dispatch! [[:popup/ax.handle-runtime-status
+                 {:tab-id (aget message "tab-id")
+                  :errors (aget message "errors")}]])
+    nil)
+  false)
+
+(defn- handle-system-banner-message [message _sender _send-response]
+  (when (= "system-banner" (.-type message))
+    (dispatch! [[:popup/ax.handle-system-banner
+                 {:event-type (aget message "event-type")
+                  :operation (aget message "operation")
+                  :script-name (aget message "script-name")
+                  :error (aget message "error")
+                  :unchanged (aget message "unchanged")
+                  :bulk-id (aget message "bulk-id")
+                  :bulk-count (aget message "bulk-count")
+                  :bulk-index (aget message "bulk-index")}]]))
+  false)
+
+(defn- handle-scripts-storage-change [changes area]
+  (when (and (= area "local") (.-scripts changes))
+    (let [scripts-change (.-scripts changes)
+          old-scripts (when (.-oldValue scripts-change)
+                        (script-utils/parse-scripts (.-oldValue scripts-change) {:extract-manifest mp/extract-manifest}))
+          new-scripts (when (.-newValue scripts-change)
+                        (script-utils/parse-scripts (.-newValue scripts-change) {:extract-manifest mp/extract-manifest}))]
+      (dispatch! [[:popup/ax.load-scripts]
+                  [:popup/ax.load-runtime-status]])
+      (when (and old-scripts new-scripts)
+        (let [{:keys [added modified]} (script-utils/diff-scripts old-scripts new-scripts)
+              changed-names (concat added modified)]
+          (when (seq changed-names)
+            (dispatch! [[:popup/ax.mark-scripts-modified (vec changed-names)]])))))))
+
+(defn- handle-sponsor-storage-change [changes area]
+  (when (= area "local")
+    (let [status-change (.-sponsorStatus changes)
+          checked-change (.-sponsorCheckedAt changes)]
+      (when (or status-change checked-change)
+        (dispatch! (cond-> []
+                     status-change
+                     (conj [:db/ax.assoc :sponsor/status (boolean (.-newValue status-change))])
+                     checked-change
+                     (conj [:db/ax.assoc :sponsor/checked-at (.-newValue checked-change)])))))))
+
+(defn- handle-default-ports-change [changes area]
+  (when (and (= area "local")
+             (or (aget changes "defaultNreplPort")
+                 (aget changes "defaultWsPort")))
+    (.then (popup-utils/get-active-tab)
+           (fn [tab]
+             (let [key (port-effects/storage-key tab)]
+               (js/chrome.storage.local.get
+                #js ["defaultNreplPort" "defaultWsPort" key]
+                (fn [result]
+                  (let [new-defaults {:nrepl (str (or (aget result "defaultNreplPort") "3339"))
+                                      :ws (str (or (aget result "defaultWsPort") "3340"))}
+                        saved (aget result key)
+                        domain-ports (when saved
+                                       (let [nrepl (.-nreplPort saved)
+                                             ws (.-wsPort saved)]
+                                         (when (or (some? nrepl) (some? ws))
+                                           (cond-> {}
+                                             (some? nrepl) (assoc :nrepl (str nrepl))
+                                             (some? ws) (assoc :ws (str ws))))))]
+                    (dispatch! [[:popup/ax.on-default-ports-changed new-defaults domain-ports]])))))))))
+
 (defn init! []
   (log/info "Popup" "Init!")
-  ;; Install global error handlers for test mode
   (test-logger/install-global-error-handlers! "popup" js/window)
   (add-watch !state :popup/render (fn [_ _ _ _] (render!)))
-
-  ;; Detect browser features
   (dispatch! [[:popup/ax.set-brave-detected (some? (.-brave js/navigator))]])
-
   (render!)
-
-  ;; Enable transitions after first paint (prevents animation on popup open)
   (js/requestAnimationFrame
    (fn [] (js/requestAnimationFrame
            (fn [] (.add (.-classList js/document.body) "ready")))))
-
-  ;; Listen for connection changes from background
-  (js/chrome.runtime.onMessage.addListener
-   (fn [message _sender _send-response]
-     (when (= "connections-changed" (.-type message))
-       (let [connections (.-connections message)]
-         (dispatch! [[:db/ax.assoc :repl/connections connections]])))
-     (when (= "fs-sync-status-changed" (.-type message))
-       (dispatch! [[:db/ax.assoc :fs/sync-tab-id (.-fsSyncTabId message)]]))
-     (when (= "runtime-status" (.-type message))
-       (dispatch! [[:popup/ax.handle-runtime-status
-                    {:tab-id (aget message "tab-id")
-                     :errors (aget message "errors")}]]))
-     ;; Return false - we don't send async response
-     false))
-
-  ;; Listen for FS sync events from background (show errors to user)
-  (js/chrome.runtime.onMessage.addListener
-   (fn [message _sender _send-response]
-     (when (= "system-banner" (.-type message))
-       (dispatch! [[:popup/ax.handle-system-banner
-                    {:event-type (aget message "event-type")
-                     :operation (aget message "operation")
-                     :script-name (aget message "script-name")
-                     :error (aget message "error")
-                     :unchanged (aget message "unchanged")
-                     :bulk-id (aget message "bulk-id")
-                     :bulk-count (aget message "bulk-count")
-                     :bulk-index (aget message "bulk-index")}]]))
-     ;; Return false - we don't send async response
-     false))
-
-  ;; Listen for storage changes (scripts modified via REPL, panel, etc.)
-  (js/chrome.storage.onChanged.addListener
-   (fn [changes area]
-     (when (and (= area "local") (.-scripts changes))
-       (let [scripts-change (.-scripts changes)
-             old-scripts (when (.-oldValue scripts-change)
-                           (script-utils/parse-scripts (.-oldValue scripts-change) {:extract-manifest mp/extract-manifest}))
-             new-scripts (when (.-newValue scripts-change)
-                           (script-utils/parse-scripts (.-newValue scripts-change) {:extract-manifest mp/extract-manifest}))]
-         ;; Always reload scripts and runtime status to update UI
-         (dispatch! [[:popup/ax.load-scripts]
-                     [:popup/ax.load-runtime-status]])
-         ;; If we have both old and new, diff to find modified scripts
-         (when (and old-scripts new-scripts)
-           (let [{:keys [added modified]} (script-utils/diff-scripts old-scripts new-scripts)
-                 changed-names (concat added modified)]
-             (when (seq changed-names)
-               (dispatch! [[:popup/ax.mark-scripts-modified (vec changed-names)]]))))))))
-  ;; Listen for sponsor status changes
-  (js/chrome.storage.onChanged.addListener
-   (fn [changes area]
-     (when (= area "local")
-       (let [status-change (.-sponsorStatus changes)
-             checked-change (.-sponsorCheckedAt changes)]
-         (when (or status-change checked-change)
-           (dispatch! (cond-> []
-                        status-change
-                        (conj [:db/ax.assoc :sponsor/status (boolean (.-newValue status-change))])
-                        checked-change
-                        (conj [:db/ax.assoc :sponsor/checked-at (.-newValue checked-change)]))))))))
-  ;; Listen for default port changes (cascade to inherited domains)
-  (js/chrome.storage.onChanged.addListener
-   (fn [changes area]
-     (when (and (= area "local")
-                (or (aget changes "defaultNreplPort")
-                    (aget changes "defaultWsPort")))
-       (.then (popup-utils/get-active-tab)
-              (fn [tab]
-                (let [key (port-effects/storage-key tab)]
-                  ;; Re-read all port data to get consistent state
-                  (js/chrome.storage.local.get
-                   #js ["defaultNreplPort" "defaultWsPort" key]
-                   (fn [result]
-                     (let [new-defaults {:nrepl (str (or (aget result "defaultNreplPort") "3339"))
-                                         :ws (str (or (aget result "defaultWsPort") "3340"))}
-                           saved (aget result key)
-                           domain-ports (when saved
-                                          (let [nrepl (.-nreplPort saved)
-                                                ws (.-wsPort saved)]
-                                            (when (or (some? nrepl) (some? ws))
-                                              (cond-> {}
-                                                (some? nrepl) (assoc :nrepl (str nrepl))
-                                                (some? ws) (assoc :ws (str ws))))))]
-                       (dispatch! [[:popup/ax.on-default-ports-changed new-defaults domain-ports]]))))))))))
+  (js/chrome.runtime.onMessage.addListener handle-runtime-message)
+  (js/chrome.runtime.onMessage.addListener handle-system-banner-message)
+  (js/chrome.storage.onChanged.addListener handle-scripts-storage-change)
+  (js/chrome.storage.onChanged.addListener handle-sponsor-storage-change)
+  (js/chrome.storage.onChanged.addListener handle-default-ports-change)
   (dispatch! [[:popup/ax.init-ports]
               [:popup/ax.check-status]
               [:popup/ax.load-scripts]
@@ -897,7 +884,6 @@
               [:popup/ax.load-sponsor-status]
               [:popup/ax.load-dev-sponsor-username]
               [:popup/ax.check-host-permission]])
-  ;; Lazy one-time migration: clean up redundant ports_* entries
   (js/setTimeout #(dispatch! [[:popup/ax.run-port-migration]]) 1000))
 
 ;; Start the app when DOM is ready
