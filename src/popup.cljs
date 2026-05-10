@@ -342,22 +342,27 @@
         :entering? entering?
         :runtime-error (get errors (:script/name script))}])))
 
+(defn- matching-url-shadow? [current-url shadow-item]
+  (and (not (script-utils/special-script? (:item shadow-item)))
+       (script-utils/get-matching-pattern current-url (:item shadow-item))))
+
 (defn matching-scripts-section [{:scripts/keys [list current-url]
                                  :ui/keys [scripts-shadow reveal-highlight-script-name recently-modified-scripts]
                                  :runtime/keys [errors]}]
   (let [matching-shadow (->> scripts-shadow
-                             (filterv #(and (not (script-utils/special-script? (:item %)))
-                                            (script-utils/get-matching-pattern current-url (:item %))))
+                             (filterv (partial matching-url-shadow? current-url))
                              (sort-by default-script-sort))
         user-scripts (filterv #(not (script-utils/builtin-script? %)) list)
         no-user-scripts? (empty? user-scripts)
-        example-pattern (script-utils/url-to-match-pattern current-url {:wildcard-scheme? true})]
+        example-pattern (script-utils/url-to-match-pattern current-url {:wildcard-scheme? true})
+        modified-set (or recently-modified-scripts #{})
+        error-map (or errors {})]
     [:div.script-list
      (if (seq matching-shadow)
        (render-script-items matching-shadow current-url
                             {:highlight-name reveal-highlight-script-name
-                             :modified-set (or recently-modified-scripts #{})
-                             :errors (or errors {})})
+                             :modified-set modified-set
+                             :errors error-map})
        [matching-scripts-empty-state no-user-scripts? example-pattern])]))
 
 ;; =============================================================================
@@ -397,15 +402,18 @@
     :ui/keys [scripts-shadow reveal-highlight-script-name recently-modified-scripts]
     :runtime/keys [errors]}
    {:keys [filter-fn sort-fn empty-text empty-hint]}]
-  (let [filtered (->> scripts-shadow
+  (let [sort-comparator (or sort-fn default-script-sort)
+        filtered (->> scripts-shadow
                       (filterv filter-fn)
-                      (sort-by (or sort-fn default-script-sort)))]
+                      (sort-by sort-comparator))
+        modified-set (or recently-modified-scripts #{})
+        error-map (or errors {})]
     [:div.script-list
      (if (seq filtered)
        (render-script-items filtered current-url
                             {:highlight-name reveal-highlight-script-name
-                             :modified-set (or recently-modified-scripts #{})
-                             :errors (or errors {})})
+                             :modified-set modified-set
+                             :errors error-map})
        [:div.no-scripts
         empty-text
         [:div.no-scripts-hint empty-hint]])]))
