@@ -149,6 +149,52 @@
     (catch :default _
       nil)))
 
+(defn- report-resolution-errors!
+  "Report dependency resolution errors to console and background."
+  [errors current-url test-mode?]
+  (doseq [err errors]
+    (js/console.error "[Epupp Loader] Resolution error:" (:error/message err)))
+  (report-errors-to-background! errors current-url)
+  (log-test-event! "LOADER_RESOLUTION_ERROR"
+                   #js {:count (count errors)
+                        :messages (clj->js (mapv :error/message errors))}
+                   test-mode?))
+
+(defn- ^:async inject-vendor-files!
+  "Inject vendor files sequentially in dependency order."
+  [vendor-steps]
+  (loop [remaining vendor-steps]
+    (when (seq remaining)
+      (let [url (.getURL js/chrome.runtime (:step/path (first remaining)))]
+        (js-await (inject-script-and-wait! url))
+        (recur (rest remaining))))))
+
+(defn- ^:async inject-scittle-and-vendor!
+  "Inject Scittle core, disable auto-eval, and inject vendor files sequentially."
+  [vendor-steps]
+  (let [scittle-url (.getURL js/chrome.runtime "vendor/scittle.js")
+        scittle-start (.now js/performance)]
+    (js-await (inject-script-and-wait! scittle-url))
+    (js/console.log "[Epupp Loader] Scittle loaded in"
+                    (.toFixed (- (.now js/performance) scittle-start) 1) "ms")
+    (js-await (inject-script-and-wait!
+               (.getURL js/chrome.runtime "disable-scittle-auto-eval.js")))
+    (when (seq vendor-steps)
+      (js/console.log "[Epupp Loader] Injecting" (count vendor-steps) "vendor files")
+      (js-await (inject-vendor-files! vendor-steps)))))
+
+(defn- inject-scripts-and-trigger!
+  "Inject library/root scripts and trigger Scittle evaluation."
+  [script-steps]
+  (doseq [step script-steps]
+    (inject-userscript! (str "userscript-" (:step/id step))
+                        (:step/code step)))
+  (let [trigger-url (.getURL js/chrome.runtime "trigger-scittle.js")
+        trigger-el (inject-script! trigger-url)]
+    (set! (.-onerror trigger-el)
+          (fn [e]
+            (js/console.error "[Epupp Loader] Failed to load trigger-scittle.js!" e)))))
+
 (defn ^:async load-scripts!
   "Main loader: read storage, parse manifests, resolve dependencies,
    inject Scittle + vendor files + scripts in correct order."
@@ -162,69 +208,24 @@
           all-scripts (script-utils/parse-scripts
                        raw-scripts
                        {:extract-manifest manifest-parser/extract-manifest})]
-
       (log-test-event! "LOADER_RUN"
                        #js {:url current-url
                             :readyState js/document.readyState}
                        test-mode?)
-
       (let [matching (get-matching-early-scripts all-scripts current-url)]
         (if (empty? matching)
           (js/console.log "[Epupp Loader] No matching early scripts for" current-url)
-          (do
+          (let [plan (dep-resolver/resolve-execution-plan (vec matching) all-scripts ext-dep-cache)
+                errors (:plan/errors plan)
+                steps (:plan/steps plan)
+                vendor-steps (filterv #(= :vendor-file (:step/type %)) steps)
+                script-steps (filterv #(contains? #{:library-script :root-script :ext-dep-script} (:step/type %))
+                                      steps)]
+            (when (seq errors)
+              (report-resolution-errors! errors current-url test-mode?))
             (js/console.log "[Epupp Loader] Found" (count matching) "matching scripts")
-
-            ;; Resolve dependency graph
-            (let [plan (dep-resolver/resolve-execution-plan (vec matching) all-scripts ext-dep-cache)
-                  errors (:plan/errors plan)
-                  steps (:plan/steps plan)
-                  vendor-steps (filterv #(= :vendor-file (:step/type %)) steps)
-                  script-steps (filterv #(contains? #{:library-script :root-script :ext-dep-script} (:step/type %))
-                                        steps)]
-
-              ;; Report resolution errors
-              (when (seq errors)
-                (doseq [err errors]
-                  (js/console.error "[Epupp Loader] Resolution error:" (:error/message err)))
-                (report-errors-to-background! errors current-url)
-                (log-test-event! "LOADER_RESOLUTION_ERROR"
-                                 #js {:count (count errors)
-                                      :messages (clj->js (mapv :error/message errors))}
-                                 test-mode?))
-
-              ;; Inject Scittle
-              (let [scittle-url (.getURL js/chrome.runtime "vendor/scittle.js")
-                    scittle-start (.now js/performance)]
-                (js-await (inject-script-and-wait! scittle-url))
-                (let [load-time (.toFixed (- (.now js/performance) scittle-start) 1)]
-                  (js/console.log "[Epupp Loader] Scittle loaded in" load-time "ms"))
-                ;; Disable Scittle's built-in DOMContentLoaded auto-eval.
-                ;; Without this, Scittle re-evaluates all script tags when
-                ;; DOMContentLoaded fires, causing double execution.
-                (let [disable-url (.getURL js/chrome.runtime "disable-scittle-auto-eval.js")]
-                  (js-await (inject-script-and-wait! disable-url)))
-
-                ;; Inject vendor files sequentially (dependency order matters)
-                (when (seq vendor-steps)
-                  (js/console.log "[Epupp Loader] Injecting" (count vendor-steps) "vendor files")
-                  (loop [remaining vendor-steps]
-                    (when (seq remaining)
-                      (let [step (first remaining)
-                            url (.getURL js/chrome.runtime (:step/path step))]
-                        (js-await (inject-script-and-wait! url))
-                        (recur (rest remaining))))))
-
-                ;; Inject library and root scripts in dependency order
-                (doseq [step script-steps]
-                  (inject-userscript! (str "userscript-" (:step/id step))
-                                      (:step/code step)))
-
-                ;; Trigger Scittle evaluation
-                (let [trigger-url (.getURL js/chrome.runtime "trigger-scittle.js")
-                      trigger-el (inject-script! trigger-url)]
-                  (set! (.-onerror trigger-el)
-                        (fn [e]
-                          (js/console.error "[Epupp Loader] Failed to load trigger-scittle.js!" e))))))))))
+            (js-await (inject-scittle-and-vendor! vendor-steps))
+            (inject-scripts-and-trigger! script-steps)))))
     (catch :default err
       (js/console.error "[Epupp Loader] Error:" err))))
 

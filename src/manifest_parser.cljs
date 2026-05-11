@@ -41,6 +41,24 @@
 
 
 
+(defn- coerce-manifest-values
+  "Coerce raw manifest values into their derived/validated forms."
+  [raw-script-name raw-run-at raw-inject]
+  (let [script-name (when raw-script-name
+                      (script-utils/normalize-script-name raw-script-name))
+        name-normalized? (and (some? raw-script-name)
+                              (not= raw-script-name script-name))
+        run-at-invalid? (and (some? raw-run-at)
+                             (not (contains? valid-run-at-values raw-run-at)))
+        run-at (if (or (nil? raw-run-at) run-at-invalid?)
+                 default-run-at
+                 raw-run-at)]
+    {:script-name script-name
+     :name-normalized? name-normalized?
+     :run-at run-at
+     :run-at-invalid? run-at-invalid?
+     :inject (normalize-inject raw-inject)}))
+
 (defn extract-manifest
   "Extracts Epupp manifest data from code string containing ^{:epupp/...} metadata.
    Returns a rich map with:
@@ -60,41 +78,24 @@
   (let [parsed (edn-data/parseEDNString code #js {:mapAs "object" :keywordAs "string"})
         found-keys (get-epupp-keys parsed)]
     (when (seq found-keys)
-      (let [;; Raw values from manifest
-            raw-script-name (aget parsed "epupp/script-name")
-            auto-run-match (aget parsed "epupp/auto-run-match")
+      (let [raw-script-name (aget parsed "epupp/script-name")
+            raw-run-at (aget parsed "epupp/run-at")
+            coerced (coerce-manifest-values raw-script-name
+                                            raw-run-at
+                                            (aget parsed "epupp/inject"))
             description (let [d (aget parsed "epupp/description")]
                           (when (string? d) d))
-            raw-run-at (aget parsed "epupp/run-at")
-            raw-inject (aget parsed "epupp/inject")
-            library? (boolean (aget parsed "epupp/library?"))
-            ;; Coerced values
-            script-name (when raw-script-name
-                          (script-utils/normalize-script-name raw-script-name))
-            name-normalized? (and raw-script-name
-                                  (not= raw-script-name script-name))
-            run-at-invalid? (and raw-run-at
-                                 (not (contains? valid-run-at-values raw-run-at)))
-            run-at (if (or (nil? raw-run-at) run-at-invalid?)
-                     default-run-at
-                     raw-run-at)
-            inject-urls (normalize-inject raw-inject)
-            ;; Identify unknown keys
             unknown-keys (->> found-keys
                               (remove #(contains? known-epupp-keys %))
                               vec)]
-        {:script-name script-name
-         :raw-script-name raw-script-name
-         :name-normalized? name-normalized?
-         :auto-run-match auto-run-match
-         :description description
-         :run-at run-at
-         :raw-run-at raw-run-at
-         :run-at-invalid? run-at-invalid?
-         :inject inject-urls
-         :library? library?
-         :found-keys found-keys
-         :unknown-keys unknown-keys}))))
+        (merge coerced
+               {:raw-script-name raw-script-name
+                :auto-run-match (aget parsed "epupp/auto-run-match")
+                :description description
+                :raw-run-at raw-run-at
+                :library? (boolean (aget parsed "epupp/library?"))
+                :found-keys found-keys
+                :unknown-keys unknown-keys})))))
 
 (defn update-manifest-script-name
   "Update :epupp/script-name in the manifest section of code, if present.

@@ -59,6 +59,44 @@
    [:a.creator-menu-item {:href "https://x.com/pappapez" :target "_blank"}
     [icons/twitter-x {:size 14}] [:span "@pappapez"]]])
 
+(defn- footer-logos []
+  [:div.footer-logos
+   [:a {:href "https://github.com/babashka/sci"
+        :target "_blank"
+        :title "SCI - Small Clojure Interpreter"}
+    [:img {:src "images/sci.png" :alt "SCI"}]]
+   [:a {:href "https://clojurescript.org/"
+        :target "_blank"
+        :title "ClojureScript"}
+    [:img {:src "images/cljs.svg" :alt "ClojureScript"}]]
+   [:a {:href "https://clojure.org/"
+        :target "_blank"
+        :title "Clojure"}
+    [:img {:src "images/clojure.png" :alt "Clojure"}]]])
+
+(defn- footer-credits
+  [{:elements/keys [sponsor-status on-sponsor-click on-creator-trigger-click]}]
+  [:div.footer-credits
+   [:span.iconed-link
+    [icons/github {:size 16}]
+    [:a {:href "https://github.com/PEZ/epupp"
+         :target "_blank"
+         :title "https://github.com/PEZ/epupp"}
+     "Open Source"]]
+   [:span.creator-trigger {:on-click on-creator-trigger-click}
+    "Created by "
+    [:span.creator-link "Peter Strömberg"]
+    " a.k.a. PEZ"]
+   [:button.footer-sponsor-heart
+    {:on-click on-sponsor-click
+     :title (when-not sponsor-status
+              "Click to update sponsor status")}
+    [icons/heart {:size 14
+                  :filled? sponsor-status
+                  :class (str "sponsor-heart-icon"
+                              (when sponsor-status " sponsor-heart-filled"))}]
+    (if sponsor-status "Thank you for sponsoring!" "Please sponsor me")]])
+
 (defn app-footer
   "Common footer component for both popup and panel.
    Options:
@@ -69,49 +107,19 @@
    - :elements/on-creator-trigger-click: click handler for creator trigger
    - :elements/on-creator-menu-close: click handler to close creator menu"
   [{:elements/keys [wrapper-class sponsor-status on-sponsor-click
-                    creator-menu-open? on-creator-trigger-click on-creator-menu-close]}]
+                    creator-menu-open? on-creator-menu-close]
+    :as opts}]
   [:div {:class (str "app-footer " wrapper-class)}
    [:div.footer-version
     "Epupp " (.-version (.getManifest js/chrome.runtime))]
    [:div.footer-powered
-       "Powered by "
-       [:a {:href "https://github.com/babashka/scittle"
-            :target "_blank"
-            :title "Scittle - Small Clojure Interpreter exposed for script tags"}
-        "Scittle"]]
-   [:div.footer-logos
-    [:a {:href "https://github.com/babashka/sci"
+    "Powered by "
+    [:a {:href "https://github.com/babashka/scittle"
          :target "_blank"
-         :title "SCI - Small Clojure Interpreter"}
-     [:img {:src "images/sci.png" :alt "SCI"}]]
-    [:a {:href "https://clojurescript.org/"
-         :target "_blank"
-         :title "ClojureScript"}
-     [:img {:src "images/cljs.svg" :alt "ClojureScript"}]]
-    [:a {:href "https://clojure.org/"
-         :target "_blank"
-         :title "Clojure"}
-     [:img {:src "images/clojure.png" :alt "Clojure"}]]]
-   [:div.footer-credits
-    [:span.iconed-link
-     [icons/github {:size 16}]
-     [:a {:href "https://github.com/PEZ/epupp"
-          :target "_blank"
-          :title "https://github.com/PEZ/epupp"}
-      "Open Source"]]
-    [:span.creator-trigger {:on-click on-creator-trigger-click}
-     "Created by "
-     [:span.creator-link "Peter Strömberg"]
-     " a.k.a. PEZ"]
-    [:button.footer-sponsor-heart
-     {:on-click on-sponsor-click
-      :title (when-not sponsor-status
-               "Click to update sponsor status")}
-     [icons/heart {:size 14
-                   :filled? sponsor-status
-                   :class (str "sponsor-heart-icon"
-                               (when sponsor-status " sponsor-heart-filled"))}]
-     (if sponsor-status "Thank you for sponsoring!" "Please sponsor me")]]
+         :title "Scittle - Small Clojure Interpreter exposed for script tags"}
+     "Scittle"]]
+   [footer-logos]
+   [footer-credits opts]
    (when creator-menu-open?
      [:div
       [creator-menu {:elements/on-sponsor-click on-sponsor-click
@@ -121,6 +129,19 @@
 ;; ============================================================
 ;; Shared UI Components
 ;; ============================================================
+
+(defn- button-classes
+  "Compute CSS class string for action button."
+  [variant size class]
+  (let [variant-class (when variant (str "btn-" variant))
+        size-class (case size
+                     :sm "btn-sm"
+                     :lg "btn-lg"
+                     nil)]
+    (str "btn"
+         (when variant-class (str " " variant-class))
+         (when size-class (str " " size-class))
+         (when class (str " " class)))))
 
 (defn action-button
   "Reusable button component with consistent styling.
@@ -136,17 +157,7 @@
 
    Note: In Squint, keywords are strings so :primary becomes \"primary\""
   [{:button/keys [variant size disabled? icon on-click class title id]} label]
-  (let [;; In Squint, keywords are strings, so (str \"btn-\" :primary) => \"btn-primary\"
-        variant-class (when variant (str "btn-" variant))
-        size-class (case size
-                     :sm "btn-sm"
-                     :lg "btn-lg"
-                     nil)
-        classes (str "btn "
-                     #_"btn-untitled "
-                     (when variant-class (str " " variant-class))
-                     (when size-class (str " " size-class))
-                     (when class (str " " class)))]
+  (let [classes (button-classes variant size class)]
     [:button {:class classes
               :disabled disabled?
               :on-click on-click
