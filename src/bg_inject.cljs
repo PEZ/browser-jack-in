@@ -10,71 +10,64 @@
 ;; Page Context Execution
 ;; ============================================================
 
+(defn- ^:async ensure-tab-permission! [tab-id]
+  (let [has-perm? (js-await (permissions/check-tab-permission tab-id))]
+    (when-not has-perm?
+      (throw (js/Error. "Missing host permission for the tab")))))
+
+(defn- execute-script-in-world
+  "Execute a function in the specified world via chrome.scripting.executeScript.
+   Returns a promise resolving to the first result value."
+  [tab-id world func args]
+  (js/Promise.
+   (fn [resolve reject]
+     (js/chrome.scripting.executeScript
+      #js {:target #js {:tabId tab-id}
+           :world world
+           :func func
+           :args (clj->js (vec args))}
+      (fn [results]
+        (if js/chrome.runtime.lastError
+          (reject (js/Error. (.-message js/chrome.runtime.lastError)))
+          (resolve (when (seq results) (.-result (first results))))))))))
+
 (defn ^:async execute-in-page
   "Execute a function in page context (MAIN world).
    Checks host permission first (Firefox treats these as revocable).
    Returns a promise."
   [tab-id func & args]
-  (let [has-perm? (js-await (permissions/check-tab-permission tab-id))]
-    (when-not has-perm?
-      (throw (js/Error. "Missing host permission for the tab")))
-    (js-await
-     (js/Promise.
-      (fn [resolve reject]
-        (js/chrome.scripting.executeScript
-         #js {:target #js {:tabId tab-id}
-              :world "MAIN"
-              :func func
-              :args (clj->js (vec args))}
-         (fn [results]
-           (if js/chrome.runtime.lastError
-             (reject (js/Error. (.-message js/chrome.runtime.lastError)))
-             (resolve (when (seq results) (.-result (first results))))))))))))
+  (js-await (ensure-tab-permission! tab-id))
+  (js-await (execute-script-in-world tab-id "MAIN" func args)))
 
 (defn ^:async execute-in-isolated
   "Execute a function in ISOLATED world (content script context).
    Checks host permission first (Firefox treats these as revocable).
    Returns a promise. Safe from page CSP restrictions."
   [tab-id func & args]
-  (let [has-perm? (js-await (permissions/check-tab-permission tab-id))]
-    (when-not has-perm?
-      (throw (js/Error. "Missing host permission for the tab")))
-    (js-await
-     (js/Promise.
-      (fn [resolve reject]
-        (js/chrome.scripting.executeScript
-         #js {:target #js {:tabId tab-id}
-              :world "ISOLATED"
-              :func func
-              :args (clj->js (vec args))}
-         (fn [results]
-           (if js/chrome.runtime.lastError
-             (reject (js/Error. (.-message js/chrome.runtime.lastError)))
-             (resolve (when (seq results) (.-result (first results))))))))))))
+  (js-await (ensure-tab-permission! tab-id))
+  (js-await (execute-script-in-world tab-id "ISOLATED" func args)))
 
 (defn ^:async inject-content-script
   "Inject a script file into ISOLATED world.
    Checks host permission first (Firefox treats these as revocable)."
   [tab-id file]
-  (let [has-perm? (js-await (permissions/check-tab-permission tab-id))]
-    (when-not has-perm?
-      (throw (js/Error. "Missing host permission for the tab")))
-    (js-await
-     (js/Promise.
-      (fn [resolve reject]
-        (log/debug "Background:Inject" "Injecting" file "into tab" tab-id)
-        (js/chrome.scripting.executeScript
-         #js {:target #js {:tabId tab-id}
-              :files #js [file]}
-         (fn [results]
-           (log/debug "Background:Inject" "executeScript callback, results:" results "lastError:" js/chrome.runtime.lastError)
-           (if js/chrome.runtime.lastError
-             (do
-               (log/error "Background:Inject" "Error:" (.-message js/chrome.runtime.lastError))
-               (reject (js/Error. (.-message js/chrome.runtime.lastError))))
-             (do
-               (log/debug "Background:Inject" "Success, results:" (js/JSON.stringify results))
-               (resolve true))))))))))
+  (js-await (ensure-tab-permission! tab-id))
+  (js-await
+   (js/Promise.
+    (fn [resolve reject]
+      (log/debug "Background:Inject" "Injecting" file "into tab" tab-id)
+      (js/chrome.scripting.executeScript
+       #js {:target #js {:tabId tab-id}
+            :files #js [file]}
+       (fn [results]
+         (log/debug "Background:Inject" "executeScript callback, results:" results "lastError:" js/chrome.runtime.lastError)
+         (if js/chrome.runtime.lastError
+           (do
+             (log/error "Background:Inject" "Error:" (.-message js/chrome.runtime.lastError))
+             (reject (js/Error. (.-message js/chrome.runtime.lastError))))
+           (do
+             (log/debug "Background:Inject" "Success, results:" (js/JSON.stringify results))
+             (resolve true)))))))))
 
 ;; ============================================================
 ;; Page-Context Functions (pure JS, no Squint runtime)
@@ -233,8 +226,9 @@
   "Ensure Scittle is loaded in the page.
    icon-state: Current icon state for the tab (keyword, e.g. :connected, :disconnected)"
   [dispatch! tab-id icon-state]
-  (let [status (js-await (execute-in-page tab-id check-scittle-fn))]
-    (when-not (and status (.-hasScittle status))
+  (let [status (js-await (execute-in-page tab-id check-scittle-fn))
+        scittle-loaded? (and status (.-hasScittle status))]
+    (when-not scittle-loaded?
       (let [scittle-url (js/chrome.runtime.getURL "vendor/scittle.js")]
         (js-await (execute-in-page tab-id inject-script-fn scittle-url false))
         (js-await (poll-until
@@ -242,11 +236,8 @@
                    (fn [r] (and r (.-hasScittle r)))
                    5000
                    "Timeout waiting for Scittle"))
-        ;; Update icon to show Scittle is injected (stays disconnected/white)
-        ;; Only if not already connected (gold)
         (when (not= :connected icon-state)
           (js-await (bg-icon/update-icon-for-tab! dispatch! tab-id :disconnected)))
-        ;; Log test event for E2E tests (after icon update so tests see stable state)
         (js-await (test-logger/log-event! "SCITTLE_LOADED" {:tab-id tab-id}))))
     true))
 
@@ -300,6 +291,11 @@
 ;; Script Injection
 ;; ============================================================
 
+(defn- throw-on-inject-failure! [file response]
+  (when (and response (false? (.-success response)))
+    (throw (js/Error. (str "Failed to inject library " file ": "
+                           (or (.-error response) "unknown error"))))))
+
 (defn ^:async inject-libs-sequentially!
   "Inject library files sequentially, awaiting each load.
    Checks each response for errors before continuing.
@@ -311,9 +307,45 @@
       (let [file (first remaining)
             url (js/chrome.runtime.getURL (str "vendor/" file))
             response (js-await (send-tab-message tab-id {:type "inject-script" :url url}))]
-        (when (and response (false? (.-success response)))
-          (throw (js/Error. (str "Failed to inject library " file ": "
-                                 (or (.-error response) "unknown error")))))
+        (throw-on-inject-failure! file response)
+        (recur (rest remaining))))))
+
+(defn- ^:async inject-vendor-steps!
+  "Inject vendor library files and verify their namespaces are available."
+  [tab-id vendor-steps vendor-namespaces]
+  (when (seq vendor-steps)
+    (let [vendor-files (mapv (fn [step]
+                               (subs (:step/path step) 7))
+                             vendor-steps)]
+      (js-await (test-logger/log-event! "INJECTING_LIBS" {:files vendor-files}))
+      (js-await (inject-libs-sequentially! tab-id vendor-files))
+      (js-await (test-logger/log-event! "LIBS_INJECTED" {:count (count vendor-files)}))
+      (when (seq vendor-namespaces)
+        (js-await (poll-until
+                   (fn [] (execute-in-page tab-id check-namespaces-fn vendor-namespaces))
+                   (fn [r] (and r (.-available r)))
+                   5000
+                   (str "Timeout waiting for library namespaces: "
+                        (.join (clj->js vendor-namespaces) ", "))))
+        (js-await (test-logger/log-event! "NAMESPACES_VERIFIED"
+                                          {:namespaces vendor-namespaces}))))))
+
+(defn- ^:async inject-script-steps!
+  "Inject userscript tags sequentially to preserve dependency order in the DOM.
+   Library scripts must appear before root scripts so that eval_script_tags
+   evaluates them in the correct namespace-definition order."
+  [tab-id script-steps]
+  (loop [remaining script-steps]
+    (when (seq remaining)
+      (let [step (first remaining)]
+        (js-await (send-tab-message tab-id {:type "inject-userscript"
+                                            :id (str "userscript-" (:step/id step))
+                                            :code (:step/code step)}))
+        (js-await (test-logger/log-event! "SCRIPT_INJECTED"
+                                          {:script-id (:step/id step)
+                                           :script-name (:step/name step)
+                                           :step-type (:step/type step)
+                                           :tab-id tab-id}))
         (recur (rest remaining))))))
 
 (defn ^:async execute-plan!
@@ -336,47 +368,11 @@
                                        :script-count (count script-steps)}))
     (when (or (seq vendor-steps) (seq script-steps))
       (try
-        ;; Inject content bridge and wait for readiness
         (js-await (inject-content-script tab-id "content-bridge.js"))
         (js-await (wait-for-bridge-ready tab-id))
-        ;; Clear any old userscript tags (prevents re-execution on bfcache navigation)
         (js-await (send-tab-message tab-id {:type "clear-userscripts"}))
-        ;; Inject vendor files sequentially via bridge
-        (when (seq vendor-steps)
-          (let [vendor-files (mapv (fn [step]
-                                     ;; step/path is "vendor/file.js", strip prefix for inject fn
-                                     (let [path (:step/path step)]
-                                       (subs path 7)))
-                                   vendor-steps)]
-            (js-await (test-logger/log-event! "INJECTING_LIBS" {:files vendor-files}))
-            (js-await (inject-libs-sequentially! tab-id vendor-files))
-            (js-await (test-logger/log-event! "LIBS_INJECTED" {:count (count vendor-files)}))
-            ;; Verify vendor namespace availability
-            (when (seq vendor-namespaces)
-              (js-await (poll-until
-                         (fn [] (execute-in-page tab-id check-namespaces-fn vendor-namespaces))
-                         (fn [r] (and r (.-available r)))
-                         5000
-                         (str "Timeout waiting for library namespaces: "
-                              (.join (clj->js vendor-namespaces) ", "))))
-              (js-await (test-logger/log-event! "NAMESPACES_VERIFIED"
-                                                {:namespaces vendor-namespaces})))))
-        ;; Inject script tags sequentially to preserve dependency order in the DOM.
-        ;; Library scripts must appear before root scripts so that eval_script_tags
-        ;; evaluates them in the correct namespace-definition order.
-        (loop [remaining script-steps]
-          (when (seq remaining)
-            (let [step (first remaining)]
-              (js-await (send-tab-message tab-id {:type "inject-userscript"
-                                                  :id (str "userscript-" (:step/id step))
-                                                  :code (:step/code step)}))
-              (js-await (test-logger/log-event! "SCRIPT_INJECTED"
-                                                {:script-id (:step/id step)
-                                                 :script-name (:step/name step)
-                                                 :step-type (:step/type step)
-                                                 :tab-id tab-id}))
-              (recur (rest remaining)))))
-        ;; Trigger Scittle to evaluate all script tags
+        (js-await (inject-vendor-steps! tab-id vendor-steps vendor-namespaces))
+        (js-await (inject-script-steps! tab-id script-steps))
         (js-await (execute-in-page tab-id trigger-scittle-fn))
         (js-await (test-logger/log-event! "EXECUTE_PLAN_COMPLETE" {:tab-id tab-id}))
         (catch :default err
