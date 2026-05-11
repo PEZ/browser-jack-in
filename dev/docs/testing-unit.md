@@ -13,7 +13,7 @@ bb test:watch  # Watch mode (Squint + Vitest in parallel)
 
 | Purpose | Path |
 |---------|------|
-| Source tests | `test/*.cljs` |
+| Source tests | `test/**/*.cljs` |
 | Compiled output | `build/test/**/*_test.mjs` |
 
 ## What to Unit Test

@@ -19,11 +19,17 @@ This document is a map of where the architecture lives in code.
 | `userscript_loader.cljs` | Content Script (ISOLATED) | Early script injection at document-start/end (compiled through Squint pipeline) |
 | `trigger-scittle.js` | Page Script (MAIN) | Triggers Scittle to evaluate injected tags |
 | `ws_bridge.cljs` | Page Script (MAIN) | Virtual WebSocket for Scittle REPL |
-| `popup.cljs` | Extension Popup | REPL connection UI, script management, settings |
-| `popup_actions.cljs` | Extension Popup | Pure popup actions for Uniflow |
-| `popup_utils.cljs` | Shared | Popup-specific pure helpers |
-| `panel.cljs` | DevTools Panel | Code evaluation, script editing |
-| `panel_actions.cljs` | DevTools Panel | Pure panel actions for Uniflow |
+| `popup.cljs` | Extension Popup | Entry point: state, dispatch!, init |
+| `popup/actions.cljs` | Extension Popup | Action router (delegates to domain modules) |
+| `popup/actions/*.cljs` | Extension Popup | Pure action handlers by domain (port, script, settings, UI, etc.) |
+| `popup/effects/*.cljs` | Extension Popup | Side effects by domain (connection, port, script, settings, etc.) |
+| `popup/views/*.cljs` | Extension Popup | Hiccup components by concern (connect, scripts, settings, etc.) |
+| `popup/utils.cljs` | Shared | Popup-specific pure helpers |
+| `panel.cljs` | DevTools Panel | Entry point: state, dispatch!, init |
+| `panel_actions.cljs` | DevTools Panel | Panel action router |
+| `panel/actions/*.cljs` | DevTools Panel | Pure action handlers by domain (eval, script, banner) |
+| `panel/effects.cljs` | DevTools Panel | Panel side effects |
+| `panel/views/*.cljs` | DevTools Panel | Hiccup components (editor, scripts, main layout) |
 | `devtools.cljs` | DevTools Entry | Registers the panel |
 | `storage.cljs` | Shared | Script CRUD, chrome.storage.local |
 | `url_matching.cljs` | Shared | URL pattern matching with storage |
@@ -76,9 +82,20 @@ graph LR
 
     subgraph "Action Layers"
         background_actions.cljs
-        popup_actions.cljs
+        popup/actions.cljs
         panel_actions.cljs
         bg_fs_dispatch.cljs
+    end
+
+    subgraph "Effects"
+        background_effects/
+        popup/effects/
+        panel/effects.cljs
+    end
+
+    subgraph "Views"
+        popup/views/
+        panel/views/
     end
 
     subgraph "Core Services"
@@ -89,7 +106,7 @@ graph LR
 
     subgraph "Utilities"
         background_utils.cljs
-        popup_utils.cljs
+        popup/utils.cljs
         script_utils.cljs
         manifest_parser.cljs
         scittle_libs.cljs
@@ -119,15 +136,18 @@ graph LR
     background.cljs --> scittle_libs.cljs
 
     %% Popup dependencies
-    popup.cljs --> popup_actions.cljs
-    popup.cljs --> popup_utils.cljs
+    popup.cljs --> popup/actions.cljs
+    popup.cljs --> popup/effects/
+    popup.cljs --> popup/views/
+    popup.cljs --> popup/utils.cljs
     popup.cljs --> reagami
     popup.cljs --> event_handler.cljs
     popup.cljs --> icons.cljc
-    popup.cljs --> script_utils.cljs
 
     %% Panel dependencies
     panel.cljs --> panel_actions.cljs
+    panel.cljs --> panel/effects.cljs
+    panel.cljs --> panel/views/
     panel.cljs --> reagami
     panel.cljs --> event_handler.cljs
     panel.cljs --> storage.cljs

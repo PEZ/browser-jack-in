@@ -6,13 +6,13 @@ This guide orients developers to quickly understand, navigate, and make surgical
 
 | What you need | Where to look |
 |--------------|---------------|
-| Popup logic & state | [src/popup.cljs](../../src/popup.cljs), [src/popup_actions.cljs](../../src/popup_actions.cljs) |
-| Panel logic & state | [src/panel.cljs](../../src/panel.cljs), [src/panel_actions.cljs](../../src/panel_actions.cljs) |
+| Popup logic & state | [src/popup.cljs](../../src/popup.cljs), [src/popup/actions/](../../src/popup/actions/) |
+| Panel logic & state | [src/panel.cljs](../../src/panel.cljs), [src/panel/actions/](../../src/panel/actions/) |
 | Shared components | [src/view_elements.cljs](../../src/view_elements.cljs) |
 | Event system core | [src/event_handler.cljs](../../src/event_handler.cljs) |
 | Icons | [src/icons.cljc](../../src/icons.cljc) |
 | Styling | [extension/design-tokens.css](../../extension/design-tokens.css), [css-architecture.md](architecture/css-architecture.md) |
-| Unit tests | [test/popup_actions_test.cljs](../../test/popup_actions_test.cljs), [test/panel_test.cljs](../../test/panel_test.cljs) |
+| Unit tests | [test/popup/](../../test/popup/), [test/panel_test.cljs](../../test/panel_test.cljs) |
 | E2E tests | [e2e/popup_*.cljs](../../e2e/), [e2e/panel_*.cljs](../../e2e/) |
 
 ## Architecture Overview
@@ -27,9 +27,9 @@ User Event → dispatch!([actions]) → handle-action (pure) → state update �
 
 ### Key Architectural Decisions
 
-1. **Action handlers are pure** - All decision logic lives in `*_actions.cljs` files, which have zero browser dependencies and are fully unit-testable.
+1. **Action handlers are pure** - All decision logic lives in action modules (e.g. `popup/actions/*.cljs`, `panel/actions/*.cljs`), which have zero browser dependencies and are fully unit-testable.
 
-2. **Effects are impure** - Side effects (Chrome APIs, storage, DOM) live in the main UI files (`popup.cljs`, `panel.cljs`) inside `perform-effect!`.
+2. **Effects are impure** - Side effects (Chrome APIs, storage, DOM) live in effect modules (e.g. `popup/effects/*.cljs`, `panel/effects.cljs`).
 
 3. **State drives rendering** - A single atom per view, watched via `add-watch` to trigger re-renders.
 
@@ -41,24 +41,30 @@ User Event → dispatch!([actions]) → handle-action (pure) → state update �
 
 ### Per-View Pattern
 
-Each view (popup, panel) follows this structure:
+Each view (popup, panel) follows the subsystem pattern:
 
 ```
-src/popup.cljs          # View: components, effects, render, init
-src/popup_actions.cljs  # Pure: action handlers (no browser deps)
-src/popup_utils.cljs    # Pure: helper functions
+src/popup.cljs              # Entry: state atom, dispatch!, init
+src/popup/
+  actions.cljs              # Action router (delegates to domain modules)
+  actions/*.cljs             # Pure action handlers by domain
+  effects/*.cljs             # Side-effecting modules by domain
+  utils.cljs                # Pure helper functions
+  views/*.cljs              # Hiccup view components by concern
 
-test/popup_actions_test.cljs  # Unit tests for actions
-e2e/popup_*.cljs              # E2E tests for full workflows
+test/popup/*.cljs           # Unit tests for actions and utils
+e2e/popup_*.cljs            # E2E tests for full workflows
 ```
 
 ### The Split Explained
 
-| File | Contains | Dependencies | Testable |
-|------|----------|--------------|----------|
-| `popup.cljs` | Components, effects, init | Chrome APIs, DOM | E2E only |
-| `popup_actions.cljs` | Action handlers | None | Unit tests |
-| `popup_utils.cljs` | Pure helpers | None | Unit tests |
+| Directory | Contains | Dependencies | Testable |
+|-----------|----------|--------------|----------|
+| `popup.cljs` | Entry point, init | Chrome APIs, DOM | E2E only |
+| `popup/actions/` | Action handlers | None | Unit tests |
+| `popup/effects/` | Side effects | Chrome APIs | E2E only |
+| `popup/views/` | Hiccup components | None | Unit tests |
+| `popup/utils.cljs` | Pure helpers | None | Unit tests |
 
 This separation enables fast TDD cycles on business logic without browser mocking.
 
@@ -84,7 +90,7 @@ This separation enables fast TDD cycles on business logic without browser mockin
 
 #### Port Cascade and Normalization
 
-The popup resolves REPL Connect ports via `normalize-domain-ports`, a pure function in `popup_actions.cljs`. Given default ports and per-domain ports from storage, it computes:
+The popup resolves REPL Connect ports via `normalize-domain-ports`, a pure function in `popup/actions/port_actions.cljs`. Given default ports and per-domain ports from storage, it computes:
 
 - **`:effective-ports`** - the ports to display (domain override if it differs from defaults, otherwise defaults)
 - **`:persist?`** - whether the per-domain entry should be stored (true only when ports differ from defaults)
@@ -303,11 +309,15 @@ See [css-architecture.md](architecture/css-architecture.md) for the layered CSS 
 
 | File | Purpose |
 |------|---------|
-| `src/popup.cljs` | Popup view: components, effects, initialization |
-| `src/popup_actions.cljs` | Popup action handlers (pure, testable) |
-| `src/popup_utils.cljs` | Popup helper functions |
-| `src/panel.cljs` | Panel view: components, effects, initialization |
-| `src/panel_actions.cljs` | Panel action handlers (pure, testable) |
+| `src/popup.cljs` | Popup entry point: state, dispatch!, init |
+| `src/popup/actions/` | Popup action handlers by domain (pure, testable) |
+| `src/popup/effects/` | Popup side effects by domain |
+| `src/popup/views/` | Popup hiccup components by concern |
+| `src/popup/utils.cljs` | Popup helper functions |
+| `src/panel.cljs` | Panel entry point: state, dispatch!, init |
+| `src/panel/actions/` | Panel action handlers by domain (pure, testable) |
+| `src/panel/effects.cljs` | Panel side effects |
+| `src/panel/views/` | Panel hiccup components by concern |
 | `src/view_elements.cljs` | Shared UI components |
 | `src/event_handler.cljs` | Uniflow dispatch system |
 | `src/icons.cljc` | SVG icon components |
@@ -316,9 +326,9 @@ See [css-architecture.md](architecture/css-architecture.md) for the layered CSS 
 
 | File | Tests |
 |------|-------|
-| `test/popup_actions_test.cljs` | Popup action state transitions |
+| `test/popup/actions_*_test.cljs` | Popup action state transitions (connection, scripts, settings, UI) |
 | `test/panel_test.cljs` | Panel action state transitions |
-| `test/popup_utils_test.cljs` | Popup utility functions |
+| `test/popup/utils_test.cljs` | Popup utility functions |
 | `e2e/popup_core_test.cljs` | REPL setup, scripts, settings |
 | `e2e/popup_connection_test.cljs` | Connection tracking |
 | `e2e/popup_autoconnect_test.cljs` | Auto-connect behavior |

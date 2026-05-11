@@ -155,9 +155,9 @@ blindly, which is correct - it is not a trust boundary.
 | `src/storage.cljs` | Storage keys, `sponsor-active?`, builtin catalog |
 | `src/view_elements.cljs` | `app-header` with sponsor heart button |
 | `src/popup.cljs` | Popup wiring, sponsor status loading, dev tools UI |
-| `src/popup_actions.cljs` | Popup actions for sponsor check, dev username |
+| `src/popup/actions/` | Popup actions for sponsor check, dev username |
 | `src/panel.cljs` | Panel wiring (same pattern as popup) |
-| `src/panel_actions.cljs` | Panel actions for sponsor check |
+| `src/panel/actions/` | Panel actions for sponsor check |
 | `src/content_bridge.cljs` | Whitelists `sponsor-status` message |
 | `src/background.cljs` | `handle-sponsor-status` handler (with pending check + URL verification), `update-sponsor-script-match!` |
 | `src/background_utils.cljs` | `sponsor-url-matches?`, `sponsor-script-id` constant |

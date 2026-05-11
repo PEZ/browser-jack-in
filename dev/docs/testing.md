@@ -48,7 +48,7 @@ bb test:e2e --grep "popup"
 
 ## What Goes Where?
 
-### Unit Tests (`test/*.cljs`)
+### Unit Tests (`test/**/*.cljs`)
 
 - Uniflow action handlers (pure state transitions)
 - URL pattern matching (`url-matches-pattern?`)

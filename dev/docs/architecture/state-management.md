@@ -60,7 +60,7 @@ decisions via `background_actions.cljs` and its sub-modules.
 
 Default REPL ports (nREPL and WebSocket) are stored in settings. Per-domain
 port overrides are stored separately. At startup and on settings changes,
-`normalize-domain-ports` in `popup_actions.cljs` resolves effective ports:
+`normalize-domain-ports` in `popup/actions/port_actions.cljs` resolves effective ports:
 
 - If a domain has no override, or its override matches the current defaults, it
   inherits the defaults (and any stale storage entry is cleared).
