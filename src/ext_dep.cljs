@@ -104,43 +104,49 @@
 ;; Fetch Engine
 ;; ============================================================
 
+(defn- extract-transitive-inject-urls
+  "Extract inject URLs from fetched code via manifest parsing.
+   Returns a vector of inject URL strings (empty if no manifest)."
+  [code parse-manifest-fn]
+  (if-let [manifest (when code (parse-manifest-fn code))]
+    (let [raw-inject (aget manifest "inject")]
+      (if (vector? raw-inject) raw-inject []))
+    []))
+
 (defn- ^:async fetch-and-cache-url!
   "Fetch a single ext dep URL and cache the result. Handles transitive deps.
-   Mutates resolved, errors, and visited atoms. Returns nil."
-  [url fetch-fn parse-manifest-fn now resolved errors visited]
-  (when-not (contains? @visited url)
-    (swap! visited conj url)
-    (js-await
-     (-> (fetch-fn url)
-         (.then (fn [code]
-                  (let [manifest (when code (parse-manifest-fn code))
-                        inject-urls (if manifest
-                                      (let [raw-inject (aget manifest "inject")]
-                                        (if (vector? raw-inject) raw-inject []))
-                                      [])
-                        transitive-ext-urls (extract-ext-dep-urls inject-urls)]
-                    (swap! resolved assoc url
-                           {:cache/code code
-                            :cache/url url
-                            :cache/inject inject-urls
-                            :cache/fetched-at now
-                            :cache/schema-version 1})
-                    transitive-ext-urls)))
-         (.then (fn [transitive-urls]
-                  (when (seq transitive-urls)
-                    (js/Promise.resolve
-                     (reduce (fn [chain t-url]
-                               (.then chain
-                                      (fn [_]
-                                        (fetch-and-cache-url! t-url fetch-fn parse-manifest-fn
-                                                              now resolved errors visited))))
-                             (js/Promise.resolve nil)
-                             transitive-urls)))))
-         (.catch (fn [e]
-                   (swap! errors conj {:error/type :ext-dep/fetch-failed
-                                       :error/phase :resolve
-                                       :error/dep-raw url
-                                       :error/message (str "Failed to fetch " url ": " (.-message e))})))))))
+   Mutates resolved, errors, and visited atoms in ctx. Returns nil."
+  [url ctx]
+  (let [{:keys [fetch-fn parse-manifest-fn now !resolved !errors !visited]} ctx]
+    (when-not (contains? @!visited url)
+      (swap! !visited conj url)
+      (js-await
+       (-> (fetch-fn url)
+           (.then (fn [code]
+                    (let [inject-urls (extract-transitive-inject-urls code parse-manifest-fn)
+                          transitive-ext-urls (extract-ext-dep-urls inject-urls)]
+                      (swap! !resolved assoc url
+                             {:cache/code code
+                              :cache/url url
+                              :cache/inject inject-urls
+                              :cache/fetched-at now
+                              :cache/schema-version 1})
+                      transitive-ext-urls)))
+           (.then (fn [transitive-urls]
+                    (when (seq transitive-urls)
+                      (js/Promise.resolve
+                       (reduce (fn [chain t-url]
+                                 (.then chain
+                                        (fn [_]
+                                          (fetch-and-cache-url! t-url ctx))))
+                               (js/Promise.resolve nil)
+                               transitive-urls)))))
+           (.catch (fn [e]
+                     (swap! !errors conj
+                            {:error/type :ext-dep/fetch-failed
+                             :error/phase :resolve
+                             :error/dep-raw url
+                             :error/message (str "Failed to fetch " url ": " (.-message e))}))))))))
 
 (defn ^:async resolve-and-fetch!
   "Resolve and fetch external dependencies, building cache entries.
@@ -164,8 +170,12 @@
      (reduce (fn [chain url]
                (.then chain
                       (fn [_]
-                        (fetch-and-cache-url! url fetch-fn parse-manifest-fn
-                                              now resolved errors visited))))
+                        (fetch-and-cache-url! url {:fetch-fn fetch-fn
+                                                   :parse-manifest-fn parse-manifest-fn
+                                                   :now now
+                                                   :!resolved resolved
+                                                   :!errors errors
+                                                   :!visited visited}))))
              (js/Promise.resolve nil)
              inject-urls))
     {:resolved @resolved

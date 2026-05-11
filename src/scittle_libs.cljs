@@ -34,17 +34,22 @@
    :scittle/react      {:catalog/files ["react.production.min.js" "react-dom.production.min.js"]
                         :catalog/internal true}})
 
+(defn- parse-scittle-url
+  "Parse a scittle:// URL, returning the library name or nil."
+  [url]
+  (when (string? url)
+    (when-let [[_ lib-name] (re-matches #"scittle://(.+)\.js" url)]
+      lib-name)))
+
 (defn resolve-scittle-url
   "Resolve scittle:// URL to library key (:scittle/lib-name keyword).
    Returns nil for invalid URLs, unknown libraries, or internal libraries."
   [url]
-  (when (string? url)
-    (when-let [[_ lib-name] (re-matches #"scittle://(.+)\.js" url)]
-      ;; In Squint, keywords are strings, so :scittle/pprint = "scittle/pprint"
-      (let [lib-key (str "scittle/" lib-name)]
-        (when-let [lib (get library-catalog lib-key)]
-          (when-not (:catalog/internal lib)
-            lib-key))))))
+  (when-let [lib-name (parse-scittle-url url)]
+    (let [lib-key (str "scittle/" lib-name)]
+      (when-let [lib (get library-catalog lib-key)]
+        (when-not (:catalog/internal lib)
+          lib-key)))))
 
 (defn get-library-files
   "Get the vendor file(s) for a library key.
@@ -73,27 +78,29 @@
       (visit lib-key)
       @result)))
 
+(defn- needs-react?
+  "Check if any library in the dependency chain needs React."
+  [all-deps lib-key]
+  (some (fn [k]
+          (when-let [l (get library-catalog k)]
+            (contains? (:catalog/deps l) :scittle/react)))
+        (conj all-deps lib-key)))
+
 (defn expand-inject
   "Expand a scittle:// require URL to ordered list of vendor files.
    Returns {:lib lib-key :files [...]} or nil if invalid.
    Includes all dependencies (internal deps like React injected first)."
   [url]
   (when-let [lib-key (resolve-scittle-url url)]
-    (when-let [lib (get library-catalog lib-key)]
-      (when-not (:catalog/internal lib)
+    (let [lib (get library-catalog lib-key)]
+      (when (and lib (not (:catalog/internal lib)))
         (let [all-deps (resolve-dependencies lib-key)
-              ;; Check if any dep needs React
-              needs-react? (some (fn [k]
-                                   (when-let [l (get library-catalog k)]
-                                     (contains? (:catalog/deps l) :scittle/react)))
-                                 (conj all-deps lib-key))
-              ;; Add internal deps first
-              internal-files (if needs-react?
+              internal-files (if (needs-react? all-deps lib-key)
                                (get-library-files :scittle/react)
                                [])]
           {:inject/lib lib-key
            :inject/files (vec (concat internal-files
-                                       (mapcat get-library-files all-deps)))})))))
+                                      (mapcat get-library-files all-deps)))})))))
 
 (defn collect-lib-files
   "Collect all library files from multiple scripts.
