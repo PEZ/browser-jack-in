@@ -5,6 +5,7 @@
             [log :as log]
             [manifest-parser :as mp]
             [script-utils :as script-utils]
+            [url-matching :as url-matching]
             [test-logger :as test-logger]))
 
 ;; ============================================================
@@ -261,7 +262,7 @@
   (js/chrome.devtools.inspectedWindow.eval
    "window.location.href"
    (fn [url _exception]
-     (when-let [pattern (script-utils/url-to-match-pattern url)]
+     (when-let [pattern (url-matching/url-to-match-pattern url)]
        (dispatch [(conj action pattern)])))))
 
 (defn- handle-check-sponsor! []

@@ -5,6 +5,7 @@
   (:require [storage :as storage]
             [url-matching :as url-matching]
             [script-utils :as script-utils]
+            [page-scriptability :as page-scriptability]
             [registration :as registration]
             [manifest-parser :as manifest-parser]
             [test-logger :as test-logger]
@@ -892,8 +893,8 @@
                 (fn [details]
                   (let [url (.-url details)]
                     (when (and (zero? (.-frameId details))
-                               (:scriptable? (script-utils/check-page-scriptability
-                                              url (script-utils/detect-browser-type))))
+                               (:scriptable? (page-scriptability/check-page-scriptability
+                                              url (page-scriptability/detect-browser-type))))
                       (dispatch! [[:nav/ax.handle-navigation (.-tabId details) url]])
                       (maybe-inject-installer! dispatch! (.-tabId details) url)))))
 
@@ -1052,8 +1053,8 @@
     (let [tab (js-await (js/chrome.tabs.get tab-id))
           url (.-url tab)
           scriptable? (and url
-                           (:scriptable? (script-utils/check-page-scriptability
-                                          url (script-utils/detect-browser-type))))]
+                           (:scriptable? (page-scriptability/check-page-scriptability
+                                          url (page-scriptability/detect-browser-type))))]
       (when scriptable?
         (js-await (process-navigation! dispatch! tab-id url icon-state))
         (js-await (maybe-inject-installer! dispatch! tab-id url))))

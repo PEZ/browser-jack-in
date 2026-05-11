@@ -1,6 +1,6 @@
 (ns popup.effects.ui-effects
   (:require [popup.utils :as popup-utils]
-            [script-utils :as script-utils]))
+            [page-scriptability :as page-scriptability]))
 
 (defn ^:async copy-command! [dispatch cmd]
   (js-await (js/navigator.clipboard.writeText cmd))
@@ -37,15 +37,15 @@
 (defn ^:async check-page-scriptability! [dispatch]
   (let [tab (js-await (popup-utils/get-active-tab))
         url (.-url tab)
-        browser-type (script-utils/detect-browser-type)
-        scriptability (script-utils/check-page-scriptability url browser-type)]
+        browser-type (page-scriptability/detect-browser-type)
+        scriptability (page-scriptability/check-page-scriptability url browser-type)]
     (dispatch [[:db/ax.assoc
                 :browser/type browser-type
                 :ui/page-banner (when-not (:scriptable? scriptability)
                                   {:type "info" :message (:message scriptability)})]])))
 
 (defn check-host-permission! [dispatch]
-  (if (= "safari" (script-utils/detect-browser-type))
+  (if (= "safari" (page-scriptability/detect-browser-type))
     (dispatch [[:db/ax.assoc :permissions/host-granted? true]])
     (try
       (js/chrome.permissions.contains

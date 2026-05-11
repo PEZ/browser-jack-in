@@ -2,6 +2,7 @@
   "Script list UI components for the popup.
    Extracted from popup.cljs to reduce file size."
   (:require [script-utils :as script-utils]
+            [url-matching :as url-matching]
             [icons :as icons]
             [view-elements :as view-elements]
             [clojure.string :as str]))
@@ -108,7 +109,7 @@
                     :as script}
                    current-url
                    {:keys [reveal-highlight? recently-modified? leaving? entering? runtime-error]}]
-  (let [matching-pattern (script-utils/get-matching-pattern current-url script)
+  (let [matching-pattern (url-matching/get-matching-pattern current-url script)
         builtin? (script-utils/builtin-script? script)
         patterns-display (when (seq match)
                            (->> match
@@ -178,7 +179,7 @@
 
 (defn- matching-url-shadow? [current-url shadow-item]
   (and (not (script-utils/special-script? (:item shadow-item)))
-       (script-utils/get-matching-pattern current-url (:item shadow-item))))
+       (url-matching/get-matching-pattern current-url (:item shadow-item))))
 
 (defn matching-scripts-section [dispatch! {:scripts/keys [list current-url]
                                            :ui/keys [scripts-shadow reveal-highlight-script-name recently-modified-scripts]
@@ -188,7 +189,7 @@
                              (sort-by default-script-sort))
         user-scripts (filterv #(not (script-utils/builtin-script? %)) list)
         no-user-scripts? (empty? user-scripts)
-        example-pattern (script-utils/url-to-match-pattern current-url {:wildcard-scheme? true})
+        example-pattern (url-matching/url-to-match-pattern current-url {:wildcard-scheme? true})
         modified-set (or recently-modified-scripts #{})
         error-map (or errors {})]
     [:div.script-list
@@ -245,7 +246,7 @@
      {:filter-fn (fn [{:keys [item]}]
                    (and (not (script-utils/special-script? item))
                         (seq (:script/match item))
-                        (not (script-utils/get-matching-pattern current-url item))))
+                        (not (url-matching/get-matching-pattern current-url item))))
       :empty-text "No auto-run scripts for other pages."
       :empty-hint "Scripts with match patterns that don't match this page appear here."}]))
 
@@ -266,12 +267,12 @@
   {:special (->> scripts (filterv script-utils/special-script?))
    :matching (->> scripts
                   (filterv #(and (not (script-utils/special-script? %))
-                                 (script-utils/get-matching-pattern current-url %))))
+                                 (url-matching/get-matching-pattern current-url %))))
    :other-autorun (->> scripts
                        (filterv (fn [s]
                                   (and (not (script-utils/special-script? s))
                                        (seq (:script/match s))
-                                       (not (script-utils/get-matching-pattern current-url s))))))
+                                       (not (url-matching/get-matching-pattern current-url s))))))
    :manual (->> scripts
                 (filterv #(and (not (script-utils/special-script? %))
                                (not (script-utils/library-script? %))

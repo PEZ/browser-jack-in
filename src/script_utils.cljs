@@ -127,10 +127,6 @@
        :runAt (:script/run-at script)
        :match (clj->js (or (:script/match script) []))})
 
-;; ============================================================
-;; URL pattern matching
-;; ============================================================
-
 (defn script->panel-js
   "Convert script map to JS object for panel save/rename messages."
   [script]
@@ -143,70 +139,6 @@
        :runAt (:script/run-at script)
        :inject (clj->js (or (:script/inject script) []))
        :force (:script/force? script)})
-
-(defn- escape-regex
-  "Escape special regex characters except * which we handle specially"
-  [s]
-  ;; Escape: . + ? ^ $ { } ( ) | [ ] \
-  ;; Don't escape * - we convert it to .*
-  (.replace s (js/RegExp. "[.+?^${}()|[\\]\\\\]" "g") "\\$&"))
-
-(defn pattern->regex
-  "Convert a match pattern to a RegExp.
-
-   Examples:
-   - '*://github.com/*' -> matches http://github.com/... and https://github.com/...
-   - 'https://*.example.com/*' -> matches any subdomain
-   - '<all_urls>' -> matches everything"
-  [pattern]
-  (cond
-    ;; Special pattern for all URLs
-    (= pattern "<all_urls>")
-    (js/RegExp. "^https?://.*$")
-
-    ;; Standard match pattern
-    :else
-    (let [;; First escape regex special chars (except *)
-          escaped (escape-regex pattern)
-          ;; Then convert * to .* for wildcard matching
-          with-wildcards (.replace escaped (js/RegExp. "\\*" "g") ".*")]
-      (js/RegExp. (str "^" with-wildcards "$")))))
-
-(defn url-matches-pattern?
-  "Check if a URL matches a single pattern.
-   Returns false for invalid (non-string) patterns."
-  [url pattern]
-  (if (string? pattern)
-    (let [regex (pattern->regex pattern)]
-      (.test regex url))
-    false))
-
-(defn url-matches-any-pattern?
-  "Check if a URL matches any pattern in the list"
-  [url patterns]
-  (some #(url-matches-pattern? url %) patterns))
-
-;; ============================================================
-;; Script query functions (pure, no storage access)
-;; ============================================================
-
-(defn get-matching-pattern
-  "Find which pattern in a script matches the given URL.
-   Returns the first matching pattern, or nil."
-  [url script]
-  (when url
-    (->> (:script/match script)
-         (filter #(url-matches-pattern? url %))
-         first)))
-
-(defn get-required-origins
-  "Extract unique origin patterns from a list of scripts.
-   Used to determine which permissions need to be requested."
-  [scripts]
-  (->> scripts
-       (mapcat :script/match)
-       distinct
-       vec))
 
 ;; ============================================================
 ;; Script name normalization
@@ -416,34 +348,6 @@
   []
   (str "script-" (.now js/Date)))
 
-;; ============================================================
-;; URL to match pattern conversion
-;; ============================================================
-
-(defn url-to-match-pattern
-  "Convert a URL to a match pattern string.
-   Options:
-   - :wildcard-scheme? - Use *:// instead of specific protocol (default: false)
-
-   Examples:
-   (url-to-match-pattern \"https://github.com/foo\")
-   => \"https://github.com/*\"
-
-   (url-to-match-pattern \"https://github.com/foo\" {:wildcard-scheme? true})
-   => \"*://github.com/*\""
-  ([url] (url-to-match-pattern url {}))
-  ([url {:keys [wildcard-scheme?] :or {wildcard-scheme? false}}]
-   (try
-     (let [parsed (js/URL. url)
-           scheme (if wildcard-scheme? "*" (.-protocol parsed))
-           sep (if wildcard-scheme? "://" "//")]
-       (str scheme sep (.-hostname parsed) "/*"))
-     (catch :default _ nil))))
-
-;; ============================================================
-;; Debug: Expose for console testing
-;; ============================================================
-
 (defn diff-scripts
   "Detect changes between old and new script lists.
    Returns {:added [names], :modified [names], :removed [names]}
@@ -464,65 +368,4 @@
      :modified modified
      :removed removed}))
 
-;; ============================================================
-;; Page scriptability detection
-;; ============================================================
 
-(def blocked-schemes
-  "URL schemes that block extension content script injection across all browsers."
-  ["chrome:" "chrome-extension:" "chrome-search:" "chrome-untrusted:"
-   "edge:" "brave:" "opera:" "vivaldi:" "arc:"
-   "about:" "moz-extension:" "safari-web-extension:"
-   "devtools:" "view-source:"])
-
-(def blocked-domains-by-browser
-  "HTTPS domains blocked per browser. Keys are browser type keywords,
-   values are vectors of domain prefixes to match against the full URL."
-  {:chrome  ["https://chrome.google.com/webstore"
-             "https://chromewebstore.google.com"]
-   :brave   ["https://chrome.google.com/webstore"
-             "https://chromewebstore.google.com"]
-   :edge    ["https://chrome.google.com/webstore"
-             "https://chromewebstore.google.com"
-             "https://microsoftedge.microsoft.com/addons"]
-   :firefox ["https://addons.mozilla.org"]})
-
-(defn detect-browser-type
-  "Detect the browser type from the runtime environment.
-   Returns :firefox, :brave, :edge, :safari, or :chrome.
-   Checks in priority order: Firefox first since it has chrome compat layer."
-  []
-  (let [ua (.-userAgent js/navigator)]
-    (cond
-      (.includes ua "Firefox") :firefox
-      (some? (.-brave js/navigator)) :brave
-      (.includes ua "Edg/") :edge
-      (and (.includes ua "Safari")
-           (not (.includes ua "Chrome"))) :safari
-      :else :chrome)))
-
-(defn check-page-scriptability
-  "Check if a page URL is scriptable by the extension.
-   Pure function taking URL string and browser type keyword.
-   Returns map with :scriptable? boolean and :message string (when not scriptable).
-
-   Three blocking conditions checked in order:
-   1. nil/empty URL
-   2. Blocked URL schemes (e.g. chrome:, about:, devtools:)
-   3. Browser-specific blocked domains (e.g. extension stores)"
-  [url browser-type]
-  (cond
-    (or (nil? url) (= url ""))
-    {:scriptable? false
-     :message "No URL available for this tab"}
-
-    (some #(.startsWith url %) blocked-schemes)
-    {:scriptable? false
-     :message (str "Unfortunatelly neither the REPL nor Userscripting works on " (first (.split url ":")) ": pages.")}
-
-    (some #(.startsWith url %) (get blocked-domains-by-browser browser-type []))
-    {:scriptable? false
-     :message "Unfortunatelly neither the REPL nor Userscripting works on Extension/Addon stores."}
-
-    :else
-    {:scriptable? true}))

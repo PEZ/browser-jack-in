@@ -8,6 +8,7 @@
             [panel-actions :as panel-actions]
             [panel.effects :as panel-effects]
             [panel.views.main-views :as views-main]
+            [page-scriptability :as page-scriptability]
             [script-utils :as script-utils]
             [storage :as storage]
             [test-logger :as test-logger]))
@@ -56,7 +57,7 @@
 (defn- update-page-banner!
   "Update page banner based on URL scriptability."
   [url]
-  (let [scriptability (script-utils/check-page-scriptability url (script-utils/detect-browser-type))]
+  (let [scriptability (page-scriptability/check-page-scriptability url (page-scriptability/detect-browser-type))]
     (dispatch! [[:db/ax.assoc :panel/page-banner
                  (when-not (:scriptable? scriptability)
                    {:type "info" :message (:message scriptability)})]])))
