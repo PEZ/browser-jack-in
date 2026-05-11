@@ -107,3 +107,30 @@
                                   port-entries)]
     {:uf/fxs [[:popup/fx.remove-storage-keys redundant-keys]
               [:popup/fx.set-storage-key "epupp_migration_ports_normalized_v1" true]]}))
+
+(defn cancel-connect [state]
+  {:uf/db (assoc state :ui/connecting? false)})
+
+(defn connect-finished [state]
+  {:uf/db (assoc state :ui/connecting? false)})
+
+(defn set-connect-mode [state mode]
+  {:uf/db (assoc state :ui/connect-mode mode)})
+
+(defn check-status [state]
+  {:uf/fxs [[:popup/fx.check-status (:ports/ws state)]]})
+
+(defn load-saved-ports [state]
+  {:uf/fxs [[:popup/fx.load-saved-ports (:settings/default-nrepl-port state) (:settings/default-ws-port state)]]})
+
+(defn init-ports []
+  {:uf/fxs [[:popup/fx.init-ports]]})
+
+(defn load-default-ports-setting []
+  {:uf/fxs [[:popup/fx.load-default-ports-setting]]})
+
+(defn run-port-migration []
+  {:uf/fxs [[:popup/fx.run-port-migration]]})
+
+(defn load-connections []
+  {:uf/fxs [[:popup/fx.load-connections]]})

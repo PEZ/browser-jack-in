@@ -196,7 +196,7 @@
                 (fn [result]
                   (let [new-defaults (popup-utils/parse-new-defaults result)
                         domain-ports (popup-utils/parse-domain-ports (aget result key))]
-                    (dispatch! [[:popup/ax.on-default-ports-changed new-defaults domain-ports]])))))))))
+                    (dispatch! [[:popup-connection/ax.on-default-ports-changed new-defaults domain-ports]])))))))))
 
 (defn init! []
   (log/info "Popup" "Init!")
@@ -212,8 +212,8 @@
   (js/chrome.storage.onChanged.addListener handle-scripts-storage-change)
   (js/chrome.storage.onChanged.addListener handle-sponsor-storage-change)
   (js/chrome.storage.onChanged.addListener handle-default-ports-change)
-  (dispatch! [[:popup/ax.init-ports]
-              [:popup/ax.check-status]
+  (dispatch! [[:popup-connection/ax.init-ports]
+              [:popup-connection/ax.check-status]
               [:popup/ax.load-scripts]
               [:popup/ax.load-current-url]
               [:popup/ax.check-page-scriptability]
@@ -221,11 +221,11 @@
               [:popup/ax.load-auto-reconnect-setting]
               [:popup/ax.load-fs-sync-status]
               [:popup/ax.load-debug-logging-setting]
-              [:popup/ax.load-connections]
+              [:popup-connection/ax.load-connections]
               [:popup/ax.load-sponsor-status]
               [:popup/ax.load-dev-sponsor-username]
               [:popup/ax.check-host-permission]])
-  (js/setTimeout #(dispatch! [[:popup/ax.run-port-migration]]) 1000))
+  (js/setTimeout #(dispatch! [[:popup-connection/ax.run-port-migration]]) 1000))
 
 ;; Start the app when DOM is ready
 (log/info "Popup" "Script loaded, readyState:" js/document.readyState)

@@ -24,7 +24,7 @@
                  (-> (send-connect-tab-message tab port)
                      (.then (fn [resp]
                               (if (and resp (.-success resp))
-                                (do (dispatch [[:popup/ax.connect-finished]
+                                (do (dispatch [[:popup-connection/ax.connect-finished]
                                                [:popup/ax.show-system-banner "success" (str "Connected to \"" tab-title "\"") {:favicon tab-favicon} "connection"]])
                                     (resolve))
                                 (js/setTimeout attempt 1500))))

@@ -61,7 +61,7 @@
                                 (cond-> {}
                                   (some? nrepl) (assoc :nrepl (str nrepl))
                                   (some? ws) (assoc :ws (str ws))))))]
-         (dispatch [[:popup/ax.apply-init-ports {:stored-defaults stored-defaults
+         (dispatch [[:popup-connection/ax.apply-init-ports {:stored-defaults stored-defaults
                                                  :domain-ports domain-ports}]]))))))
 
 (defn load-default-ports-setting! [dispatch]
@@ -102,7 +102,7 @@
                                                        (some? ws) (assoc :ws (str ws))))))
                                     {}
                                     port-keys)]
-           (dispatch [[:popup/ax.apply-port-migration {:defaults defaults
+           (dispatch [[:popup-connection/ax.apply-port-migration {:defaults defaults
                                                        :port-entries port-entries}]])))))))
 
 (defn remove-storage-keys! [_dispatch keys-to-remove]

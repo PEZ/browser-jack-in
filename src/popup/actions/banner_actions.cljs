@@ -75,3 +75,9 @@
     (cond-> {}
       (not= state new-state) (assoc :uf/db new-state)
       (seq dxs) (assoc :uf/dxs dxs))))
+
+(defn track-bulk-name [state bulk-id script-name]
+  {:uf/db (update-in state [:ui/system-bulk-names bulk-id] (fnil conj []) script-name)})
+
+(defn clear-bulk-names [state bulk-id]
+  {:uf/db (update state :ui/system-bulk-names dissoc bulk-id)})

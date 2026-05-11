@@ -100,11 +100,11 @@
       [components/port-input {:id "default-nrepl-port"
                               :label "nREPL:"
                               :value (:settings/default-nrepl-port state)
-                              :on-change #(dispatch! [[:popup/ax.set-default-nrepl-port %]])}]
+                              :on-change #(dispatch! [[:popup-connection/ax.set-default-nrepl-port %]])}]
       [components/port-input {:id "default-ws-port"
                               :label "WebSocket:"
                               :value (:settings/default-ws-port state)
-                              :on-change #(dispatch! [[:popup/ax.set-default-ws-port %]])}]]]
+                              :on-change #(dispatch! [[:popup-connection/ax.set-default-ws-port %]])}]]]
     (repl-settings-toggles dispatch! state {}))
    [:div.settings-section
     [:h3.settings-section-title "Diagnostics"]
