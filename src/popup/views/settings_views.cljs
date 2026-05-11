@@ -1,6 +1,6 @@
-(ns popup.views.settings
+(ns popup.views.settings-views
   (:require [view-elements :as view-elements]
-            [popup.views.components :as components]))
+            [popup.views.component-views :as components]))
 
 (defn dev-tools-section
   "Dev tools: sponsor username, reset sponsor status, dump dev log.

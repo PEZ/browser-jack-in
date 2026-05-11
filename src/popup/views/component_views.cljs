@@ -1,4 +1,4 @@
-(ns popup.views.components
+(ns popup.views.component-views
   (:require [icons :as icons]
             [view-elements :as view-elements]))
 

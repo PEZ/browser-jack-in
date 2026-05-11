@@ -15,7 +15,7 @@
             [popup.effects.ui-effects :as ui-effects]
             [log :as log]
             [test-logger :as test-logger]
-            [popup.views.main :as views-main]))
+            [popup.views.main-views :as views-main]))
 
 ;; EXTENSION_CONFIG is injected by esbuild at bundle time from config/*.edn
 ;; Shape: {"dev": boolean, "depsString": string, "sectionsCollapsed": {...}}

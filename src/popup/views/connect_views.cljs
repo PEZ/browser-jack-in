@@ -1,10 +1,10 @@
-(ns popup.views.connect
+(ns popup.views.connect-views
   (:require [icons :as icons]
             [view-elements :as view-elements]
             [popup.utils :as popup-utils]
             [popup.effects.connection-effects :as connection-effects]
-            [popup.views.components :as components]
-            [popup.views.settings :as settings]))
+            [popup.views.component-views :as components]
+            [popup.views.settings-views :as settings]))
 
 (def ^:private config js/EXTENSION_CONFIG)
 

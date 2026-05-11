@@ -1,4 +1,4 @@
-(ns popup.views.scripts
+(ns popup.views.script-views
   "Script list UI components for the popup.
    Extracted from popup.cljs to reduce file size."
   (:require [script-utils :as script-utils]

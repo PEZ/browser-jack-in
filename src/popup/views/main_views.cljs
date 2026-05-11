@@ -1,12 +1,12 @@
-(ns popup.views.main
+(ns popup.views.main-views
   (:require [icons :as icons]
             [view-elements :as view-elements]
             [popup.utils :as popup-utils]
-            [popup.views.scripts :as popup-scripts]
+            [popup.views.script-views :as popup-scripts]
             [storage :as storage]
-            [popup.views.components :as components]
-            [popup.views.settings :as settings]
-            [popup.views.connect :as connect]))
+            [popup.views.component-views :as components]
+            [popup.views.settings-views :as settings]
+            [popup.views.connect-views :as connect]))
 
 (def ^:private config js/EXTENSION_CONFIG)
 
