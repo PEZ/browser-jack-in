@@ -31,3 +31,17 @@
 
 (defn check-page-scriptability []
   {:uf/fxs [[:popup/fx.check-page-scriptability]]})
+
+(defn handle-action [state _uf-data [action & args]]
+  (case action
+    :ui/ax.toggle-section (toggle-section state (first args))
+    :ui/ax.toggle-creator-menu (toggle-creator-menu state)
+    :ui/ax.close-creator-menu (close-creator-menu state)
+    :ui/ax.dump-dev-log (dump-dev-log)
+    :ui/ax.reveal-tab (reveal-tab (first args))
+    :ui/ax.disconnect-tab (disconnect-tab (first args))
+    :ui/ax.mark-scripts-modified (mark-scripts-modified state (first args))
+    :ui/ax.clear-modified-scripts (clear-modified-scripts state)
+    :ui/ax.set-brave-detected (set-brave-detected state (first args))
+    :ui/ax.check-page-scriptability (check-page-scriptability)
+    :uf/unhandled-ax))

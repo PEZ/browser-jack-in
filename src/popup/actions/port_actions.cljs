@@ -134,3 +134,25 @@
 
 (defn load-connections []
   {:uf/fxs [[:popup/fx.load-connections]]})
+
+(defn handle-action [state uf-data [action & args]]
+  (case action
+    :connection/ax.set-nrepl-port (set-port state :ports/nrepl (first args))
+    :connection/ax.set-ws-port (set-port state :ports/ws (first args))
+    :connection/ax.copy-command (copy-command state uf-data)
+    :connection/ax.connect (connect state)
+    :connection/ax.cancel-connect (cancel-connect state)
+    :connection/ax.connect-finished (connect-finished state)
+    :connection/ax.set-connect-mode (set-connect-mode state (first args))
+    :connection/ax.check-status (check-status state)
+    :connection/ax.load-saved-ports (load-saved-ports state)
+    :connection/ax.init-ports (init-ports)
+    :connection/ax.apply-init-ports (apply-init-ports state (first args))
+    :connection/ax.set-default-nrepl-port (set-default-port state :settings/default-nrepl-port (first args))
+    :connection/ax.set-default-ws-port (set-default-port state :settings/default-ws-port (first args))
+    :connection/ax.load-default-ports-setting (load-default-ports-setting)
+    :connection/ax.on-default-ports-changed (on-default-ports-changed state (first args) (second args))
+    :connection/ax.run-port-migration (run-port-migration)
+    :connection/ax.apply-port-migration (apply-port-migration state (first args))
+    :connection/ax.load-connections (load-connections)
+    :uf/unhandled-ax))

@@ -81,3 +81,16 @@
 
 (defn clear-bulk-names [state bulk-id]
   {:uf/db (update state :ui/system-bulk-names dissoc bulk-id)})
+
+(defn handle-action [state uf-data [action & args]]
+  (case action
+    :banner/ax.show-system-banner
+    (let [[event-type message bulk-info category] args]
+      (show-system-banner state uf-data event-type message
+                          (cond-> (or bulk-info {})
+                            category (assoc :category category))))
+    :banner/ax.clear-system-banner (clear-system-banner state (first args))
+    :banner/ax.track-bulk-name (track-bulk-name state (first args) (second args))
+    :banner/ax.clear-bulk-names (clear-bulk-names state (first args))
+    :banner/ax.handle-system-banner (handle-system-banner state (first args))
+    :uf/unhandled-ax))

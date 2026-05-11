@@ -31,3 +31,15 @@
 
 (defn load-debug-logging-setting []
   {:uf/fxs [[:popup/fx.load-debug-logging-setting]]})
+
+(defn handle-action [state _uf-data [action & args]]
+  (case action
+    :settings/ax.load-auto-connect-level (load-auto-connect-level)
+    :settings/ax.set-auto-connect-level (set-auto-connect-level state (first args))
+    :settings/ax.load-auto-reconnect-setting (load-auto-reconnect-setting)
+    :settings/ax.toggle-auto-reconnect-repl (toggle-auto-reconnect-repl state)
+    :settings/ax.load-fs-sync-status (load-fs-sync-status)
+    :settings/ax.toggle-fs-sync (toggle-fs-sync state)
+    :settings/ax.load-debug-logging-setting (load-debug-logging-setting)
+    :settings/ax.toggle-debug-logging (toggle-debug-logging state)
+    :uf/unhandled-ax))

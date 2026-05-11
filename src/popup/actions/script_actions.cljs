@@ -43,3 +43,17 @@
 
 (defn handle-import [scripts-data]
   {:uf/fxs [[:popup/fx.import-scripts scripts-data]]})
+
+(defn handle-action [state _uf-data [action & args]]
+  (case action
+    :script/ax.load-scripts (load-scripts)
+    :script/ax.toggle-script (toggle-script state (first args) (second args))
+    :script/ax.delete-script (delete-script state (first args))
+    :script/ax.load-current-url (load-current-url)
+    :script/ax.inspect-script (inspect-script state (first args))
+    :script/ax.evaluate-script (evaluate-script state (first args))
+    :script/ax.export-scripts (export-scripts)
+    :script/ax.import-scripts (import-scripts)
+    :script/ax.handle-import (handle-import (first args))
+    :script/ax.reveal-script (reveal-script state (first args))
+    :uf/unhandled-ax))

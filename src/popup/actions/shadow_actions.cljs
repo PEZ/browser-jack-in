@@ -33,3 +33,12 @@
   {:uf/db (update state :ui/scripts-shadow
                   (fn [shadow]
                     (filterv (fn [s] (not (contains? ids (get-in s [:item :script/id])))) shadow)))})
+
+(defn handle-action [state _uf-data [action & args]]
+  (case action
+    :shadow-list/ax.sync-scripts-shadow
+    (let [[{:keys [added-items removed-ids]}] args]
+      (sync-scripts-shadow state added-items removed-ids))
+    :shadow-list/ax.clear-entering-scripts (clear-entering-scripts state (first args))
+    :shadow-list/ax.remove-leaving-scripts (remove-leaving-scripts state (first args))
+    :uf/unhandled-ax))

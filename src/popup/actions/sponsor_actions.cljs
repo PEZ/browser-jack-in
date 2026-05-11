@@ -17,3 +17,12 @@
 
 (defn load-sponsor-status []
   {:uf/fxs [[:popup/fx.load-sponsor-status]]})
+
+(defn handle-action [state _uf-data [action & args]]
+  (case action
+    :sponsor/ax.set-dev-sponsor-username (set-dev-sponsor-username state (first args))
+    :sponsor/ax.reset-sponsor-status (reset-sponsor-status state)
+    :sponsor/ax.load-dev-sponsor-username (load-dev-sponsor-username)
+    :sponsor/ax.check-sponsor (check-sponsor state)
+    :sponsor/ax.load-sponsor-status (load-sponsor-status)
+    :uf/unhandled-ax))
