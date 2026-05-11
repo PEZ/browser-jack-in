@@ -23,15 +23,18 @@
   [:span {:class (str "field-hint " (when type (str "hint-" type)))}
    text])
 
+(defn- empty-match? [v]
+  (or (nil? v)
+      (and (string? v) (empty? v))
+      (and (sequential? v) (empty? v))))
+
 (defn- format-auto-run-match
   "Format auto-run-match for display, handling both string and vector.
    Empty strings and empty collections are treated as nil (no auto-run)."
   [auto-run-match]
   (cond
-    (nil? auto-run-match) nil
-    (and (string? auto-run-match) (empty? auto-run-match)) nil
+    (empty-match? auto-run-match) nil
     (string? auto-run-match) [auto-run-match]
-    (and (sequential? auto-run-match) (empty? auto-run-match)) nil
     (sequential? auto-run-match) (vec auto-run-match)
     :else [auto-run-match]))
 
@@ -172,24 +175,33 @@
                       (not has-name-conflict?))
    :rename-disabled? (or editing-builtin? name-error)})
 
+(defn- name-hint
+  "Compute the hint for the Name property row."
+  [{:keys [name-error has-name-conflict? normalized-name name-normalized? raw-script-name]}]
+  (cond
+    name-error {:type "error" :text name-error}
+    has-name-conflict? {:type "warning" :text (str "\"" normalized-name "\" already exists")}
+    name-normalized? {:type "info" :text (str "Normalized from: " raw-script-name)}))
+
+(defn- requires-summary
+  "Format requires count for display."
+  [inject valid invalid]
+  (when (seq inject)
+    (str (count inject) " "
+         (if (= 1 (count inject)) "library" "libraries")
+         (when (and (empty? invalid) (seq valid)) " ✓"))))
+
 (defn- manifest-metadata-table
   "Render the metadata property table from parsed manifest."
-  [{:keys [script-name name-error has-name-conflict? normalized-name
-           name-normalized? raw-script-name auto-run-matches
+  [{:keys [script-name auto-run-matches
            script-description run-at run-at-invalid? raw-run-at inject
-           valid invalid]}]
+           valid invalid] :as ctx}]
   [:table.metadata-table
    [:tbody
     [property-row
      {:label "Name"
       :value script-name
-      :hint (cond
-              name-error
-              {:type "error" :text name-error}
-              has-name-conflict?
-              {:type "warning" :text (str "\"" normalized-name "\" already exists")}
-              name-normalized?
-              {:type "info" :text (str "Normalized from: " raw-script-name)})}]
+      :hint (name-hint ctx)}]
     [property-row
      {:label "Auto-run"
       :values (when (seq auto-run-matches) auto-run-matches)
@@ -206,34 +218,44 @@
                :text (str "Invalid value \"" raw-run-at "\" - using default")})}]
     [property-row
      {:label "Requires"
-      :value (if (seq inject)
-               (str (count inject) " "
-                    (if (= 1 (count inject)) "library" "libraries")
-                    (when (and (empty? invalid) (seq valid)) " ✓"))
-               nil)}]]])
+      :value (requires-summary inject valid invalid)}]]])
+
+(defn- save-button-title
+  "Compute title text for the save button."
+  [{:keys [name-error has-name-conflict? normalized-name
+           editing-builtin? name-changed? script-name]}]
+  (cond
+    name-error name-error
+    has-name-conflict? (str "Script \"" normalized-name "\" already exists - use Overwrite to replace it")
+    (and editing-builtin? (not name-changed?)) "Cannot overwrite built-in script - change the name to create a copy"
+    (empty? script-name) "Add :epupp/script-name to manifest"
+    :else nil))
+
+(defn- overwrite-button-title [name-error normalized-name conflicting-script]
+  (cond
+    name-error name-error
+    (script-utils/builtin-script? conflicting-script) "Cannot overwrite built-in scripts"
+    :else (str "Replace existing \"" normalized-name "\" with this code")))
+
+(defn- rename-button-title [name-error rename-disabled? original-name normalized-name]
+  (cond
+    name-error name-error
+    rename-disabled? "Cannot rename built-in scripts"
+    :else (str "Rename from \"" original-name "\" to \"" normalized-name "\"")))
 
 (defn- save-action-buttons
   "Render save/overwrite/rename action buttons."
   [dispatch! {:keys [save-disabled? save-button-text has-name-conflict?
                      show-rename? rename-disabled? name-error
-                     normalized-name original-name editing-builtin?
-                     name-changed? script-name conflicting-script]}]
+                     normalized-name original-name
+                     conflicting-script] :as ctx}]
   [:div.save-actions
    [view-elements/action-button
     {:button/variant :success
      :button/class "btn-save"
      :button/disabled? save-disabled?
      :button/on-click #(dispatch! [[:editor/ax.save-script]])
-     :button/title (cond
-                     name-error
-                     name-error
-                     has-name-conflict?
-                     (str "Script \"" normalized-name "\" already exists - use Overwrite to replace it")
-                     (and editing-builtin? (not name-changed?))
-                     "Cannot overwrite built-in script - change the name to create a copy"
-                     (empty? script-name)
-                     "Add :epupp/script-name to manifest"
-                     :else nil)}
+     :button/title (save-button-title ctx)}
     save-button-text]
    (when has-name-conflict?
      [view-elements/action-button
@@ -241,12 +263,7 @@
        :button/class "btn-overwrite"
        :button/disabled? (or name-error (script-utils/builtin-script? conflicting-script))
        :button/on-click #(dispatch! [[:editor/ax.save-script-overwrite]])
-       :button/title (cond
-                       name-error
-                       name-error
-                       (script-utils/builtin-script? conflicting-script)
-                       "Cannot overwrite built-in scripts"
-                       :else (str "Replace existing \"" normalized-name "\" with this code"))}
+       :button/title (overwrite-button-title name-error normalized-name conflicting-script)}
       "Overwrite"])
    (when show-rename?
      [view-elements/action-button
@@ -254,12 +271,7 @@
        :button/class "btn-rename"
        :button/disabled? rename-disabled?
        :button/on-click #(dispatch! [[:editor/ax.rename-script]])
-       :button/title (cond
-                       name-error
-                       name-error
-                       rename-disabled?
-                       "Cannot rename built-in scripts"
-                       :else (str "Rename from \"" original-name "\" to \"" normalized-name "\""))}
+       :button/title (rename-button-title name-error rename-disabled? original-name normalized-name)}
       "Rename"])])
 
 (defn- new-script-button

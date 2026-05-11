@@ -96,6 +96,12 @@
    (fn [result _exception]
      (callback (if result (.-status result) "not-loaded")))))
 
+(defn- response-success? [response]
+  (and response (.-success response)))
+
+(defn- response-error [response]
+  (or (and response (.-error response)) "Failed to inject Scittle"))
+
 (defn ensure-scittle!
   "Request background worker to inject Scittle."
   [callback]
@@ -103,9 +109,9 @@
     (js/chrome.runtime.sendMessage
      #js {:type "ensure-scittle" :tabId tab-id}
      (fn [response]
-       (if (and response (.-success response))
+       (if (response-success? response)
          (callback nil)
-         (callback {:error (or (and response (.-error response)) "Failed to inject Scittle")}))))))
+         (callback {:error (response-error response)}))))))
 
 (defn- inject-libs-error
   [response]
@@ -251,6 +257,20 @@
                    :sponsor/status status
                    :sponsor/checked-at checked-at]])))))
 
+(defn- handle-use-current-url! [dispatch action]
+  (js/chrome.devtools.inspectedWindow.eval
+   "window.location.href"
+   (fn [url _exception]
+     (when-let [pattern (script-utils/url-to-match-pattern url)]
+       (dispatch [(conj action pattern)])))))
+
+(defn- handle-check-sponsor! []
+  (js/chrome.storage.local.get
+   #js ["sponsor/sponsored-username"]
+   (fn [result]
+     (let [username (or (aget result "sponsor/sponsored-username") "PEZ")]
+       (js/chrome.tabs.create #js {:url (str "https://github.com/sponsors/" username) :active true})))))
+
 (defn perform-effect! [dispatch [effect & args]]
   (case effect
     :editor/fx.restore-panel-state
@@ -285,19 +305,13 @@
         (js/chrome.storage.local.remove (panel-state-key hostname))))
 
     :editor/fx.use-current-url
-    (let [[action] args]
-      (js/chrome.devtools.inspectedWindow.eval
-       "window.location.href"
-       (fn [url _exception]
-         (when-let [pattern (script-utils/url-to-match-pattern url)]
-           (dispatch [(conj action pattern)])))))
+    (handle-use-current-url! dispatch (first args))
 
     :editor/fx.check-editing-script
     (handle-check-editing-script! dispatch)
 
     :editor/fx.reload-script-from-storage
-    (let [[script-name] args]
-      (handle-reload-script! dispatch script-name))
+    (handle-reload-script! dispatch (first args))
 
     :editor/fx.load-scripts-list
     (handle-load-scripts-list! dispatch)
@@ -306,11 +320,7 @@
     (handle-load-connections! dispatch)
 
     :editor/fx.check-sponsor
-    (js/chrome.storage.local.get
-     #js ["sponsor/sponsored-username"]
-     (fn [result]
-       (let [username (or (aget result "sponsor/sponsored-username") "PEZ")]
-         (js/chrome.tabs.create #js {:url (str "https://github.com/sponsors/" username) :active true}))))
+    (handle-check-sponsor!)
 
     :editor/fx.load-sponsor-status
     (handle-load-sponsor-status! dispatch)
