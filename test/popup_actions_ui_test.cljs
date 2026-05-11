@@ -7,26 +7,6 @@
 ;; Shared Setup
 ;; ============================================================
 
-(def initial-state
-  {:ports/nrepl "1339"
-   :ports/ws "1340"
-   :ui/status nil
-   :ui/copy-feedback nil
-   :ui/has-connected false
-   :ui/sections-collapsed {:repl-connect false
-                           :matching-scripts false
-                           :other-scripts false
-                           :settings true}
-   :ui/leaving-scripts #{}
-   :ui/leaving-origins #{}
-   :ui/leaving-tabs #{}
-   :browser/brave? false
-   :scripts/list []
-   :scripts/current-url nil
-   :settings/user-origins []
-   :settings/new-origin ""
-   :settings/default-origins []})
-
 (def uf-data {:system/now 1234567890
               :config/deps-string "{:deps {}}"})
 
