@@ -1,4 +1,4 @@
-(ns popup-actions-connection-test
+(ns popup.actions-connection-test
   "Tests for popup connection-related action handlers"
   (:require ["vitest" :refer [describe test expect]]
             [popup.actions :as popup-actions]))

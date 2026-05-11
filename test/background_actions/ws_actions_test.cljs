@@ -1,4 +1,4 @@
-(ns ws-actions-test
+(ns background-actions.ws-actions-test
   (:require ["vitest" :refer [describe test expect]]
             [background-actions.ws-actions :as ws-actions]))
 

@@ -1,4 +1,4 @@
-(ns fs-actions-test
+(ns background-actions.fs-actions-test
   "Tests for FS sync action handlers - pure decision logic"
   (:require ["vitest" :refer [describe test expect]]
             [background-actions :as bg-actions]

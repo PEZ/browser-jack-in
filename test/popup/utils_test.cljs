@@ -1,4 +1,4 @@
-(ns popup-utils-test
+(ns popup.utils-test
   (:require ["vitest" :refer [describe test expect]]
             [popup.utils :as popup-utils]))
 

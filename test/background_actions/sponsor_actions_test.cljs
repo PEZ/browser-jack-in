@@ -1,4 +1,4 @@
-(ns sponsor-actions-test
+(ns background-actions.sponsor-actions-test
   (:require ["vitest" :refer [describe test expect]]
             [background-actions.sponsor-actions :as sponsor-actions]))
 
