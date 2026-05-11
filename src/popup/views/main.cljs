@@ -1,8 +1,8 @@
 (ns popup.views.main
   (:require [icons :as icons]
             [view-elements :as view-elements]
-            [popup-utils :as popup-utils]
-            [popup-scripts :as popup-scripts]
+            [popup.utils :as popup-utils]
+            [popup.views.scripts :as popup-scripts]
             [storage :as storage]
             [popup.views.components :as components]
             [popup.views.settings :as settings]

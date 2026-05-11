@@ -1,5 +1,5 @@
-(ns popup-effects.port-effects
-  (:require [popup-utils :as popup-utils]))
+(ns popup.effects.port-effects
+  (:require [popup.utils :as popup-utils]))
 
 (defn- get-hostname [tab]
   (try

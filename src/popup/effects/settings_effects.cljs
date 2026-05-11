@@ -1,4 +1,4 @@
-(ns popup-effects.settings-effects)
+(ns popup.effects.settings-effects)
 
 (defn load-auto-connect-level! [dispatch]
   (js/chrome.storage.local.get

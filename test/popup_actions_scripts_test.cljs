@@ -1,7 +1,7 @@
 (ns popup-actions-scripts-test
   "Tests for popup script-related action handlers - pure state transitions"
   (:require ["vitest" :refer [describe test expect]]
-            [popup-actions :as popup-actions]))
+            [popup.actions :as popup-actions]))
 
 ;; ============================================================
 ;; Shared Setup

@@ -1,7 +1,7 @@
 (ns popup-actions-ui-test
   "Tests for popup UI-related action handlers"
   (:require ["vitest" :refer [describe test expect]]
-            [popup-actions :as popup-actions]))
+            [popup.actions :as popup-actions]))
 
 ;; ============================================================
 ;; Shared Setup

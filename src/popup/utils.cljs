@@ -1,4 +1,4 @@
-(ns popup-utils
+(ns popup.utils
   "Pure utility functions for the popup UI.
    No browser dependencies - takes config/state as arguments.")
 

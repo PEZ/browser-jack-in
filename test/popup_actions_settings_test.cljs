@@ -1,7 +1,7 @@
 (ns popup-actions-settings-test
   "Tests for popup settings-related action handlers"
   (:require ["vitest" :refer [describe test expect]]
-            [popup-actions :as popup-actions]))
+            [popup.actions :as popup-actions]))
 
 ;; ============================================================
 ;; Shared Setup

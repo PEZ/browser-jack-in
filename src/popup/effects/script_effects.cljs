@@ -1,5 +1,5 @@
-(ns popup-effects.script-effects
-  (:require [popup-utils :as popup-utils]
+(ns popup.effects.script-effects
+  (:require [popup.utils :as popup-utils]
             [script-utils :as script-utils]
             [manifest-parser :as mp]))
 

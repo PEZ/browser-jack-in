@@ -1,7 +1,7 @@
-(ns popup-actions
+(ns popup.actions
   "Pure action handlers for the extension popup.
    No browser dependencies - testable without Chrome APIs."
-  (:require [popup-utils :as popup-utils]))
+  (:require [popup.utils :as popup-utils]))
 
 (defn normalize-domain-ports
   "Pure helper: given default ports and per-domain ports, computes

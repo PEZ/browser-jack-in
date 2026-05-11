@@ -1,5 +1,5 @@
-(ns popup-effects.ui-effects
-  (:require [popup-utils :as popup-utils]
+(ns popup.effects.ui-effects
+  (:require [popup.utils :as popup-utils]
             [script-utils :as script-utils]))
 
 (defn ^:async copy-command! [dispatch cmd]

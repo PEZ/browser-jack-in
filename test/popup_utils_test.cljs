@@ -1,6 +1,6 @@
 (ns popup-utils-test
   (:require ["vitest" :refer [describe test expect]]
-            [popup-utils :as popup-utils]))
+            [popup.utils :as popup-utils]))
 
 ;; ============================================================
 ;; Test Functions

@@ -1,4 +1,4 @@
-(ns popup-effects.sponsor-effects)
+(ns popup.effects.sponsor-effects)
 
 (defn check-sponsor! [_dispatch username]
   (js/chrome.tabs.create #js {:url (str "https://github.com/sponsors/" username) :active true}))

@@ -1,8 +1,8 @@
 (ns popup.views.connect
   (:require [icons :as icons]
             [view-elements :as view-elements]
-            [popup-utils :as popup-utils]
-            [popup-effects.connection-effects :as connection-effects]
+            [popup.utils :as popup-utils]
+            [popup.effects.connection-effects :as connection-effects]
             [popup.views.components :as components]
             [popup.views.settings :as settings]))
 

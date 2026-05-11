@@ -1,5 +1,5 @@
-(ns popup-effects.connection-effects
-  (:require [popup-utils :as popup-utils]))
+(ns popup.effects.connection-effects
+  (:require [popup.utils :as popup-utils]))
 
 (def connect-cancel-signal #js {:cancelled false})
 
