@@ -1,6 +1,9 @@
 (ns popup.actions.port-actions
   (:require [popup.utils :as popup-utils]))
 
+(defn- port-override? [domain-value default-value]
+  (and (some? domain-value) (not= domain-value default-value)))
+
 (defn normalize-domain-ports
   "Pure helper: given default ports and per-domain ports, computes
    effective ports, whether to persist, and the source of each port.
@@ -9,19 +12,15 @@
             :normalized-domain-ports map-or-nil
             :source {:nrepl :default|:override :ws :default|:override}}"
   [defaults domain-ports]
-  (let [nrepl-default (:nrepl defaults)
-        ws-default (:ws defaults)
-        nrepl-domain (:nrepl domain-ports)
-        ws-domain (:ws domain-ports)
-        nrepl-effective (or nrepl-domain nrepl-default)
-        ws-effective (or ws-domain ws-default)
-        nrepl-overridden? (and (some? nrepl-domain) (not= nrepl-domain nrepl-default))
-        ws-overridden? (and (some? ws-domain) (not= ws-domain ws-default))
+  (let [nrepl-effective (or (:nrepl domain-ports) (:nrepl defaults))
+        ws-effective (or (:ws domain-ports) (:ws defaults))
+        nrepl-overridden? (port-override? (:nrepl domain-ports) (:nrepl defaults))
+        ws-overridden? (port-override? (:ws domain-ports) (:ws defaults))
         any-override? (or nrepl-overridden? ws-overridden?)]
     {:effective-ports {:nrepl nrepl-effective :ws ws-effective}
      :persist? any-override?
      :normalized-domain-ports (when any-override?
-                                 {:nrepl nrepl-effective :ws ws-effective})
+                                {:nrepl nrepl-effective :ws ws-effective})
      :source {:nrepl (if nrepl-overridden? :override :default)
               :ws (if ws-overridden? :override :default)}}))
 

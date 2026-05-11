@@ -1,7 +1,6 @@
 (ns popup.actions.banner-actions)
 
-(defn show-system-banner [state uf-data event-type message
-                          {:keys [bulk-op? bulk-final? bulk-names favicon category]}]
+(defn show-system-banner [state uf-data {:keys [event-type message bulk-op? bulk-final? bulk-names favicon category]}]
   (let [banner-id (str "msg-" (:system/now uf-data) "-" (count (:ui/system-banners state)))
         new-banner (cond-> {:id banner-id :type event-type :message message}
                      favicon (assoc :favicon favicon)
@@ -27,32 +26,51 @@
                              banners))
          :uf/fxs [[:uf/fx.defer-dispatch [[:banner/ax.clear-system-banner banner-id]] 250]]}))))
 
-(defn handle-system-banner [state {:keys [event-type operation script-name error unchanged
-                                          bulk-id bulk-count bulk-index]}]
-  (let [bulk-final? (and (some? bulk-count)
-                         (some? bulk-index)
-                         (= bulk-index (dec bulk-count)))
-        bulk-op? (and (= event-type "success")
-                      (some? bulk-count)
-                      (or (= operation "save")
-                          (= operation "delete")))
-        show-banner? (or (= event-type "error")
-                         (= event-type "info")
-                         (not bulk-op?)
-                         bulk-final?)
-        banner-msg (cond
-                     (= event-type "error")
-                     (str "FS sync error: " error)
+(defn- show-banner? [event-type bulk-op? bulk-final?]
+  (or (= event-type "error")
+      (= event-type "info")
+      (not bulk-op?)
+      bulk-final?))
 
-                     unchanged
-                     (str "Script \"" script-name "\" unchanged")
+(defn- banner-message [{:keys [event-type error unchanged bulk-op? bulk-final?
+                               bulk-count operation script-name]}]
+  (cond
+    (= event-type "error")
+    (str "FS sync error: " error)
 
-                     (and bulk-op? bulk-final?)
-                     (str bulk-count (if (= bulk-count 1) " file " " files ")
-                          (if (= operation "delete") "deleted" "saved"))
+    unchanged
+    (str "Script \"" script-name "\" unchanged")
 
-                     :else
-                     (str "Script \"" script-name "\" " operation "d"))
+    (and bulk-op? bulk-final?)
+    (str bulk-count (if (= bulk-count 1) " file " " files ")
+         (if (= operation "delete") "deleted" "saved"))
+
+    :else
+    (str "Script \"" script-name "\" " operation "d")))
+
+(defn- bulk-final? [{:keys [bulk-count bulk-index]}]
+  (and (some? bulk-count) (some? bulk-index) (= bulk-index (dec bulk-count))))
+
+(defn- bulk-op? [{:keys [event-type bulk-count operation]}]
+  (and (= event-type "success") (some? bulk-count)
+       (or (= operation "save") (= operation "delete"))))
+
+(defn- build-dxs [{:keys [event-type operation script-name unchanged bulk-id]}
+                  {:keys [show? msg-text bulk-op? bulk-final? tracked-bulk-names]}]
+  (cond-> []
+    (and (or (= event-type "error") unchanged)
+         (= operation "save")
+         script-name
+         (not bulk-id))
+    (conj [:ui/ax.mark-scripts-modified [script-name]])
+    show?
+    (conj [:banner/ax.show-system-banner event-type msg-text
+           {:bulk-op? bulk-op? :bulk-final? bulk-final?
+            :bulk-names tracked-bulk-names}])))
+
+(defn handle-system-banner [state {:keys [event-type bulk-id script-name] :as msg}]
+  (let [final? (bulk-final? msg)
+        operation? (bulk-op? msg)
         pre-bulk-names (get-in state [:ui/system-bulk-names bulk-id])
         tracked-bulk-names (if (and bulk-id script-name)
                              ((fnil conj []) pre-bulk-names script-name)
@@ -60,18 +78,14 @@
         new-state (cond-> state
                     (some? bulk-id)
                     (assoc-in [:ui/system-bulk-names bulk-id] tracked-bulk-names)
-                    (and bulk-id bulk-final?)
+                    (and bulk-id final?)
                     (update :ui/system-bulk-names dissoc bulk-id))
-        dxs (cond-> []
-              (and (or (= event-type "error") unchanged)
-                   (= operation "save")
-                   script-name
-                   (not bulk-id))
-              (conj [:ui/ax.mark-scripts-modified [script-name]])
-              show-banner?
-              (conj [:banner/ax.show-system-banner event-type banner-msg
-                     {:bulk-op? bulk-op? :bulk-final? bulk-final?
-                      :bulk-names tracked-bulk-names}]))]
+        msg-text (banner-message (assoc msg :bulk-op? operation? :bulk-final? final?))
+        dxs (build-dxs msg {:show? (show-banner? event-type operation? final?)
+                            :msg-text msg-text
+                            :bulk-op? operation?
+                            :bulk-final? final?
+                            :tracked-bulk-names tracked-bulk-names})]
     (cond-> {}
       (not= state new-state) (assoc :uf/db new-state)
       (seq dxs) (assoc :uf/dxs dxs))))
@@ -86,8 +100,8 @@
   (case action
     :banner/ax.show-system-banner
     (let [[event-type message bulk-info category] args]
-      (show-system-banner state uf-data event-type message
-                          (cond-> (or bulk-info {})
+      (show-system-banner state uf-data
+                          (cond-> (merge (or bulk-info {}) {:event-type event-type :message message})
                             category (assoc :category category))))
     :banner/ax.clear-system-banner (clear-system-banner state (first args))
     :banner/ax.track-bulk-name (track-bulk-name state (first args) (second args))
