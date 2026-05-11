@@ -107,51 +107,24 @@
     {:uf/fxs [[:popup/fx.remove-storage-keys redundant-keys]
               [:popup/fx.set-storage-key "epupp_migration_ports_normalized_v1" true]]}))
 
-(defn cancel-connect [state]
-  {:uf/db (assoc state :ui/connecting? false)})
-
-(defn connect-finished [state]
-  {:uf/db (assoc state :ui/connecting? false)})
-
-(defn set-connect-mode [state mode]
-  {:uf/db (assoc state :ui/connect-mode mode)})
-
-(defn check-status [state]
-  {:uf/fxs [[:popup/fx.check-status (:ports/ws state)]]})
-
-(defn load-saved-ports [state]
-  {:uf/fxs [[:popup/fx.load-saved-ports (:settings/default-nrepl-port state) (:settings/default-ws-port state)]]})
-
-(defn init-ports []
-  {:uf/fxs [[:popup/fx.init-ports]]})
-
-(defn load-default-ports-setting []
-  {:uf/fxs [[:popup/fx.load-default-ports-setting]]})
-
-(defn run-port-migration []
-  {:uf/fxs [[:popup/fx.run-port-migration]]})
-
-(defn load-connections []
-  {:uf/fxs [[:popup/fx.load-connections]]})
-
 (defn handle-action [state uf-data [action & args]]
   (case action
     :connection/ax.set-nrepl-port (set-port state :ports/nrepl (first args))
     :connection/ax.set-ws-port (set-port state :ports/ws (first args))
     :connection/ax.copy-command (copy-command state uf-data)
     :connection/ax.connect (connect state)
-    :connection/ax.cancel-connect (cancel-connect state)
-    :connection/ax.connect-finished (connect-finished state)
-    :connection/ax.set-connect-mode (set-connect-mode state (first args))
-    :connection/ax.check-status (check-status state)
-    :connection/ax.load-saved-ports (load-saved-ports state)
-    :connection/ax.init-ports (init-ports)
+    :connection/ax.cancel-connect {:uf/db (assoc state :ui/connecting? false)}
+    :connection/ax.connect-finished {:uf/db (assoc state :ui/connecting? false)}
+    :connection/ax.set-connect-mode {:uf/db (assoc state :ui/connect-mode (first args))}
+    :connection/ax.check-status {:uf/fxs [[:popup/fx.check-status (:ports/ws state)]]}
+    :connection/ax.load-saved-ports {:uf/fxs [[:popup/fx.load-saved-ports (:settings/default-nrepl-port state) (:settings/default-ws-port state)]]}
+    :connection/ax.init-ports {:uf/fxs [[:popup/fx.init-ports]]}
     :connection/ax.apply-init-ports (apply-init-ports state (first args))
     :connection/ax.set-default-nrepl-port (set-default-port state :settings/default-nrepl-port (first args))
     :connection/ax.set-default-ws-port (set-default-port state :settings/default-ws-port (first args))
-    :connection/ax.load-default-ports-setting (load-default-ports-setting)
+    :connection/ax.load-default-ports-setting {:uf/fxs [[:popup/fx.load-default-ports-setting]]}
     :connection/ax.on-default-ports-changed (on-default-ports-changed state (first args) (second args))
-    :connection/ax.run-port-migration (run-port-migration)
+    :connection/ax.run-port-migration {:uf/fxs [[:popup/fx.run-port-migration]]}
     :connection/ax.apply-port-migration (apply-port-migration state (first args))
-    :connection/ax.load-connections (load-connections)
+    :connection/ax.load-connections {:uf/fxs [[:popup/fx.load-connections]]}
     :uf/unhandled-ax))
