@@ -302,7 +302,8 @@
         name-val (compute-name-validation raw-script-name script-name original-name scripts-list)
         {:keys [has-name-conflict?]} name-val
         btn (compute-button-state (merge name-val {:code code :script-name script-name
-                                                   :has-manifest? has-manifest?}))
+                                                   :has-manifest? has-manifest?
+                                                   :original-name original-name}))
         run-at (if run-at-invalid? "document-idle" raw-run-at)
         ctx (merge name-val btn {:script-name script-name
                                  :name-normalized? name-normalized?
