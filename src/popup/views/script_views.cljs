@@ -90,7 +90,7 @@
   [dispatch!
    {:script/keys [enabled run-at]
     script-id :script/id :as script}
-   matching-pattern patterns-display patterns-tooltip]
+   {:keys [matching-pattern patterns-display patterns-tooltip]}]
   [:div.script-row-pattern
    (when (show-auto-run-checkbox? script)
      [:input.pattern-checkbox {:type "checkbox"
@@ -138,7 +138,7 @@
        nil]]
      [:div.script-content-column
       [script-name-row dispatch! script runtime-error]
-      [script-pattern-row dispatch! script matching-pattern patterns-display patterns-tooltip]
+      [script-pattern-row dispatch! script {:matching-pattern matching-pattern :patterns-display patterns-display :patterns-tooltip patterns-tooltip}]
       (when (seq description)
         [:div.script-row-description
          [:span.script-description {:title description}

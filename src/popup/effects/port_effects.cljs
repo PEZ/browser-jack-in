@@ -83,27 +83,36 @@
    #js {:defaultNreplPort (:settings/default-nrepl-port ports)
         :defaultWsPort (:settings/default-ws-port ports)}))
 
+(defn- normalize-port-entry [v]
+  (let [nrepl (.-nreplPort v)
+        ws (.-wsPort v)
+        has-nrepl (some? nrepl)
+        has-ws (some? ws)]
+    (cond-> {}
+      has-nrepl (assoc :nrepl (str nrepl))
+      has-ws (assoc :ws (str ws)))))
+
+(defn- build-migration-data [result]
+  (let [all-keys (js/Object.keys result)
+        port-keys (filterv #(.startsWith % "ports_") all-keys)
+        nrepl-default (or (aget result "defaultNreplPort") "3339")
+        ws-default (or (aget result "defaultWsPort") "3340")
+        defaults {:nrepl (str nrepl-default)
+                  :ws (str ws-default)}
+        port-entries (reduce (fn [acc k]
+                               (assoc acc k (normalize-port-entry (aget result k))))
+                             {}
+                             port-keys)]
+    {:defaults defaults :port-entries port-entries}))
+
 (defn run-port-migration! [dispatch]
   (js/chrome.storage.local.get
    nil
    (fn [result]
      (let [marker (aget result "epupp_migration_ports_normalized_v1")]
        (when-not marker
-         (let [all-keys (js/Object.keys result)
-               port-keys (filterv #(.startsWith % "ports_") all-keys)
-               defaults {:nrepl (str (or (aget result "defaultNreplPort") "3339"))
-                         :ws (str (or (aget result "defaultWsPort") "3340"))}
-               port-entries (reduce (fn [acc k]
-                                      (let [v (aget result k)
-                                            nrepl (.-nreplPort v)
-                                            ws (.-wsPort v)]
-                                        (assoc acc k (cond-> {}
-                                                       (some? nrepl) (assoc :nrepl (str nrepl))
-                                                       (some? ws) (assoc :ws (str ws))))))
-                                    {}
-                                    port-keys)]
-           (dispatch [[:connection/ax.apply-port-migration {:defaults defaults
-                                                       :port-entries port-entries}]])))))))
+         (dispatch [[:connection/ax.apply-port-migration
+                     (build-migration-data result)]]))))))
 
 (defn remove-storage-keys! [_dispatch keys-to-remove]
   (when (seq keys-to-remove)

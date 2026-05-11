@@ -10,7 +10,7 @@
                   (filterv #(not= (:category %) category) banners)
                   banners)]
     {:uf/db (assoc state :ui/system-banners (conj banners new-banner))
-     :uf/fxs [[:popup/fx.log-system-banner message bulk-op? bulk-final? bulk-names]
+     :uf/fxs [[:popup/fx.log-system-banner message {:bulk-op? bulk-op? :bulk-final? bulk-final? :bulk-names bulk-names}]
               [:uf/fx.defer-dispatch [[:banner/ax.clear-system-banner banner-id]] 2000]]}))
 
 (defn clear-system-banner [state banner-id]

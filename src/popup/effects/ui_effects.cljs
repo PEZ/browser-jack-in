@@ -29,7 +29,7 @@
      (let [events (or (aget result "test-events") #js [])]
        (js/console.log "__EPUPP_DEV_LOG__" (js/JSON.stringify events))))))
 
-(defn log-system-banner! [_dispatch message bulk-op? bulk-final? bulk-names]
+(defn log-system-banner! [_dispatch message {:keys [bulk-op? bulk-final? bulk-names]}]
   (if (and bulk-op? bulk-final? (seq bulk-names))
     (js/console.info "[Epupp:FS]" message (clj->js {:files bulk-names}))
     (js/console.info "[Epupp:FS]" message)))

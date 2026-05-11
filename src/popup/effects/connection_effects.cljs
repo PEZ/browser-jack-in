@@ -15,7 +15,7 @@
           (reject (js/Error. (.-message js/chrome.runtime.lastError)))
           (resolve response)))))))
 
-(defn- retry-connect! [dispatch tab port tab-title tab-favicon]
+(defn- retry-connect! [dispatch tab port {:keys [tab-title tab-favicon]}]
   (js/Promise.
    (fn [resolve]
      (letfn [(attempt []
@@ -38,7 +38,7 @@
         tab-favicon (.-favIconUrl tab)]
     (set! (.-cancelled connect-cancel-signal) false)
     (dispatch [[:banner/ax.show-system-banner "info" (str "Waiting for server on :" port "...") {:favicon tab-favicon} "connection"]])
-    (js-await (retry-connect! dispatch tab port tab-title tab-favicon))))
+    (js-await (retry-connect! dispatch tab port {:tab-title tab-title :tab-favicon tab-favicon}))))
 
 (defn ^:async check-status! [_dispatch _ws-port]
   (let [tab (js-await (popup-utils/get-active-tab))]
