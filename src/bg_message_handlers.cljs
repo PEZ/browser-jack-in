@@ -7,9 +7,7 @@
             [manifest-parser :as manifest-parser]
             [background-utils :as bg-utils]
             [bg-fs-dispatch :as fs-dispatch]
-            [bg-inject :as bg-inject]
-            [log :as log]
-            [test-logger :as test-logger]))
+            [log :as log]))
 
 ;; ============================================================
 ;; WebSocket relay handlers
@@ -254,20 +252,6 @@
 ;; ============================================================
 ;; Sponsor/permission/web-installer handlers
 ;; ============================================================
-
-(defn- ^:async update-sponsor-script-match!
-  "Rewrite the sponsor script's auto-run-match URL to use the given username."
-  [username]
-  (let [sponsor-script (storage/get-script "epupp-builtin-sponsor-check")]
-    (when sponsor-script
-      (let [old-code (:script/code sponsor-script)
-            new-code (.replace old-code
-                               (js/RegExp. "https://github\\.com/sponsors/[^\"*]+" "g")
-                               (str "https://github.com/sponsors/" username))
-            updated (assoc sponsor-script :script/code new-code)]
-        (when (not= old-code new-code)
-          (js-await (storage/save-script! updated))
-          (log/info "Background" "Updated sponsor script match to:" username))))))
 
 (defn- handle-permission-granted [message dispatch!]
   (let [tab-id (.-tabId message)]
