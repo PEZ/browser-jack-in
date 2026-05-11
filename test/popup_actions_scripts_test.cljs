@@ -39,7 +39,7 @@
 (defn- test-toggle-script-passes-data-to-effect []
   (let [scripts [{:script/id "test-1" :script/enabled true}]
         state (assoc initial-state :scripts/list scripts)
-        result (popup-actions/handle-action state uf-data [:popup/ax.toggle-script "test-1" "*://example.com/*"])
+        result (popup-actions/handle-action state uf-data [:script/ax.toggle-script "test-1" "*://example.com/*"])
         [fx-name fx-scripts fx-id fx-pattern] (first (:uf/fxs result))]
     (-> (expect fx-name)
         (.toBe :popup/fx.toggle-script))
@@ -53,7 +53,7 @@
 (defn- test-delete-script-removes-and-triggers-effect []
   (let [scripts [{:script/id "test-1"} {:script/id "test-2"}]
         state (assoc initial-state :scripts/list scripts)
-        result (popup-actions/handle-action state uf-data [:popup/ax.delete-script "test-1"])
+        result (popup-actions/handle-action state uf-data [:script/ax.delete-script "test-1"])
         [fx-name _fx-scripts fx-id] (first (:uf/fxs result))]
     ;; Should immediately remove from list
     (-> (expect (count (:scripts/list (:uf/db result))))
@@ -74,7 +74,7 @@
                   :script/match ["*://example.com/*"]
                   :script/code "(println \"hi\")"}]
         state (assoc initial-state :scripts/list scripts)
-        result (popup-actions/handle-action state uf-data [:popup/ax.inspect-script "test-1"])]
+        result (popup-actions/handle-action state uf-data [:script/ax.inspect-script "test-1"])]
     ;; Should trigger inspect effect
     (-> (expect (first (first (:uf/fxs result))))
         (.toBe :popup/fx.inspect-script))
@@ -83,7 +83,7 @@
       (-> (expect fx-name)
           (.toBe :uf/fx.defer-dispatch))
       (-> (expect action)
-          (.toBe :popup/ax.show-system-banner))
+          (.toBe :banner/ax.show-system-banner))
       (-> (expect event-type)
           (.toBe "info")))))
 
@@ -93,7 +93,7 @@
                   :script/match ["*://example.com/*"]
                   :script/code "(println \"hello\")"}]
         state (assoc initial-state :scripts/list scripts)
-        result (popup-actions/handle-action state uf-data [:popup/ax.inspect-script "test-1"])
+        result (popup-actions/handle-action state uf-data [:script/ax.inspect-script "test-1"])
         [_fx-name script] (first (:uf/fxs result))]
     (-> (expect (:script/id script))
         (.toBe "test-1"))
@@ -103,7 +103,7 @@
 (defn- test-inspect-script-returns-nil-for-non-existent []
   (let [scripts [{:script/id "other"}]
         state (assoc initial-state :scripts/list scripts)
-        result (popup-actions/handle-action state uf-data [:popup/ax.inspect-script "missing"])]
+        result (popup-actions/handle-action state uf-data [:script/ax.inspect-script "missing"])]
     (-> (expect result)
         (.toBeUndefined))))
 
@@ -115,7 +115,7 @@
                   :script/match ["*://example.com/*"]
                   :script/code "(println \"hi\")"}]
         state (assoc initial-state :scripts/list scripts)
-        result (popup-actions/handle-action state uf-data [:popup/ax.evaluate-script "test-1"])
+        result (popup-actions/handle-action state uf-data [:script/ax.evaluate-script "test-1"])
         [fx-name script] (first (:uf/fxs result))]
     (-> (expect fx-name)
         (.toBe :popup/fx.evaluate-script))
@@ -127,7 +127,7 @@
 (defn- test-evaluate-script-returns-nil-for-non-existent []
   (let [scripts [{:script/id "other"}]
         state (assoc initial-state :scripts/list scripts)
-        result (popup-actions/handle-action state uf-data [:popup/ax.evaluate-script "missing"])]
+        result (popup-actions/handle-action state uf-data [:script/ax.evaluate-script "missing"])]
     (-> (expect result)
         (.toBeUndefined))))
 
@@ -138,7 +138,7 @@
 (defn- test-handle-runtime-status-stores-errors-for-current-tab []
   (let [state (assoc initial-state :scripts/current-tab-id 42 :runtime/errors {})
         result (popup-actions/handle-action state uf-data
-                 [:popup/ax.handle-runtime-status {:tab-id 42
+                 [:runtime-status/ax.handle-runtime-status {:tab-id 42
                                                    :errors {"my/script.cljs" {:error/message "err"}}}])]
     (-> (expect (count (:runtime/errors (:uf/db result)))) (.toBe 1))
     (-> (expect (get-in (:uf/db result) [:runtime/errors "my/script.cljs" :error/message])) (.toBe "err"))))
@@ -146,7 +146,7 @@
 (defn- test-handle-runtime-status-ignores-different-tab []
   (let [state (assoc initial-state :scripts/current-tab-id 42 :runtime/errors {})
         result (popup-actions/handle-action state uf-data
-                 [:popup/ax.handle-runtime-status {:tab-id 99
+                 [:runtime-status/ax.handle-runtime-status {:tab-id 99
                                                    :errors {"my/script.cljs" {:error/message "err"}}}])]
     ;; Should return nil (no state change)
     (-> (expect result) (.toBeUndefined))))
@@ -156,12 +156,12 @@
                      :scripts/current-tab-id 42
                      :runtime/errors {"old.cljs" {:error/message "old"}})
         result (popup-actions/handle-action state uf-data
-                 [:popup/ax.handle-runtime-status {:tab-id 42 :errors {}}])]
+                 [:runtime-status/ax.handle-runtime-status {:tab-id 42 :errors {}}])]
     (-> (expect (count (:runtime/errors (:uf/db result)))) (.toBe 0))))
 
 (defn- test-load-runtime-status-triggers-effect []
   (let [state (assoc initial-state :scripts/current-tab-id 42)
-        result (popup-actions/handle-action state uf-data [:popup/ax.load-runtime-status])
+        result (popup-actions/handle-action state uf-data [:runtime-status/ax.load-runtime-status])
         [fx-name fx-tab-id] (first (:uf/fxs result))]
     (-> (expect fx-name) (.toBe :popup/fx.load-runtime-status))
     (-> (expect fx-tab-id) (.toBe 42))))

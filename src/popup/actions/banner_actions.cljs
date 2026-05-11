@@ -12,7 +12,7 @@
                   banners)]
     {:uf/db (assoc state :ui/system-banners (conj banners new-banner))
      :uf/fxs [[:popup/fx.log-system-banner message bulk-op? bulk-final? bulk-names]
-              [:uf/fx.defer-dispatch [[:popup/ax.clear-system-banner banner-id]] 2000]]}))
+              [:uf/fx.defer-dispatch [[:banner/ax.clear-system-banner banner-id]] 2000]]}))
 
 (defn clear-system-banner [state banner-id]
   (let [banners (or (:ui/system-banners state) [])
@@ -25,7 +25,7 @@
                                 (assoc % :leaving true)
                                 %)
                              banners))
-         :uf/fxs [[:uf/fx.defer-dispatch [[:popup/ax.clear-system-banner banner-id]] 250]]}))))
+         :uf/fxs [[:uf/fx.defer-dispatch [[:banner/ax.clear-system-banner banner-id]] 250]]}))))
 
 (defn handle-system-banner [state {:keys [event-type operation script-name error unchanged
                                           bulk-id bulk-count bulk-index]}]
@@ -67,9 +67,9 @@
                    (= operation "save")
                    script-name
                    (not bulk-id))
-              (conj [:popup/ax.mark-scripts-modified [script-name]])
+              (conj [:ui/ax.mark-scripts-modified [script-name]])
               show-banner?
-              (conj [:popup/ax.show-system-banner event-type banner-msg
+              (conj [:banner/ax.show-system-banner event-type banner-msg
                      {:bulk-op? bulk-op? :bulk-final? bulk-final?
                       :bulk-names tracked-bulk-names}]))]
     (cond-> {}

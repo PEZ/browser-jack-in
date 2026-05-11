@@ -24,7 +24,7 @@
     :elements/header-class "popup-header"
     :elements/icon [icons/epupp-logo {:size 28 :connected? (popup-utils/current-tab-connected? state)}]
     :elements/sponsor-status (storage/sponsor-active? state)
-    :elements/on-sponsor-click #(dispatch! [[:popup/ax.check-sponsor]])
+    :elements/on-sponsor-click #(dispatch! [[:sponsor/ax.check-sponsor]])
     :elements/permanent-banner [:div
                                 (when-not (:permissions/host-granted? state)
                                   [components/permission-banner dispatch!])
@@ -36,10 +36,10 @@
 (defn- popup-footer [dispatch! state]
   [view-elements/app-footer {:elements/wrapper-class "popup-footer"
                              :elements/sponsor-status (storage/sponsor-active? state)
-                             :elements/on-sponsor-click #(dispatch! [[:popup/ax.check-sponsor]])
+                             :elements/on-sponsor-click #(dispatch! [[:sponsor/ax.check-sponsor]])
                              :elements/creator-menu-open? (:ui/creator-menu-open? state)
-                             :elements/on-creator-trigger-click #(dispatch! [[:popup/ax.toggle-creator-menu]])
-                             :elements/on-creator-menu-close #(dispatch! [[:popup/ax.close-creator-menu]])}])
+                             :elements/on-creator-trigger-click #(dispatch! [[:ui/ax.toggle-creator-menu]])
+                             :elements/on-creator-menu-close #(dispatch! [[:ui/ax.close-creator-menu]])}])
 
 (defn popup-ui [dispatch! {:ui/keys [sections-collapsed]
                             :scripts/keys [list current-url]

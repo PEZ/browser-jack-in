@@ -63,7 +63,7 @@
          ;; List watchers: compare source to shadow, trigger sync actions
          :uf/list-watchers {:scripts/list {:id-fn :script/id
                                            :shadow-path :ui/scripts-shadow
-                                           :on-change :ui/ax.sync-scripts-shadow}}}))
+                                           :on-change :shadow-list/ax.sync-scripts-shadow}}}))
 
 (def ^:private effect-router
   {:popup/fx.save-ports port-effects/save-ports!
@@ -138,7 +138,7 @@
     "fs-sync-status-changed"
     (dispatch! [[:db/ax.assoc :fs/sync-tab-id (.-fsSyncTabId message)]])
     "runtime-status"
-    (dispatch! [[:popup/ax.handle-runtime-status
+    (dispatch! [[:runtime-status/ax.handle-runtime-status
                  {:tab-id (aget message "tab-id")
                   :errors (aget message "errors")}]])
     nil)
@@ -146,7 +146,7 @@
 
 (defn- handle-system-banner-message [message _sender _send-response]
   (when (= "system-banner" (.-type message))
-    (dispatch! [[:popup/ax.handle-system-banner
+    (dispatch! [[:banner/ax.handle-system-banner
                  {:event-type (aget message "event-type")
                   :operation (aget message "operation")
                   :script-name (aget message "script-name")
@@ -162,7 +162,7 @@
     (let [{:keys [added modified]} (script-utils/diff-scripts old-scripts new-scripts)
           changed-names (concat added modified)]
       (when (seq changed-names)
-        (dispatch! [[:popup/ax.mark-scripts-modified (vec changed-names)]])))))
+        (dispatch! [[:ui/ax.mark-scripts-modified (vec changed-names)]])))))
 
 (defn- handle-scripts-storage-change [changes area]
   (when (and (= area "local") (.-scripts changes))
@@ -171,8 +171,8 @@
                         (script-utils/parse-scripts (.-oldValue scripts-change) {:extract-manifest mp/extract-manifest}))
           new-scripts (when (.-newValue scripts-change)
                         (script-utils/parse-scripts (.-newValue scripts-change) {:extract-manifest mp/extract-manifest}))]
-      (dispatch! [[:popup/ax.load-scripts]
-                  [:popup/ax.load-runtime-status]])
+      (dispatch! [[:script/ax.load-scripts]
+                  [:runtime-status/ax.load-runtime-status]])
       (notify-scripts-modified! old-scripts new-scripts))))
 
 (defn- handle-sponsor-storage-change [changes area]
@@ -196,13 +196,13 @@
                 (fn [result]
                   (let [new-defaults (popup-utils/parse-new-defaults result)
                         domain-ports (popup-utils/parse-domain-ports (aget result key))]
-                    (dispatch! [[:popup-connection/ax.on-default-ports-changed new-defaults domain-ports]])))))))))
+                    (dispatch! [[:connection/ax.on-default-ports-changed new-defaults domain-ports]])))))))))
 
 (defn init! []
   (log/info "Popup" "Init!")
   (test-logger/install-global-error-handlers! "popup" js/window)
   (add-watch !state :popup/render (fn [_ _ _ _] (render!)))
-  (dispatch! [[:popup/ax.set-brave-detected (some? (.-brave js/navigator))]])
+  (dispatch! [[:ui/ax.set-brave-detected (some? (.-brave js/navigator))]])
   (render!)
   (js/requestAnimationFrame
    (fn [] (js/requestAnimationFrame
@@ -212,20 +212,20 @@
   (js/chrome.storage.onChanged.addListener handle-scripts-storage-change)
   (js/chrome.storage.onChanged.addListener handle-sponsor-storage-change)
   (js/chrome.storage.onChanged.addListener handle-default-ports-change)
-  (dispatch! [[:popup-connection/ax.init-ports]
-              [:popup-connection/ax.check-status]
-              [:popup/ax.load-scripts]
-              [:popup/ax.load-current-url]
-              [:popup/ax.check-page-scriptability]
-              [:popup/ax.load-auto-connect-level]
-              [:popup/ax.load-auto-reconnect-setting]
-              [:popup/ax.load-fs-sync-status]
-              [:popup/ax.load-debug-logging-setting]
-              [:popup-connection/ax.load-connections]
-              [:popup/ax.load-sponsor-status]
-              [:popup/ax.load-dev-sponsor-username]
-              [:popup/ax.check-host-permission]])
-  (js/setTimeout #(dispatch! [[:popup-connection/ax.run-port-migration]]) 1000))
+  (dispatch! [[:connection/ax.init-ports]
+              [:connection/ax.check-status]
+              [:script/ax.load-scripts]
+              [:script/ax.load-current-url]
+              [:ui/ax.check-page-scriptability]
+              [:settings/ax.load-auto-connect-level]
+              [:settings/ax.load-auto-reconnect-setting]
+              [:settings/ax.load-fs-sync-status]
+              [:settings/ax.load-debug-logging-setting]
+              [:connection/ax.load-connections]
+              [:sponsor/ax.load-sponsor-status]
+              [:sponsor/ax.load-dev-sponsor-username]
+              [:permission/ax.check-host-permission]])
+  (js/setTimeout #(dispatch! [[:connection/ax.run-port-migration]]) 1000))
 
 ;; Start the app when DOM is ready
 (log/info "Popup" "Script loaded, readyState:" js/document.readyState)

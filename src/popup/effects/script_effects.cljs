@@ -75,7 +75,7 @@
                         (try
                           (let [json-str (.. e -target -result)
                                 scripts (js/JSON.parse json-str)]
-                            (dispatch [[:popup/ax.handle-import scripts]]))
+                            (dispatch [[:script/ax.handle-import scripts]]))
                           (catch :default err
                             (js/alert (str "Failed to parse JSON: " (.-message err)))))))
                 (.readAsText reader file)))))
@@ -99,4 +99,4 @@
         #js {:scripts merged-scripts}
         (fn []
           (js/alert "Scripts imported successfully! Reloading...")
-          (dispatch [[:popup/ax.load-scripts]])))))))
+          (dispatch [[:script/ax.load-scripts]])))))))

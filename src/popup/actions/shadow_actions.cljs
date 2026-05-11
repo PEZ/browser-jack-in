@@ -17,8 +17,8 @@
         updated-shadow (into shadow-with-updates new-shadow-items)
         added-ids (set (map :script/id added-items))]
     {:uf/db (assoc state :ui/scripts-shadow updated-shadow)
-     :uf/fxs [[:uf/fx.defer-dispatch [[:ui/ax.clear-entering-scripts added-ids]] 50]
-              [:uf/fx.defer-dispatch [[:ui/ax.remove-leaving-scripts removed-ids]] 250]]}))
+     :uf/fxs [[:uf/fx.defer-dispatch [[:shadow-list/ax.clear-entering-scripts added-ids]] 50]
+              [:uf/fx.defer-dispatch [[:shadow-list/ax.remove-leaving-scripts removed-ids]] 250]]}))
 
 (defn clear-entering-scripts [state ids]
   {:uf/db (update state :ui/scripts-shadow

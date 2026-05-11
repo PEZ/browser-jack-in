@@ -12,7 +12,7 @@
   (let [script (some #(when (= (:script/id %) script-id) %) (:scripts/list state))]
     (when script
       {:uf/fxs [[:popup/fx.inspect-script script]
-                [:uf/fx.defer-dispatch [[:popup/ax.show-system-banner "info" "Open the Epupp panel in Developer Tools"]] 0]]})))
+                [:uf/fx.defer-dispatch [[:banner/ax.show-system-banner "info" "Open the Epupp panel in Developer Tools"]] 0]]})))
 
 (defn evaluate-script [state script-id]
   (let [script (some #(when (= (:script/id %) script-id) %) (:scripts/list state))]

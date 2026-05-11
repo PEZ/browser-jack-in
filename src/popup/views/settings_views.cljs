@@ -13,17 +13,17 @@
              :id "dev-sponsor-username"
              :value (or sponsored-username "PEZ")
              :on-change (fn [e]
-                          (dispatch! [[:popup/ax.set-dev-sponsor-username
+                          (dispatch! [[:sponsor/ax.set-dev-sponsor-username
                                        (.. e -target -value)]]))}]]
    [:div.dev-tools-buttons
     [view-elements/action-button
      {:button/variant :secondary
-      :button/on-click #(dispatch! [[:popup/ax.reset-sponsor-status]])}
+      :button/on-click #(dispatch! [[:sponsor/ax.reset-sponsor-status]])}
      "Reset Sponsor Status"]
     [view-elements/action-button
      {:button/variant :secondary
       :button/class "dev-log-btn"
-      :button/on-click #(dispatch! [[:popup/ax.dump-dev-log]])}
+      :button/on-click #(dispatch! [[:ui/ax.dump-dev-log]])}
      "Dump Dev Log"]]])
 
 (defn- reconnect-toggle [dispatch! state prefix auto-connect-active?]
@@ -34,7 +34,7 @@
              :id (str prefix "auto-reconnect-repl")
              :checked (:settings/auto-reconnect-repl state)
              :disabled auto-connect-active?
-             :on-change #(dispatch! [[:popup/ax.toggle-auto-reconnect-repl]])}]
+             :on-change #(dispatch! [[:settings/ax.toggle-auto-reconnect-repl]])}]
     "Reconnect connected tabs on navigation"]
    [:p.description
     "When a connected tab navigates to a new page, automatically reconnect. "
@@ -47,7 +47,7 @@
    [:div.select-wrapper
     [:select {:id (str prefix "auto-connect-level")
               :value auto-connect-level
-              :on-change #(dispatch! [[:popup/ax.set-auto-connect-level (.. % -target -value)]])}
+              :on-change #(dispatch! [[:settings/ax.set-auto-connect-level (.. % -target -value)]])}
      [:option {:value "off"} "Never"]
      [:option {:value "all-pages"} "On page load"]
      [:option {:value "all-tabs"} "On page load + tab activation"]]]
@@ -70,7 +70,7 @@
                :id (str prefix "fs-repl-sync")
                :checked fs-sync-enabled?
                :disabled (not current-tab-connected?)
-               :on-change #(dispatch! [[:popup/ax.toggle-fs-sync]])}]
+               :on-change #(dispatch! [[:settings/ax.toggle-fs-sync]])}]
       "Allow REPL FS Sync for this tab"]
      [:p.description.warning
       (if current-tab-connected?
@@ -100,11 +100,11 @@
       [components/port-input {:id "default-nrepl-port"
                               :label "nREPL:"
                               :value (:settings/default-nrepl-port state)
-                              :on-change #(dispatch! [[:popup-connection/ax.set-default-nrepl-port %]])}]
+                              :on-change #(dispatch! [[:connection/ax.set-default-nrepl-port %]])}]
       [components/port-input {:id "default-ws-port"
                               :label "WebSocket:"
                               :value (:settings/default-ws-port state)
-                              :on-change #(dispatch! [[:popup-connection/ax.set-default-ws-port %]])}]]]
+                              :on-change #(dispatch! [[:connection/ax.set-default-ws-port %]])}]]]
     (repl-settings-toggles dispatch! state {}))
    [:div.settings-section
     [:h3.settings-section-title "Diagnostics"]
@@ -112,7 +112,7 @@
      [:label.checkbox-label
       [:input#debug-logging {:type "checkbox"
                              :checked debug-logging
-                             :on-change #(dispatch! [[:popup/ax.toggle-debug-logging]])}]
+                             :on-change #(dispatch! [[:settings/ax.toggle-debug-logging]])}]
       "Enable debug logging"]
      [:p.description
       "Show verbose Epupp logs in browser console (for troubleshooting)."]]]
@@ -124,10 +124,10 @@
      [view-elements/action-button
       {:button/variant :secondary
        :button/class "export-btn"
-       :button/on-click #(dispatch! [[:popup/ax.export-scripts]])}
+       :button/on-click #(dispatch! [[:script/ax.export-scripts]])}
       "Export Scripts"]
      [view-elements/action-button
       {:button/variant :secondary
        :button/class "import-btn"
-       :button/on-click #(dispatch! [[:popup/ax.import-scripts]])}
+       :button/on-click #(dispatch! [[:script/ax.import-scripts]])}
       "Import Scripts"]]]])

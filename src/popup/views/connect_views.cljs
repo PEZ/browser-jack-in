@@ -18,7 +18,7 @@
                                                (when-not is-current-tab "clickable "))
                                    :title (str title (when url (str "\n" url)))}
                                   (when-not is-current-tab
-                                    {:on-click #(dispatch! [[:popup/ax.reveal-tab tab-id]])}))
+                                    {:on-click #(dispatch! [[:ui/ax.reveal-tab tab-id]])}))
    (when favicon
      [:img.connected-tab-favicon {:src favicon :width 16 :height 16}])
    [:span.connected-tab-title (or title "Unknown")]
@@ -31,7 +31,7 @@
      :button/title "Disconnect this tab"
      :button/on-click (fn [e]
                         (.stopPropagation e)
-                        (dispatch! [[:popup/ax.disconnect-tab tab-id]]))}
+                        (dispatch! [[:ui/ax.disconnect-tab tab-id]]))}
     nil]])
 
 (defn connected-tabs-section [dispatch! {:repl/keys [connections] :scripts/keys [current-tab-id]}]
@@ -63,8 +63,8 @@
        :button/title "Cancel connection"
        :button/on-click (fn [_e]
                           (set! (.-cancelled connection-effects/connect-cancel-signal) true)
-                          (dispatch! [[:popup-connection/ax.cancel-connect]
-                                      [:popup/ax.show-system-banner "info" "Connection cancelled" {} "connection"]]))}
+                          (dispatch! [[:connection/ax.cancel-connect]
+                                      [:banner/ax.show-system-banner "info" "Connection cancelled" {} "connection"]]))}
       "Cancel"]]
     [:div.connect-row
      [:span.connect-target (str "ws://localhost:" ws)]
@@ -72,7 +72,7 @@
       {:button/variant :primary
        :button/id "connect"
        :button/title "Connect this tab to the REPL server"
-       :button/on-click #(dispatch! [[:popup-connection/ax.connect]])}
+       :button/on-click #(dispatch! [[:connection/ax.connect]])}
       "Connect"]]))
 
 (defn- direct-connect-mode [dispatch! state ws]
@@ -82,7 +82,7 @@
     [components/port-input {:id "ws-port"
                             :label "WebSocket:"
                             :value ws
-                            :on-change #(dispatch! [[:popup-connection/ax.set-ws-port %]])}]]
+                            :on-change #(dispatch! [[:connection/ax.set-ws-port %]])}]]
    [connect-controls dispatch! state ws]])
 
 (defn- relay-connect-mode [dispatch! {:ports/keys [nrepl ws] :as state}]
@@ -94,11 +94,11 @@
      [components/port-input {:id "nrepl-port"
                              :label "nREPL:"
                              :value nrepl
-                             :on-change #(dispatch! [[:popup-connection/ax.set-nrepl-port %]])}]
+                             :on-change #(dispatch! [[:connection/ax.set-nrepl-port %]])}]
      [components/port-input {:id "ws-port"
                              :label "WebSocket:"
                              :value ws
-                             :on-change #(dispatch! [[:popup-connection/ax.set-ws-port %]])}]]
+                             :on-change #(dispatch! [[:connection/ax.set-ws-port %]])}]]
     [components/command-box dispatch! {:command (generate-server-cmd state)}]]
    [:div.step
     [:div.step-header "2. Connect browser to relay"]
@@ -112,11 +112,11 @@
   [:div.connect-mode-toggle
    [:button {:class (when direct? "active")
              :on-click (when-not direct?
-                         #(dispatch! [[:popup-connection/ax.set-connect-mode "direct"]]))}
+                         #(dispatch! [[:connection/ax.set-connect-mode "direct"]]))}
     "Direct"]
    [:button {:class (when-not direct? "active")
              :on-click (when direct?
-                         #(dispatch! [[:popup-connection/ax.set-connect-mode "relay"]]))}
+                         #(dispatch! [[:connection/ax.set-connect-mode "relay"]]))}
     "Relay"]])
 
 (defn repl-connect-content

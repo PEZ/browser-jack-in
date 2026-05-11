@@ -21,7 +21,7 @@
      {:button/variant :primary
       :button/class "grant-permission-btn"
       :button/size :sm
-      :button/on-click #(dispatch! [[:popup/ax.request-host-permission]])}
+      :button/on-click #(dispatch! [[:permission/ax.request-host-permission]])}
      "Grant Permission"]]])
 
 (defn command-box [dispatch! {:keys [command]}]
@@ -30,14 +30,14 @@
    [view-elements/icon-button
     {:button/icon icons/copy
      :button/title "Copy browser-nrepl server command line. (You need Babashka to run it)"
-     :button/on-click #(dispatch! [[:popup-connection/ax.copy-command]])}]])
+     :button/on-click #(dispatch! [[:connection/ax.copy-command]])}]])
 
 (defn collapsible-section [dispatch! {:keys [id title expanded? badge-count max-height data-attrs]} & children]
   [:div.collapsible-section (merge {:class (when-not expanded? "collapsed")
                                     :data-e2e-section id
                                     :data-e2e-expanded (boolean expanded?)}
                                    data-attrs)
-   [:div.section-header {:on-click #(dispatch! [[:popup/ax.toggle-section id]])}
+   [:div.section-header {:on-click #(dispatch! [[:ui/ax.toggle-section id]])}
     [icons/chevron-right {:class (str "chevron " (when expanded? "expanded"))}]
     [:span.section-title title]
     (when (and badge-count (pos? badge-count))

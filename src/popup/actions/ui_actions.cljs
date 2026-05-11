@@ -12,7 +12,7 @@
 (defn mark-scripts-modified [state script-names]
   (let [new-modified (into (or (:ui/recently-modified-scripts state) #{}) script-names)]
     {:uf/db (assoc state :ui/recently-modified-scripts new-modified)
-     :uf/fxs [[:uf/fx.defer-dispatch [[:popup/ax.clear-modified-scripts]] 2000]]}))
+     :uf/fxs [[:uf/fx.defer-dispatch [[:ui/ax.clear-modified-scripts]] 2000]]}))
 
 (defn clear-modified-scripts [state]
   {:uf/db (assoc state :ui/recently-modified-scripts #{})})

@@ -73,7 +73,7 @@
         :button/size :md
         :button/icon icons/eye
         :button/title "Inspect script"
-        :button/on-click #(dispatch! [[:popup/ax.inspect-script script-id]])}
+        :button/on-click #(dispatch! [[:script/ax.inspect-script script-id]])}
        nil]
       (when-not builtin?
         [view-elements/action-button
@@ -83,7 +83,7 @@
           :button/icon icons/trash
           :button/title "Delete script"
           :button/on-click #(when (js/confirm "Delete this script?")
-                              (dispatch! [[:popup/ax.delete-script script-id]]))}
+                              (dispatch! [[:script/ax.delete-script script-id]]))}
          nil])]]))
 
 (defn- script-pattern-row
@@ -96,7 +96,7 @@
      [:input.pattern-checkbox {:type "checkbox"
                                :checked enabled
                                :title (if enabled "Auto-run enabled" "Auto-run disabled")
-                               :on-change #(dispatch! [[:popup/ax.toggle-script script-id matching-pattern]])}])
+                               :on-change #(dispatch! [[:script/ax.toggle-script script-id matching-pattern]])}])
    (when run-at
      (run-at-badge run-at))
    [:span.script-match {:title (script-match-text patterns-tooltip script)}
@@ -134,7 +134,7 @@
         :button/size :md
         :button/icon icons/play
         :button/title "Run script"
-        :button/on-click #(dispatch! [[:popup/ax.evaluate-script script-id]])}
+        :button/on-click #(dispatch! [[:script/ax.evaluate-script script-id]])}
        nil]]
      [:div.script-content-column
       [script-name-row dispatch! script runtime-error]

@@ -24,8 +24,8 @@
                  (-> (send-connect-tab-message tab port)
                      (.then (fn [resp]
                               (if (and resp (.-success resp))
-                                (do (dispatch [[:popup-connection/ax.connect-finished]
-                                               [:popup/ax.show-system-banner "success" (str "Connected to \"" tab-title "\"") {:favicon tab-favicon} "connection"]])
+                                (do (dispatch [[:connection/ax.connect-finished]
+                                               [:banner/ax.show-system-banner "success" (str "Connected to \"" tab-title "\"") {:favicon tab-favicon} "connection"]])
                                     (resolve))
                                 (js/setTimeout attempt 1500))))
                      (.catch (fn [_err]
@@ -37,7 +37,7 @@
         tab-title (or (.-title tab) "tab")
         tab-favicon (.-favIconUrl tab)]
     (set! (.-cancelled connect-cancel-signal) false)
-    (dispatch [[:popup/ax.show-system-banner "info" (str "Waiting for server on :" port "...") {:favicon tab-favicon} "connection"]])
+    (dispatch [[:banner/ax.show-system-banner "info" (str "Waiting for server on :" port "...") {:favicon tab-favicon} "connection"]])
     (js-await (retry-connect! dispatch tab port tab-title tab-favicon))))
 
 (defn ^:async check-status! [_dispatch _ws-port]
@@ -65,7 +65,7 @@
     (dispatch [[:db/ax.assoc
                 :scripts/current-url (.-url tab)
                 :scripts/current-tab-id (.-id tab)]
-               [:popup/ax.load-runtime-status]])))
+               [:runtime-status/ax.load-runtime-status]])))
 
 (defn load-connections! [dispatch]
   (js/chrome.runtime.sendMessage
@@ -81,6 +81,6 @@
      #js {:type "get-runtime-status" :tabId tab-id}
      (fn [response]
        (when (and response (.-success response))
-         (dispatch [[:popup/ax.handle-runtime-status
+         (dispatch [[:runtime-status/ax.handle-runtime-status
                      {:tab-id tab-id
                       :errors (.-errors response)}]]))))))

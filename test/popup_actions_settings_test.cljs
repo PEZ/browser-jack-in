@@ -26,13 +26,13 @@
 ;; ============================================================
 
 (defn- ^:async test-load-auto-reconnect-setting-triggers-effect []
-  (let [result (popup-actions/handle-action initial-state uf-data [:popup/ax.load-auto-reconnect-setting])]
+  (let [result (popup-actions/handle-action initial-state uf-data [:settings/ax.load-auto-reconnect-setting])]
     (-> (expect (first (first (:uf/fxs result))))
         (.toBe :popup/fx.load-auto-reconnect-setting))))
 
 (defn- ^:async test-toggle-auto-reconnect-repl-toggles-true-to-false []
   (let [state (assoc initial-state :settings/auto-reconnect-repl true)
-        result (popup-actions/handle-action state uf-data [:popup/ax.toggle-auto-reconnect-repl])]
+        result (popup-actions/handle-action state uf-data [:settings/ax.toggle-auto-reconnect-repl])]
     (-> (expect (:settings/auto-reconnect-repl (:uf/db result)))
         (.toBe false))
     ;; Should trigger save effect
@@ -44,7 +44,7 @@
 
 (defn- ^:async test-toggle-auto-reconnect-repl-toggles-false-to-true []
   (let [state (assoc initial-state :settings/auto-reconnect-repl false)
-        result (popup-actions/handle-action state uf-data [:popup/ax.toggle-auto-reconnect-repl])]
+        result (popup-actions/handle-action state uf-data [:settings/ax.toggle-auto-reconnect-repl])]
     (-> (expect (:settings/auto-reconnect-repl (:uf/db result)))
         (.toBe true))
     ;; Should trigger save effect
@@ -59,18 +59,18 @@
 ;; ============================================================
 
 (defn- ^:async test-check-host-permission-triggers-effect []
-  (let [result (popup-actions/handle-action initial-state uf-data [:popup/ax.check-host-permission])]
+  (let [result (popup-actions/handle-action initial-state uf-data [:permission/ax.check-host-permission])]
     (-> (expect (first (first (:uf/fxs result))))
         (.toBe :popup/fx.check-host-permission))))
 
 (defn- ^:async test-request-host-permission-triggers-effect []
-  (let [result (popup-actions/handle-action initial-state uf-data [:popup/ax.request-host-permission])]
+  (let [result (popup-actions/handle-action initial-state uf-data [:permission/ax.request-host-permission])]
     (-> (expect (first (first (:uf/fxs result))))
         (.toBe :popup/fx.request-host-permission))))
 
 (defn- ^:async test-request-host-permission-passes-tab-id []
   (let [state (assoc initial-state :scripts/current-tab-id 42)
-        result (popup-actions/handle-action state uf-data [:popup/ax.request-host-permission])
+        result (popup-actions/handle-action state uf-data [:permission/ax.request-host-permission])
         [fx-name tab-id] (first (:uf/fxs result))]
     (-> (expect fx-name)
         (.toBe :popup/fx.request-host-permission))
@@ -78,7 +78,7 @@
         (.toBe 42))))
 
 (defn- ^:async test-request-host-permission-passes-nil-tab-id-when-missing []
-  (let [result (popup-actions/handle-action initial-state uf-data [:popup/ax.request-host-permission])
+  (let [result (popup-actions/handle-action initial-state uf-data [:permission/ax.request-host-permission])
         [fx-name tab-id] (first (:uf/fxs result))]
     (-> (expect fx-name)
         (.toBe :popup/fx.request-host-permission))
@@ -90,13 +90,13 @@
 ;; ============================================================
 
 (defn- ^:async test-load-auto-connect-level-triggers-effect []
-  (let [result (popup-actions/handle-action initial-state uf-data [:popup/ax.load-auto-connect-level])]
+  (let [result (popup-actions/handle-action initial-state uf-data [:settings/ax.load-auto-connect-level])]
     (-> (expect (first (first (:uf/fxs result))))
         (.toBe :popup/fx.load-auto-connect-level))))
 
 (defn- ^:async test-set-auto-connect-level-sets-all-pages []
   (let [state (assoc initial-state :settings/auto-connect-level "off")
-        result (popup-actions/handle-action state uf-data [:popup/ax.set-auto-connect-level "all-pages"])]
+        result (popup-actions/handle-action state uf-data [:settings/ax.set-auto-connect-level "all-pages"])]
     (-> (expect (:settings/auto-connect-level (:uf/db result)))
         (.toBe "all-pages"))
     (let [[fx-name level] (first (:uf/fxs result))]
@@ -107,7 +107,7 @@
 
 (defn- ^:async test-set-auto-connect-level-sets-all-tabs []
   (let [state (assoc initial-state :settings/auto-connect-level "off")
-        result (popup-actions/handle-action state uf-data [:popup/ax.set-auto-connect-level "all-tabs"])]
+        result (popup-actions/handle-action state uf-data [:settings/ax.set-auto-connect-level "all-tabs"])]
     (-> (expect (:settings/auto-connect-level (:uf/db result)))
         (.toBe "all-tabs"))
     (let [[fx-name level] (first (:uf/fxs result))]
@@ -118,7 +118,7 @@
 
 (defn- ^:async test-set-auto-connect-level-sets-off []
   (let [state (assoc initial-state :settings/auto-connect-level "all-pages")
-        result (popup-actions/handle-action state uf-data [:popup/ax.set-auto-connect-level "off"])]
+        result (popup-actions/handle-action state uf-data [:settings/ax.set-auto-connect-level "off"])]
     (-> (expect (:settings/auto-connect-level (:uf/db result)))
         (.toBe "off"))
     (let [[fx-name level] (first (:uf/fxs result))]

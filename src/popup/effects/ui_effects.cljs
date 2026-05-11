@@ -4,7 +4,7 @@
 
 (defn ^:async copy-command! [dispatch cmd]
   (js-await (js/navigator.clipboard.writeText cmd))
-  (dispatch [[:popup/ax.show-system-banner "success" "browser-nrepl command copied to your clipboard." {} nil]]))
+  (dispatch [[:banner/ax.show-system-banner "success" "browser-nrepl command copied to your clipboard." {} nil]]))
 
 (defn reveal-script! [_dispatch script-name]
   (let [el (js/document.querySelector (str ".script-item[data-script-name='" script-name "']"))]

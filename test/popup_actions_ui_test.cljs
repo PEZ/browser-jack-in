@@ -16,19 +16,19 @@
 
 (defn- test-toggle-section-toggles-false-to-true []
   (let [state {:ui/sections-collapsed {:repl-connect false}}
-        result (popup-actions/handle-action state uf-data [:popup/ax.toggle-section :repl-connect])]
+        result (popup-actions/handle-action state uf-data [:ui/ax.toggle-section :repl-connect])]
     (-> (expect (get-in (:uf/db result) [:ui/sections-collapsed :repl-connect]))
         (.toBe true))))
 
 (defn- test-toggle-section-toggles-true-to-false []
   (let [state {:ui/sections-collapsed {:settings true}}
-        result (popup-actions/handle-action state uf-data [:popup/ax.toggle-section :settings])]
+        result (popup-actions/handle-action state uf-data [:ui/ax.toggle-section :settings])]
     (-> (expect (get-in (:uf/db result) [:ui/sections-collapsed :settings]))
         (.toBe false))))
 
 (defn- test-toggle-section-handles-nil-state []
   (let [state {:ui/sections-collapsed {}}
-        result (popup-actions/handle-action state uf-data [:popup/ax.toggle-section :scripts])]
+        result (popup-actions/handle-action state uf-data [:ui/ax.toggle-section :scripts])]
     (-> (expect (get-in (:uf/db result) [:ui/sections-collapsed :scripts]))
         (.toBe true))))
 
@@ -46,7 +46,7 @@
                                     :ui/leaving? false}]}
         ;; Content change signal: no membership changes
         result (popup-actions/handle-action state uf-data
-                                            [:ui/ax.sync-scripts-shadow {:added-items []
+                                            [:shadow-list/ax.sync-scripts-shadow {:added-items []
                                                                          :removed-ids #{}}])
         updated-shadow (:ui/scripts-shadow (:uf/db result))
         shadow-item (first updated-shadow)]
@@ -65,7 +65,7 @@
         state {:scripts/list [new-script]
                :ui/scripts-shadow []}
         result (popup-actions/handle-action state uf-data
-                                            [:ui/ax.sync-scripts-shadow {:added-items [new-script]
+                                            [:shadow-list/ax.sync-scripts-shadow {:added-items [new-script]
                                                                          :removed-ids #{}}])
         updated-shadow (:ui/scripts-shadow (:uf/db result))
         shadow-item (first updated-shadow)]
@@ -85,7 +85,7 @@
                                     :ui/entering? false
                                     :ui/leaving? false}]}
         result (popup-actions/handle-action state uf-data
-                                            [:ui/ax.sync-scripts-shadow {:added-items []
+                                            [:shadow-list/ax.sync-scripts-shadow {:added-items []
                                                                          :removed-ids #{"to-remove"}}])
         updated-shadow (:ui/scripts-shadow (:uf/db result))
         shadow-item (first updated-shadow)]
@@ -100,7 +100,7 @@
 (defn- test-show-system-banner-appends-to-empty-list []
   (let [state {:ui/system-banners []}
         result (popup-actions/handle-action state uf-data
-                                            [:popup/ax.show-system-banner "success" "Saved!" {}])
+                                            [:banner/ax.show-system-banner "success" "Saved!" {}])
         banners (:ui/system-banners (:uf/db result))]
     ;; Should have one banner
     (-> (expect (count banners))
@@ -114,7 +114,7 @@
 (defn- test-show-system-banner-generates-unique-id []
   (let [state {:ui/system-banners []}
         result (popup-actions/handle-action state uf-data
-                                            [:popup/ax.show-system-banner "success" "Saved!" {}])
+                                            [:banner/ax.show-system-banner "success" "Saved!" {}])
         banner (first (:ui/system-banners (:uf/db result)))]
     ;; Should have an ID
     (-> (expect (:id banner))
@@ -124,7 +124,7 @@
   (let [existing-banner {:id "msg-1" :type "info" :message "Processing..."}
         state {:ui/system-banners [existing-banner]}
         result (popup-actions/handle-action state uf-data
-                                            [:popup/ax.show-system-banner "success" "Done!" {}])
+                                            [:banner/ax.show-system-banner "success" "Done!" {}])
         banners (:ui/system-banners (:uf/db result))]
     ;; Should have two banners
     (-> (expect (count banners))
@@ -139,7 +139,7 @@
 (defn- test-show-system-banner-schedules-clear-for-specific-banner []
   (let [state {:ui/system-banners []}
         result (popup-actions/handle-action state uf-data
-                                            [:popup/ax.show-system-banner "success" "Saved!" {}])
+                                            [:banner/ax.show-system-banner "success" "Saved!" {}])
         banner-id (:id (first (:ui/system-banners (:uf/db result))))
         defer-fx (some #(when (= :uf/fx.defer-dispatch (first %)) %) (:uf/fxs result))]
     ;; Should have defer dispatch effect
@@ -149,7 +149,7 @@
     (let [[_fx-name actions-list _delay] defer-fx
           [action-name action-id] (first actions-list)]
       (-> (expect action-name)
-          (.toBe :popup/ax.clear-system-banner))
+          (.toBe :banner/ax.clear-system-banner))
       (-> (expect action-id)
           (.toBe banner-id)))))
 
@@ -157,7 +157,7 @@
   (let [banner {:id "msg-1" :type "success" :message "Saved!"}
         state {:ui/system-banners [banner]}
         result (popup-actions/handle-action state uf-data
-                                            [:popup/ax.clear-system-banner "msg-1"])
+                                            [:banner/ax.clear-system-banner "msg-1"])
         banners (:ui/system-banners (:uf/db result))
         updated-banner (first banners)]
     ;; Banner should be marked as leaving
@@ -168,7 +168,7 @@
   (let [banner {:id "msg-1" :type "success" :message "Saved!" :leaving true}
         state {:ui/system-banners [banner]}
         result (popup-actions/handle-action state uf-data
-                                            [:popup/ax.clear-system-banner "msg-1"])
+                                            [:banner/ax.clear-system-banner "msg-1"])
         banners (:ui/system-banners (:uf/db result))]
     ;; Banner should be removed
     (-> (expect (count banners))
@@ -179,7 +179,7 @@
         banner2 {:id "msg-2" :type "success" :message "B"}
         state {:ui/system-banners [banner1 banner2]}
         result (popup-actions/handle-action state uf-data
-                                            [:popup/ax.clear-system-banner "msg-1"])
+                                            [:banner/ax.clear-system-banner "msg-1"])
         banners (:ui/system-banners (:uf/db result))]
     ;; Should still have both banners
     (-> (expect (count banners))
@@ -195,7 +195,7 @@
   (let [banner {:id "msg-1" :type "success" :message "Saved!"}
         state {:ui/system-banners [banner]}
         result (popup-actions/handle-action state uf-data
-                                            [:popup/ax.clear-system-banner "msg-1"])
+                                            [:banner/ax.clear-system-banner "msg-1"])
         defer-fx (some #(when (= :uf/fx.defer-dispatch (first %)) %) (:uf/fxs result))]
     ;; Should have defer dispatch for removal after 250ms animation
     (-> (expect defer-fx)
@@ -208,7 +208,7 @@
   (let [existing-banner {:id "msg-1" :type "info" :message "Connecting..." :category "connection"}
         state {:ui/system-banners [existing-banner]}
         result (popup-actions/handle-action state uf-data
-                                            [:popup/ax.show-system-banner "success" "Connected!" {} "connection"])
+                                            [:banner/ax.show-system-banner "success" "Connected!" {} "connection"])
         banners (:ui/system-banners (:uf/db result))]
     ;; Should still have one banner (replaced, not appended)
     (-> (expect (count banners))
@@ -224,7 +224,7 @@
   (let [existing-banner {:id "msg-1" :type "info" :message "Loading..." :category "loading"}
         state {:ui/system-banners [existing-banner]}
         result (popup-actions/handle-action state uf-data
-                                            [:popup/ax.show-system-banner "success" "Connected!" {} "connection"])
+                                            [:banner/ax.show-system-banner "success" "Connected!" {} "connection"])
         banners (:ui/system-banners (:uf/db result))]
     ;; Should have two banners (different categories)
     (-> (expect (count banners))
@@ -234,7 +234,7 @@
   (let [existing-banner {:id "msg-1" :type "info" :message "Connecting..." :category "connection"}
         state {:ui/system-banners [existing-banner]}
         result (popup-actions/handle-action state uf-data
-                                            [:popup/ax.show-system-banner "success" "Saved!" {}])
+                                            [:banner/ax.show-system-banner "success" "Saved!" {}])
         banners (:ui/system-banners (:uf/db result))]
     ;; Should have two banners (no category match to replace)
     (-> (expect (count banners))
@@ -243,7 +243,7 @@
 (defn- test-clear-system-banner-no-op-when-banner-not-found []
   (let [state {:ui/system-banners [{:id "msg-other" :type "info" :message "Other"}]}
         result (popup-actions/handle-action state uf-data
-                                            [:popup/ax.clear-system-banner "msg-nonexistent"])]
+                                            [:banner/ax.clear-system-banner "msg-nonexistent"])]
     ;; Should be undefined (no-op) - prevents infinite loop when banner was already removed
     (-> (expect result) (.toBeUndefined))
     ;; State should be unchanged
@@ -290,7 +290,7 @@
 (defn- test-mark-scripts-modified-single-script []
   (let [state {:ui/recently-modified-scripts #{}}
         result (popup-actions/handle-action state uf-data
-                                            [:popup/ax.mark-scripts-modified ["test.cljs"]])
+                                            [:ui/ax.mark-scripts-modified ["test.cljs"]])
         new-state (:uf/db result)]
     ;; Script should be added to modified set
     (-> (expect (:ui/recently-modified-scripts new-state))
@@ -302,7 +302,7 @@
 (defn- test-mark-scripts-modified-multiple-scripts []
   (let [state {:ui/recently-modified-scripts #{}}
         result (popup-actions/handle-action state uf-data
-                                            [:popup/ax.mark-scripts-modified ["one.cljs" "two.cljs"]])
+                                            [:ui/ax.mark-scripts-modified ["one.cljs" "two.cljs"]])
         new-state (:uf/db result)]
     ;; Both scripts should be added
     (-> (expect (:ui/recently-modified-scripts new-state))
@@ -313,7 +313,7 @@
 (defn- test-mark-scripts-modified-appends-to-existing []
   (let [state {:ui/recently-modified-scripts #{"existing.cljs"}}
         result (popup-actions/handle-action state uf-data
-                                            [:popup/ax.mark-scripts-modified ["new.cljs"]])
+                                            [:ui/ax.mark-scripts-modified ["new.cljs"]])
         new-state (:uf/db result)]
     ;; Should have both existing and new
     (-> (expect (:ui/recently-modified-scripts new-state))
@@ -324,7 +324,7 @@
 (defn- test-clear-modified-scripts-removes-all []
   (let [state {:ui/recently-modified-scripts #{"one.cljs" "two.cljs"}}
         result (popup-actions/handle-action state uf-data
-                                            [:popup/ax.clear-modified-scripts])
+                                            [:ui/ax.clear-modified-scripts])
         new-state (:uf/db result)]
     ;; Should clear all modified scripts
     (-> (expect (count (:ui/recently-modified-scripts new-state)))
@@ -339,10 +339,10 @@
         state {:scripts/list [new-script]
                :ui/scripts-shadow []}
         result (popup-actions/handle-action state uf-data
-                                            [:ui/ax.sync-scripts-shadow {:added-items [new-script]
+                                            [:shadow-list/ax.sync-scripts-shadow {:added-items [new-script]
                                                                          :removed-ids #{}}])
         defer-fxs (filter #(= :uf/fx.defer-dispatch (first %)) (:uf/fxs result))
-        clear-entering-fx (some #(when (= :ui/ax.clear-entering-scripts
+        clear-entering-fx (some #(when (= :shadow-list/ax.clear-entering-scripts
                                             (first (first (second %))))
                                    %)
                                 defer-fxs)]
@@ -360,10 +360,10 @@
                                     :ui/entering? false
                                     :ui/leaving? false}]}
         result (popup-actions/handle-action state uf-data
-                                            [:ui/ax.sync-scripts-shadow {:added-items []
+                                            [:shadow-list/ax.sync-scripts-shadow {:added-items []
                                                                          :removed-ids #{"to-remove"}}])
         defer-fxs (filter #(= :uf/fx.defer-dispatch (first %)) (:uf/fxs result))
-        remove-leaving-fx (some #(when (= :ui/ax.remove-leaving-scripts
+        remove-leaving-fx (some #(when (= :shadow-list/ax.remove-leaving-scripts
                                            (first (first (second %))))
                                     %)
                                 defer-fxs)]
@@ -383,7 +383,7 @@
                                     :ui/entering? false
                                     :ui/leaving? false}]}
         result (popup-actions/handle-action state uf-data
-                                            [:ui/ax.clear-entering-scripts #{"new-1"}])
+                                            [:shadow-list/ax.clear-entering-scripts #{"new-1"}])
         shadow (:ui/scripts-shadow (:uf/db result))
         new-item (first shadow)
         old-item (second shadow)]
@@ -402,7 +402,7 @@
                                     :ui/entering? false
                                     :ui/leaving? false}]}
         result (popup-actions/handle-action state uf-data
-                                            [:ui/ax.remove-leaving-scripts #{"leaving-1"}])
+                                            [:shadow-list/ax.remove-leaving-scripts #{"leaving-1"}])
         shadow (:ui/scripts-shadow (:uf/db result))]
     ;; Should have only one item left
     (-> (expect (count shadow))
@@ -432,12 +432,12 @@
 (defn- test-handle-system-banner-simple-success []
   (let [state {:ui/system-bulk-names {}}
         result (popup-actions/handle-action state uf-data
-                                            [:popup/ax.handle-system-banner
+                                            [:banner/ax.handle-system-banner
                                              {:event-type "success"
                                               :operation "save"
                                               :script-name "test.cljs"}])
         dxs (:uf/dxs result)
-        show-banner-dx (some #(when (= :popup/ax.show-system-banner (first %)) %) dxs)]
+        show-banner-dx (some #(when (= :banner/ax.show-system-banner (first %)) %) dxs)]
     ;; Should dispatch show-system-banner
     (-> (expect show-banner-dx) (.toBeTruthy))
     ;; Banner message should contain script name
@@ -447,13 +447,13 @@
 (defn- test-handle-system-banner-error []
   (let [state {:ui/system-bulk-names {}}
         result (popup-actions/handle-action state uf-data
-                                            [:popup/ax.handle-system-banner
+                                            [:banner/ax.handle-system-banner
                                              {:event-type "error"
                                               :operation "save"
                                               :script-name "test.cljs"
                                               :error "Permission denied"}])
         dxs (:uf/dxs result)
-        show-banner-dx (some #(when (= :popup/ax.show-system-banner (first %)) %) dxs)]
+        show-banner-dx (some #(when (= :banner/ax.show-system-banner (first %)) %) dxs)]
     ;; Should dispatch show-system-banner with error
     (-> (expect (second show-banner-dx)) (.toBe "error"))
     (-> (expect (nth show-banner-dx 2)) (.toBe "FS sync error: Permission denied"))))
@@ -462,13 +462,13 @@
   (let [state {:ui/system-bulk-names {}
                :ui/recently-modified-scripts #{}}
         result (popup-actions/handle-action state uf-data
-                                            [:popup/ax.handle-system-banner
+                                            [:banner/ax.handle-system-banner
                                              {:event-type "error"
                                               :operation "save"
                                               :script-name "test.cljs"
                                               :error "Failed"}])
         dxs (:uf/dxs result)
-        mark-dx (some #(when (= :popup/ax.mark-scripts-modified (first %)) %) dxs)]
+        mark-dx (some #(when (= :ui/ax.mark-scripts-modified (first %)) %) dxs)]
     ;; Should dispatch mark-scripts-modified for error saves
     (-> (expect mark-dx) (.toBeTruthy))
     (-> (expect (second mark-dx)) (.toEqual ["test.cljs"]))))
@@ -477,20 +477,20 @@
   (let [state {:ui/system-bulk-names {}
                :ui/recently-modified-scripts #{}}
         result (popup-actions/handle-action state uf-data
-                                            [:popup/ax.handle-system-banner
+                                            [:banner/ax.handle-system-banner
                                              {:event-type "success"
                                               :operation "save"
                                               :script-name "test.cljs"
                                               :unchanged true}])
         dxs (:uf/dxs result)
-        mark-dx (some #(when (= :popup/ax.mark-scripts-modified (first %)) %) dxs)]
+        mark-dx (some #(when (= :ui/ax.mark-scripts-modified (first %)) %) dxs)]
     ;; Should dispatch mark-scripts-modified for unchanged saves
     (-> (expect mark-dx) (.toBeTruthy))))
 
 (defn- test-handle-system-banner-bulk-tracks-name []
   (let [state {:ui/system-bulk-names {}}
         result (popup-actions/handle-action state uf-data
-                                            [:popup/ax.handle-system-banner
+                                            [:banner/ax.handle-system-banner
                                              {:event-type "success"
                                               :operation "save"
                                               :script-name "a.cljs"
@@ -505,7 +505,7 @@
 (defn- test-handle-system-banner-bulk-final-shows-summary []
   (let [state {:ui/system-bulk-names {"bulk-1" ["a.cljs" "b.cljs"]}}
         result (popup-actions/handle-action state uf-data
-                                            [:popup/ax.handle-system-banner
+                                            [:banner/ax.handle-system-banner
                                              {:event-type "success"
                                               :operation "save"
                                               :script-name "c.cljs"
@@ -513,7 +513,7 @@
                                               :bulk-count 3
                                               :bulk-index 2}])
         dxs (:uf/dxs result)
-        show-banner-dx (some #(when (= :popup/ax.show-system-banner (first %)) %) dxs)
+        show-banner-dx (some #(when (= :banner/ax.show-system-banner (first %)) %) dxs)
         bulk-info (nth show-banner-dx 3)]
     ;; Should show summary banner
     (-> (expect (nth show-banner-dx 2)) (.toBe "3 files saved"))
@@ -523,7 +523,7 @@
 (defn- test-handle-system-banner-bulk-final-clears-names []
   (let [state {:ui/system-bulk-names {"bulk-1" ["a.cljs" "b.cljs"]}}
         result (popup-actions/handle-action state uf-data
-                                            [:popup/ax.handle-system-banner
+                                            [:banner/ax.handle-system-banner
                                              {:event-type "success"
                                               :operation "save"
                                               :script-name "c.cljs"
@@ -538,7 +538,7 @@
 (defn- test-handle-system-banner-bulk-intermediate-no-banner []
   (let [state {:ui/system-bulk-names {}}
         result (popup-actions/handle-action state uf-data
-                                            [:popup/ax.handle-system-banner
+                                            [:banner/ax.handle-system-banner
                                              {:event-type "success"
                                               :operation "save"
                                               :script-name "a.cljs"
@@ -546,7 +546,7 @@
                                               :bulk-count 3
                                               :bulk-index 0}])
         dxs (:uf/dxs result)
-        show-banner-dx (some #(when (= :popup/ax.show-system-banner (first %)) %) dxs)]
+        show-banner-dx (some #(when (= :banner/ax.show-system-banner (first %)) %) dxs)]
     ;; Intermediate bulk ops should not show banner
     (-> (expect show-banner-dx) (.toBeFalsy))))
 
@@ -554,7 +554,7 @@
   ;; Verify the action does NOT require @!state - it works with passed state parameter
   (let [state {:ui/system-bulk-names {"bulk-1" ["existing.cljs"]}}
         result (popup-actions/handle-action state uf-data
-                                            [:popup/ax.handle-system-banner
+                                            [:banner/ax.handle-system-banner
                                              {:event-type "success"
                                               :operation "save"
                                               :script-name "new.cljs"
@@ -562,7 +562,7 @@
                                               :bulk-count 2
                                               :bulk-index 1}])
         dxs (:uf/dxs result)
-        show-banner-dx (some #(when (= :popup/ax.show-system-banner (first %)) %) dxs)
+        show-banner-dx (some #(when (= :banner/ax.show-system-banner (first %)) %) dxs)
         bulk-info (nth show-banner-dx 3)]
     ;; Bulk names should include both existing and newly tracked
     (-> (expect (:bulk-names bulk-info)) (.toEqual ["existing.cljs" "new.cljs"]))))
