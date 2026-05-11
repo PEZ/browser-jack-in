@@ -183,10 +183,6 @@
       [:span.section-badge badge-count])]
    (into [:div.section-content {:style (when (and expanded? max-height) {:max-height max-height})}] children)])
 
-;; =============================================================================
-;; Dev Tools Section (only shown in dev/test mode)
-;; =============================================================================
-
 (defn dev-tools-section
   "Dev tools: sponsor username, reset sponsor status, dump dev log.
    Only visible in dev/test builds."
@@ -210,10 +206,6 @@
       :button/class "dev-log-btn"
       :button/on-click #(dispatch! [[:popup/ax.dump-dev-log]])}
      "Dump Dev Log"]]])
-
-;; ============================================================
-;; Settings Components
-;; ============================================================
 
 (defn- reconnect-toggle [state prefix auto-connect-active?]
   [:div.setting (when auto-connect-active?
@@ -277,6 +269,7 @@
     [[reconnect-toggle state prefix auto-connect-active?]
      [auto-connect-toggle auto-connect-level prefix]
      [fs-sync-toggle state prefix]]))
+
 (defn settings-content [{:settings/keys [debug-logging] :as state}]
   [:div.settings-content
    (into
@@ -320,10 +313,6 @@
        :button/on-click #(dispatch! [[:popup/ax.import-scripts]])}
       "Import Scripts"]]]])
 
-;; ============================================================
-;; Connected Tabs Section
-;; ============================================================
-
 (defn connected-tab-item [{:keys [tab-id port title url favicon is-current-tab]}]
   [:div.connected-tab-item (merge {:class (str (when is-current-tab "current-tab ")
                                                (when-not is-current-tab "clickable "))
@@ -362,9 +351,6 @@
       "No REPL connections active"
       [:div.no-connections-hint
        "Start the server (Step 1), then click Connect (Step 2)."]])])
-
-;; ============================================================;; Main View
-;; ============================================================
 
 (defn- connect-controls [state ws]
   (if (:ui/connecting? state)
