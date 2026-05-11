@@ -6,13 +6,6 @@
             [view-elements :as view-elements]
             [clojure.string :as str]))
 
-;; Dispatch function - set by popup.cljs during init
-(def ^:private !dispatch-fn (atom nil))
-
-(defn set-dispatch! [f] (reset! !dispatch-fn f))
-
-(defn- dispatch! [actions] (@!dispatch-fn actions))
-
 ;; ============================================================
 ;; Pure helpers
 ;; ============================================================
@@ -60,7 +53,7 @@
 ;; Script item components
 ;; ============================================================
 
-(defn- script-name-row [{:script/keys [name] script-id :script/id :as script} runtime-error]
+(defn- script-name-row [dispatch! {:script/keys [name] script-id :script/id :as script} runtime-error]
   (let [builtin? (script-utils/builtin-script? script)]
     [:div.script-row-header
      [:span.script-name
@@ -94,7 +87,8 @@
          nil])]]))
 
 (defn- script-pattern-row
-  [{:script/keys [enabled run-at]
+  [dispatch!
+   {:script/keys [enabled run-at]
     script-id :script/id :as script}
    matching-pattern patterns-display patterns-tooltip]
   [:div.script-row-pattern
@@ -108,7 +102,8 @@
    [:span.script-match {:title (script-match-text patterns-tooltip script)}
     (script-match-text patterns-display script)]])
 
-(defn script-item [{:script/keys [name match description]
+(defn script-item [dispatch!
+                   {:script/keys [name match description]
                     script-id :script/id
                     :as script}
                    current-url
@@ -142,8 +137,8 @@
         :button/on-click #(dispatch! [[:popup/ax.evaluate-script script-id]])}
        nil]]
      [:div.script-content-column
-      [script-name-row script runtime-error]
-      [script-pattern-row script matching-pattern patterns-display patterns-tooltip]
+      [script-name-row dispatch! script runtime-error]
+      [script-pattern-row dispatch! script matching-pattern patterns-display patterns-tooltip]
       (when (seq description)
         [:div.script-row-description
          [:span.script-description {:title description}
@@ -169,12 +164,12 @@
   [(if (script-utils/builtin-script? item) 1 0)
    (str/lower-case (or (:script/name item) ""))])
 
-(defn- render-script-items [items current-url opts]
+(defn- render-script-items [dispatch! items current-url opts]
   (let [{:keys [highlight-name modified-set errors]} opts]
     (for [{:keys [item] :ui/keys [entering? leaving?]} items
           :let [script item]]
       ^{:key (:script/id script)}
-      [script-item script current-url
+      [script-item dispatch! script current-url
        {:reveal-highlight? (= (:script/name script) highlight-name)
         :recently-modified? (contains? modified-set (:script/name script))
         :leaving? leaving?
@@ -185,9 +180,9 @@
   (and (not (script-utils/special-script? (:item shadow-item)))
        (script-utils/get-matching-pattern current-url (:item shadow-item))))
 
-(defn matching-scripts-section [{:scripts/keys [list current-url]
-                                 :ui/keys [scripts-shadow reveal-highlight-script-name recently-modified-scripts]
-                                 :runtime/keys [errors]}]
+(defn matching-scripts-section [dispatch! {:scripts/keys [list current-url]
+                                           :ui/keys [scripts-shadow reveal-highlight-script-name recently-modified-scripts]
+                                           :runtime/keys [errors]}]
   (let [matching-shadow (->> scripts-shadow
                              (filterv (partial matching-url-shadow? current-url))
                              (sort-by default-script-sort))
@@ -198,14 +193,15 @@
         error-map (or errors {})]
     [:div.script-list
      (if (seq matching-shadow)
-       (render-script-items matching-shadow current-url
+       (render-script-items dispatch! matching-shadow current-url
                             {:highlight-name reveal-highlight-script-name
                              :modified-set modified-set
                              :errors error-map})
        [matching-scripts-empty-state no-user-scripts? example-pattern])]))
 
 (defn- filtered-script-section
-  [{:scripts/keys [current-url]
+  [dispatch!
+   {:scripts/keys [current-url]
     :ui/keys [scripts-shadow reveal-highlight-script-name recently-modified-scripts]
     :runtime/keys [errors]}
    {:keys [filter-fn sort-fn empty-text empty-hint]}]
@@ -217,7 +213,7 @@
         error-map (or errors {})]
     [:div.script-list
      (if (seq filtered)
-       (render-script-items filtered current-url
+       (render-script-items dispatch! filtered current-url
                             {:highlight-name reveal-highlight-script-name
                              :modified-set modified-set
                              :errors error-map})
@@ -225,8 +221,8 @@
         empty-text
         [:div.no-scripts-hint empty-hint]])]))
 
-(defn manual-scripts-section [state]
-  [filtered-script-section state
+(defn manual-scripts-section [dispatch! state]
+  [filtered-script-section dispatch! state
    {:filter-fn (fn [{:keys [item]}]
                  (and (not (script-utils/special-script? item))
                       (not (script-utils/library-script? item))
@@ -234,8 +230,8 @@
     :empty-text "No manual scripts."
     :empty-hint "Scripts without auto-run patterns appear here."}])
 
-(defn libraries-section [state]
-  [filtered-script-section state
+(defn libraries-section [dispatch! state]
+  [filtered-script-section dispatch! state
    {:filter-fn (fn [{:keys [item]}]
                  (and (script-utils/library-script? item)
                       (not (script-utils/special-script? item))
@@ -243,9 +239,9 @@
     :empty-text "No library scripts."
     :empty-hint "Scripts with :epupp/library? true appear here."}])
 
-(defn other-scripts-section [state]
+(defn other-scripts-section [dispatch! state]
   (let [current-url (:scripts/current-url state)]
-    [filtered-script-section state
+    [filtered-script-section dispatch! state
      {:filter-fn (fn [{:keys [item]}]
                    (and (not (script-utils/special-script? item))
                         (seq (:script/match item))
@@ -253,8 +249,8 @@
       :empty-text "No auto-run scripts for other pages."
       :empty-hint "Scripts with match patterns that don't match this page appear here."}]))
 
-(defn special-scripts-section [state]
-  [filtered-script-section state
+(defn special-scripts-section [dispatch! state]
+  [filtered-script-section dispatch! state
    {:filter-fn (fn [{:keys [item]}]
                  (script-utils/special-script? item))
     :sort-fn (fn [{:keys [item]}]

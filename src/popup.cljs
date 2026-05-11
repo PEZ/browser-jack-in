@@ -435,13 +435,13 @@
            (repl-settings-toggles state {:id-prefix "connect-"}))
      [connected-tabs-section state]]))
 
-(defn- scripts-section [state {:keys [id title scripts component]}]
+(defn- scripts-section [dispatch! state {:keys [id title scripts component]}]
   [collapsible-section {:id id
                         :title title
                         :expanded? (not (get (:ui/sections-collapsed state) id))
                         :badge-count (count scripts)
                         :max-height (str (+ 50 (* 105 (max 1 (count scripts)))) "px")}
-   [component state]])
+   [component dispatch! state]])
 
 (defn- popup-header [state]
   [view-elements/app-header
@@ -481,12 +481,12 @@
                                                (* 35 (count connections))) "px")
                            :data-attrs {:data-e2e-connection-count (count connections)}}
       [repl-connect-content state]]
-     [scripts-section state {:id :manual-scripts :title "Manual/On-demand scripts" :scripts manual :component popup-scripts/manual-scripts-section}]
-     [scripts-section state {:id :matching-scripts :title "Auto-run for this page" :scripts matching :component popup-scripts/matching-scripts-section}]
-     [scripts-section state {:id :other-scripts :title "Auto-run not matching this page" :scripts other-autorun :component popup-scripts/other-scripts-section}]
-     [scripts-section state {:id :libraries :title "Libraries" :scripts library :component popup-scripts/libraries-section}]
+     [scripts-section dispatch! state {:id :manual-scripts :title "Manual/On-demand scripts" :scripts manual :component popup-scripts/manual-scripts-section}]
+     [scripts-section dispatch! state {:id :matching-scripts :title "Auto-run for this page" :scripts matching :component popup-scripts/matching-scripts-section}]
+     [scripts-section dispatch! state {:id :other-scripts :title "Auto-run not matching this page" :scripts other-autorun :component popup-scripts/other-scripts-section}]
+     [scripts-section dispatch! state {:id :libraries :title "Libraries" :scripts library :component popup-scripts/libraries-section}]
      (when (seq special)
-       [scripts-section state {:id :special :title "Special" :scripts special :component popup-scripts/special-scripts-section}])
+       [scripts-section dispatch! state {:id :special :title "Special" :scripts special :component popup-scripts/special-scripts-section}])
      [collapsible-section {:id :settings
                            :title "Settings"
                            :expanded? (not (:settings sections-collapsed))
@@ -572,7 +572,6 @@
 
 (defn init! []
   (log/info "Popup" "Init!")
-  (popup-scripts/set-dispatch! dispatch!)
   (test-logger/install-global-error-handlers! "popup" js/window)
   (add-watch !state :popup/render (fn [_ _ _ _] (render!)))
   (dispatch! [[:popup/ax.set-brave-detected (some? (.-brave js/navigator))]])
