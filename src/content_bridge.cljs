@@ -141,41 +141,55 @@
   [msg]
   (send-message-safe! msg))
 
+(defn- passes-pre-forward?
+  "Check if message passes the pre-forward hook for a registry entry."
+  [entry msg]
+  (let [pre-forward (:msg/pre-forward entry)]
+    (or (nil? pre-forward)
+        (not (false? (pre-forward msg))))))
+
+(defn- forward-by-response-type!
+  "Forward message using the appropriate method based on registry entry."
+  [entry msg]
+  (if (:msg/response? entry)
+    (forward-with-response msg)
+    (forward-fire-and-forget msg)))
+
+(defn- try-forward-registered-message!
+  "Forward a message if it matches the registry and passes pre-forward checks."
+  [msg-type msg-source msg]
+  (when-let [entry (get message-registry msg-type)]
+    (when (and (contains? (:msg/sources entry) msg-source)
+               (passes-pre-forward? entry msg))
+      (forward-by-response-type! entry msg))))
+
+(defn- handle-local-message!
+  "Handle messages that are processed locally, never forwarded to background."
+  [msg-type msg]
+  (case msg-type
+    "log"
+    (let [level (.-level msg)
+          subsystem (.-subsystem msg)
+          messages (.-messages msg)]
+      (apply log/log level subsystem messages))
+
+    "get-icon-url"
+    (.postMessage js/window
+                  #js {:source "epupp-bridge"
+                       :type "get-icon-url-response"
+                       :requestId (.-requestId msg)
+                       :url (js/chrome.runtime.getURL "icons/icon.svg")}
+                  "*")
+    nil))
+
 (defn- handle-page-message [event]
   (when (same-window? event)
-    (let [msg (.-data event)]
-      (when msg
-        (let [msg-type (.-type msg)
-              msg-source (.-source msg)
-              entry (get message-registry msg-type)]
-          ;; Registry-driven dispatch: check source is allowed
-          (when (and entry (contains? (:msg/sources entry) msg-source))
-            ;; Run pre-forward hook if present
-            (let [pre-forward (:msg/pre-forward entry)
-                  should-forward? (if pre-forward
-                                    (not (false? (pre-forward msg)))
-                                    true)]
-              (when should-forward?
-                (if (:msg/response? entry)
-                  (forward-with-response msg)
-                  (forward-fire-and-forget msg)))))
-          ;; Locally-handled messages (never reach background)
-          (when (= "epupp-page" msg-source)
-            (case msg-type
-              "log"
-              (let [level (.-level msg)
-                    subsystem (.-subsystem msg)
-                    messages (.-messages msg)]
-                (apply log/log level subsystem messages))
-
-              "get-icon-url"
-              (.postMessage js/window
-                            #js {:source "epupp-bridge"
-                                 :type "get-icon-url-response"
-                                 :requestId (.-requestId msg)
-                                 :url (js/chrome.runtime.getURL "icons/icon.svg")}
-                            "*")
-              nil)))))))
+    (when-let [msg (.-data event)]
+      (let [msg-type (.-type msg)
+            msg-source (.-source msg)]
+        (try-forward-registered-message! msg-type msg-source msg)
+        (when (= "epupp-page" msg-source)
+          (handle-local-message! msg-type msg))))))
 
 ;; Script injection helpers
 (defn- inject-script-tag!
@@ -227,23 +241,63 @@
     (.appendChild js/document.head script)
     (log/debug "Bridge" "Injected userscript:" id)))
 
+(defn- relay-ws-message-to-page!
+  "Relay a WebSocket lifecycle message from background to the page."
+  [msg-type message]
+  (case msg-type
+    "ws-open"
+    (do
+      (log/debug "Bridge" "WebSocket connected")
+      (start-keepalive!)
+      (.postMessage js/window
+                    #js {:source "epupp-bridge"
+                         :type "ws-open"}
+                    "*"))
+
+    "ws-message"
+    (.postMessage js/window
+                  #js {:source "epupp-bridge"
+                       :type "ws-message"
+                       :data (.-data message)}
+                  "*")
+
+    "ws-error"
+    (do
+      (log/error "Bridge" "WebSocket error:" (.-error message))
+      (stop-keepalive!)
+      (set-connected! false)
+      (.postMessage js/window
+                    #js {:source "epupp-bridge"
+                         :type "ws-error"
+                         :error (.-error message)}
+                    "*"))
+
+    "ws-close"
+    (do
+      (log/debug "Bridge" "WebSocket closed")
+      (stop-keepalive!)
+      (set-connected! false)
+      (.postMessage js/window
+                    #js {:source "epupp-bridge"
+                         :type "ws-close"}
+                    "*"))
+
+    nil)
+  ;; ws relay messages never need async response
+  false)
+
 (defn- handle-runtime-message [message _sender send-response]
   (let [msg-type (.-type message)]
     (case msg-type
-      ;; Readiness check - background pings to confirm bridge is ready
       "bridge-ping"
       (do
         (log/debug "Bridge" "Responding to ping")
         (send-response #js {:ready true})
-        ;; Return true to keep sendResponse valid for async use
         true)
 
-      ;; Script injection messages
       "inject-script"
       (do
-        ;; inject-script-tag! calls send-response when script loads
         (inject-script-tag! (.-url message) send-response)
-        ;; Return true to indicate async response
         true)
 
       "clear-userscripts"
@@ -258,48 +312,9 @@
         (send-response #js {:success true})
         false)
 
-      ;; WebSocket relay messages - no response needed
-      "ws-open"
-      (do
-        (log/debug "Bridge" "WebSocket connected")
-        (start-keepalive!)
-        (.postMessage js/window
-                      #js {:source "epupp-bridge"
-                           :type "ws-open"}
-                      "*")
-        false)
-
-      "ws-message"
-      (do
-        (.postMessage js/window
-                      #js {:source "epupp-bridge"
-                           :type "ws-message"
-                           :data (.-data message)}
-                      "*")
-        false)
-
-      "ws-error"
-      (do
-        (log/error "Bridge" "WebSocket error:" (.-error message))
-        (stop-keepalive!)
-        (set-connected! false)
-        (.postMessage js/window
-                      #js {:source "epupp-bridge"
-                           :type "ws-error"
-                           :error (.-error message)}
-                      "*")
-        false)
-
-      "ws-close"
-      (do
-        (log/debug "Bridge" "WebSocket closed")
-        (stop-keepalive!)
-        (set-connected! false)
-        (.postMessage js/window
-                      #js {:source "epupp-bridge"
-                           :type "ws-close"}
-                      "*")
-        false)
+      ;; WebSocket relay messages
+      ("ws-open" "ws-message" "ws-error" "ws-close")
+      (relay-ws-message-to-page! msg-type message)
 
       ;; Unknown message type
       false)))

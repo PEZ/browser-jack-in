@@ -26,104 +26,103 @@
         (bridge-log :debug "Bridge is ready")
         (swap! !state assoc :bridge/ready? true)))))
 
+(defn- handle-ws-bridge-event!
+  "Handle a single WebSocket bridge event, updating ws-obj state and calling callbacks."
+  [ws-obj msg-type msg]
+  (case msg-type
+    "ws-open"
+    (do
+      (bridge-log :debug "WebSocket OPEN")
+      (set! (.-readyState ws-obj) 1)
+      (when-let [onopen (.-onopen ws-obj)]
+        (onopen)))
+
+    "ws-message"
+    (when-let [onmessage (.-onmessage ws-obj)]
+      (onmessage #js {:data (.-data msg)}))
+
+    "ws-error"
+    (do
+      (bridge-log :error "WebSocket ERROR")
+      (set! (.-readyState ws-obj) 3)
+      (when-let [onerror (.-onerror ws-obj)]
+        (onerror (js/Error. (or (.-error msg) "WebSocket error")))))
+
+    "ws-close"
+    (do
+      (bridge-log :debug "WebSocket CLOSED")
+      (set! (.-readyState ws-obj) 3)
+      (when-let [onclose (.-onclose ws-obj)]
+        (onclose)))
+
+    nil))
+
+(defn- make-bridge-message-handler
+  "Create a message event handler that routes bridge messages to ws-obj."
+  [ws-obj]
+  (fn [event]
+    (when (= (.-source event) js/window)
+      (let [msg (.-data event)]
+        (when (and msg (= "epupp-bridge" (.-source msg)))
+          (handle-ws-bridge-event! ws-obj (.-type msg) msg))))))
+
+(defn- init-ws-obj!
+  "Initialize a WebSocket-like object with properties and constants."
+  [url]
+  (let [ws-obj (js-obj)]
+    (set! (.-url ws-obj) url)
+    (set! (.-readyState ws-obj) 0)
+    (set! (.-onopen ws-obj) nil)
+    (set! (.-onmessage ws-obj) nil)
+    (set! (.-onerror ws-obj) nil)
+    (set! (.-onclose ws-obj) nil)
+    (set! (.-CONNECTING ws-obj) 0)
+    (set! (.-OPEN ws-obj) 1)
+    (set! (.-CLOSING ws-obj) 2)
+    (set! (.-CLOSED ws-obj) 3)
+    ws-obj))
+
+(defn- attach-ws-methods!
+  "Attach send and close methods to a ws-obj."
+  [ws-obj]
+  (set! (.-send ws-obj)
+        (fn [data]
+          (when (= 1 (.-readyState ws-obj))
+            (.postMessage js/window
+                          #js {:source "epupp-page"
+                               :type "ws-send"
+                               :data data}
+                          "*"))))
+  (set! (.-close ws-obj)
+        (fn []
+          (set! (.-readyState ws-obj) 3)
+          (when-let [handler (:ws/message-handler @!state)]
+            (.removeEventListener js/window "message" handler)
+            (swap! !state assoc :ws/message-handler nil))
+          (when-let [onclose (.-onclose ws-obj)]
+            (onclose)))))
+
 (defn bridged-websocket [url]
   (bridge-log :debug "Creating bridged WebSocket for:" url)
-
   ;; Clean up any existing message handler from previous connection
   (when-let [old-handler (:ws/message-handler @!state)]
     (bridge-log :debug "Removing old message handler")
     (.removeEventListener js/window "message" old-handler)
     (swap! !state assoc :ws/message-handler nil))
-
-  (let [ws-obj (js-obj)]
-
-    ;; Set up basic properties
-    (set! (.-url ws-obj) url)
-    (set! (.-readyState ws-obj) 0) ; CONNECTING
-    (set! (.-onopen ws-obj) nil)
-    (set! (.-onmessage ws-obj) nil)
-    (set! (.-onerror ws-obj) nil)
-    (set! (.-onclose ws-obj) nil)
-
-    ;; Expose WebSocket constants on instance
-    (set! (.-CONNECTING ws-obj) 0)
-    (set! (.-OPEN ws-obj) 1)
-    (set! (.-CLOSING ws-obj) 2)
-    (set! (.-CLOSED ws-obj) 3)
-
-    ;; Parse port from URL
-    (let [port (if-let [match (.match url #":(\d+)/")]
-                 (aget match 1)
-                 "1340")
-          message-handler
-          (fn [event]
-            (when (= (.-source event) js/window)
-              (let [msg (.-data event)]
-                (when (and msg (= "epupp-bridge" (.-source msg)))
-                  (case (.-type msg)
-                    "ws-open"
-                    (do
-                      (bridge-log :debug "WebSocket OPEN")
-                      (set! (.-readyState ws-obj) 1) ; OPEN
-                      (when-let [onopen (.-onopen ws-obj)]
-                        (onopen)))
-
-                    "ws-message"
-                    (when-let [onmessage (.-onmessage ws-obj)]
-                      (onmessage #js {:data (.-data msg)}))
-
-                    "ws-error"
-                    (do
-                      (bridge-log :error "WebSocket ERROR")
-                      (set! (.-readyState ws-obj) 3) ; CLOSED
-                      (when-let [onerror (.-onerror ws-obj)]
-                        (onerror (js/Error. (or (.-error msg) "WebSocket error")))))
-
-                    "ws-close"
-                    (do
-                      (bridge-log :debug "WebSocket CLOSED")
-                      (set! (.-readyState ws-obj) 3) ; CLOSED
-                      (when-let [onclose (.-onclose ws-obj)]
-                        (onclose)))
-
-                    nil)))))]
-
-      ;; Store and add the new message handler
-      (swap! !state assoc :ws/message-handler message-handler)
-      (.addEventListener js/window "message" message-handler)
-
-      ;; Add send method
-      (set! (.-send ws-obj)
-            (fn [data]
-              (when (= 1 (.-readyState ws-obj)) ; OPEN
-                (.postMessage js/window
-                              #js {:source "epupp-page"
-                                   :type "ws-send"
-                                   :data data}
-                              "*"))))
-
-      ;; Add close method
-      ;; Note: This only closes the page-side proxy, not the background WebSocket.
-      ;; The background WebSocket is cleaned up when:
-      ;; - A new connection is requested (handle-ws-connect calls close-ws! first)
-      ;; - The tab is closed (onRemoved listener)
-      ;; This design avoids extra message round-trips for the common reconnect case.
-      (set! (.-close ws-obj)
-            (fn []
-              (set! (.-readyState ws-obj) 3) ; CLOSED
-              (when-let [handler (:ws/message-handler @!state)]
-                (.removeEventListener js/window "message" handler)
-                (swap! !state assoc :ws/message-handler nil))
-              (when-let [onclose (.-onclose ws-obj)]
-                (onclose))))
-
-      ;; Request connection through bridge
-      (.postMessage js/window
-                    #js {:source "epupp-page"
-                         :type "ws-connect"
-                         :port port}
-                    "*"))
-
+  (let [ws-obj (init-ws-obj! url)
+        port (if-let [match (.match url #":(\d+)/")]
+               (aget match 1)
+               "1340")
+        message-handler (make-bridge-message-handler ws-obj)]
+    (swap! !state assoc :ws/message-handler message-handler)
+    (.addEventListener js/window "message" message-handler)
+    (attach-ws-methods! ws-obj)
+    ;; Request connection through bridge
+    (.postMessage js/window
+                  #js {:source "epupp-page"
+                       :type "ws-connect"
+                       :port port}
+                  "*")
     ws-obj))
 
 ;; Initialize - guard against multiple injections

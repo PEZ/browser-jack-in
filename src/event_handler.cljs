@@ -103,6 +103,44 @@
     (id-fn item)
     (get item id-fn)))
 
+(defn- get-shadow-watcher-action
+  "Shadow mode: compare source list to shadow list in current state.
+   Detects additions, removals, and content changes."
+  [list-path watcher-config new-state]
+  (let [id-fn (:id-fn watcher-config)
+        shadow-path (:shadow-path watcher-config)
+        on-change (:on-change watcher-config)
+        source-list (or (get new-state list-path) [])
+        shadow-list (or (get new-state shadow-path) [])
+        source-ids (set (map (fn [item] (apply-id-fn id-fn item)) source-list))
+        active-shadow-items (filterv (fn [s] (not (:ui/leaving? s))) shadow-list)
+        shadow-ids (set (map (fn [s] (apply-id-fn id-fn (:item s))) active-shadow-items))
+        added-ids (set/difference source-ids shadow-ids)
+        removed-ids (set/difference shadow-ids source-ids)
+        shadow-by-id (into {} (map (fn [s] [(apply-id-fn id-fn (:item s)) (:item s)]) active-shadow-items))
+        has-content-changes? (some (fn [item]
+                                     (let [id (apply-id-fn id-fn item)
+                                           shadow-item (get shadow-by-id id)]
+                                       (and shadow-item (not= item shadow-item))))
+                                   source-list)
+        added-items (filterv (fn [item] (contains? added-ids (apply-id-fn id-fn item))) source-list)]
+    (when (or (seq added-items) (seq removed-ids) has-content-changes?)
+      [on-change {:added-items added-items :removed-ids removed-ids}])))
+
+(defn- get-classic-watcher-action
+  "Classic mode: compare old vs new source lists."
+  [list-path watcher-config old-state new-state]
+  (let [id-fn (:id-fn watcher-config)
+        on-change (:on-change watcher-config)
+        old-list (or (get old-state list-path) [])
+        new-list (or (get new-state list-path) [])
+        old-ids (set (map (fn [item] (apply-id-fn id-fn item)) old-list))
+        new-ids (set (map (fn [item] (apply-id-fn id-fn item)) new-list))
+        added (set/difference new-ids old-ids)
+        removed (set/difference old-ids new-ids)]
+    (when (or (seq added) (seq removed))
+      [on-change {:added added :removed removed}])))
+
 (defn get-list-watcher-actions
   "Process list watchers, comparing state before and after changes.
    Two modes:
@@ -118,43 +156,33 @@
     (when (seq watchers)
       (->> watchers
            (map (fn [[list-path watcher-config]]
-                  (let [id-fn (:id-fn watcher-config)
-                        shadow-path (:shadow-path watcher-config)
-                        on-change (:on-change watcher-config)]
-                    (if shadow-path
-                      ;; Shadow mode: compare source to shadow in new-state
-                      ;; Also detects content changes (same ID, different content)
-                      (let [source-list (or (get new-state list-path) [])
-                            shadow-list (or (get new-state shadow-path) [])
-                            source-ids (set (map (fn [item] (apply-id-fn id-fn item)) source-list))
-                            ;; Shadow IDs exclude items already leaving
-                            active-shadow-items (filterv (fn [s] (not (:ui/leaving? s))) shadow-list)
-                            shadow-ids (set (map (fn [s] (apply-id-fn id-fn (:item s))) active-shadow-items))
-                            added-ids (set/difference source-ids shadow-ids)
-                            removed-ids (set/difference shadow-ids source-ids)
-                            ;; Detect content changes: items with same ID but different content
-                            shadow-by-id (into {} (map (fn [s] [(apply-id-fn id-fn (:item s)) (:item s)]) active-shadow-items))
-                            has-content-changes? (some (fn [item]
-                                                         (let [id (apply-id-fn id-fn item)
-                                                               shadow-item (get shadow-by-id id)]
-                                                           (and shadow-item (not= item shadow-item))))
-                                                       source-list)
-                            ;; Get full items for additions from source
-                            added-items (filterv (fn [item] (contains? added-ids (apply-id-fn id-fn item))) source-list)]
-                        ;; Fire if membership OR content changed
-                        (when (or (seq added-items) (seq removed-ids) has-content-changes?)
-                          [on-change {:added-items added-items :removed-ids removed-ids}]))
-                      ;; Classic mode: compare old vs new source
-                      (let [old-list (or (get old-state list-path) [])
-                            new-list (or (get new-state list-path) [])
-                            old-ids (set (map (fn [item] (apply-id-fn id-fn item)) old-list))
-                            new-ids (set (map (fn [item] (apply-id-fn id-fn item)) new-list))
-                            added (set/difference new-ids old-ids)
-                            removed (set/difference old-ids new-ids)]
-                        (when (or (seq added) (seq removed))
-                          [on-change {:added added :removed removed}]))))))
+                  (if (:shadow-path watcher-config)
+                    (get-shadow-watcher-action list-path watcher-config new-state)
+                    (get-classic-watcher-action list-path watcher-config old-state new-state))))
            (remove nil?)
            vec))))
+
+(defn- execute-fire-and-forget!
+  "Execute an effect without awaiting. Catches and logs errors."
+  [dispatch ex-handler fx]
+  (try
+    (execute-effect! dispatch ex-handler fx)
+    (catch :default e
+      (js/console.error (ex-info "Effect failed"
+                                 {:error e :effect fx}
+                                 :event-handler/execute-effects)))))
+
+(defn- ^:async execute-single-effect!
+  "Execute a single effect. Awaits if marked, otherwise fires and forgets.
+   Returns the updated prev-result."
+  [dispatch ex-handler raw-fx prev-result]
+  (let [is-await? (await-fx? raw-fx)
+        fx (-> raw-fx unwrap-fx (replace-prev-result prev-result))]
+    (if is-await?
+      (js-await (execute-effect! dispatch ex-handler fx))
+      (do
+        (execute-fire-and-forget! dispatch ex-handler fx)
+        prev-result))))
 
 (defn ^:async execute-effects!
   "Execute effects in order. Effects marked with :uf/await are awaited.
@@ -164,20 +192,8 @@
   (loop [remaining fxs
          prev-result nil]
     (if (seq remaining)
-      (let [raw-fx (first remaining)
-            is-await? (await-fx? raw-fx)
-            fx (-> raw-fx unwrap-fx (replace-prev-result prev-result))]
-        (if is-await?
-          (let [result (js-await (execute-effect! dispatch ex-handler fx))]
-            (recur (rest remaining) result))
-          (do
-            (try
-              (execute-effect! dispatch ex-handler fx)
-              (catch :default e
-                (js/console.error (ex-info "Effect failed"
-                                           {:error e :effect fx}
-                                           :event-handler/execute-effects))))
-            (recur (rest remaining) prev-result))))
+      (let [result (js-await (execute-single-effect! dispatch ex-handler (first remaining) prev-result))]
+        (recur (rest remaining) result))
       prev-result)))
 
 (defn replace-prev-result-in-actions
@@ -186,6 +202,18 @@
   (mapv (fn [action]
           (replace-prev-result action prev-result))
         actions))
+
+(defn- dispatch-effects-and-dxs!
+  "Execute effects then dispatch deferred actions with result substitution."
+  [dispatch-fn ex-handler fxs dxs]
+  (if (seq fxs)
+    (-> (execute-effects! dispatch-fn ex-handler fxs)
+        (.then (fn [prev-result]
+                 (when dxs
+                   (let [substituted-dxs (replace-prev-result-in-actions dxs prev-result)]
+                     (dispatch-fn substituted-dxs))))))
+    (when dxs
+      (dispatch-fn dxs))))
 
 (defn dispatch!
   "Dispatch actions through the Uniflow system.
@@ -215,21 +243,10 @@
                                                               :event-handler/handle-actions)]]}))]
      (when db
        (reset! !state db))
-     ;; List watchers: detect changes and dispatch actions
      (let [new-state (or db old-state)
            watcher-actions (get-list-watcher-actions old-state new-state)]
        (when (seq watcher-actions)
          (dispatch! !state ax-handler ex-handler watcher-actions additional-uf-data)))
-     ;; Execute effects first (unified model), then dispatch dxs with prev-result
      (let [dispatch-fn (fn [actions]
                          (dispatch! !state ax-handler ex-handler actions additional-uf-data))]
-       (if (seq fxs)
-         ;; Effects exist: execute them, then dispatch dxs with final result
-         (-> (execute-effects! dispatch-fn ex-handler fxs)
-             (.then (fn [prev-result]
-                      (when dxs
-                        (let [substituted-dxs (replace-prev-result-in-actions dxs prev-result)]
-                          (dispatch-fn substituted-dxs))))))
-         ;; No effects: dispatch dxs immediately (prev-result is nil)
-         (when dxs
-           (dispatch-fn dxs)))))))
+       (dispatch-effects-and-dxs! dispatch-fn ex-handler fxs dxs)))))

@@ -44,6 +44,17 @@
     (vector? match) match
     :else (vec match)))
 
+(defn- normalize-inject-value
+  "Normalize manifest inject value to a vector of strings."
+  [has-manifest? manifest-inject script-inject]
+  (cond
+    (not has-manifest?) script-inject
+    (nil? manifest-inject) []
+    (vector? manifest-inject) (vec manifest-inject)
+    (js/Array.isArray manifest-inject) (vec manifest-inject)
+    (string? manifest-inject) [manifest-inject]
+    :else []))
+
 (defn derive-script-fields
   "Derive script fields from manifest data.
    When manifest is present, it becomes the source of truth for derived fields."
@@ -66,13 +77,7 @@
                 []
                 :else
                 (:script/match script))
-        inject (cond
-                 (not has-manifest?) (:script/inject script)
-                 (nil? manifest-inject) []
-                 (vector? manifest-inject) (vec manifest-inject)
-                 (js/Array.isArray manifest-inject) (vec manifest-inject)
-                 (string? manifest-inject) [manifest-inject]
-                 :else [])]
+        inject (normalize-inject-value has-manifest? manifest-inject (:script/inject script))]
     (cond-> script
       has-manifest? (assoc :script/match match
                            :script/run-at (normalize-run-at manifest-run-at)
@@ -245,6 +250,70 @@
     (.startsWith input-name ".") "Script name cannot start with '.'"
     :else nil))
 
+(defn- extract-raw-name
+  "Extract raw script name from manifest or script data."
+  [script manifest]
+  (let [manifest-name (when manifest
+                        (or (get manifest "raw-script-name")
+                            (get manifest "script-name")))]
+    (or manifest-name (:script/name script))))
+
+(defn- normalize-name-with-validation
+  "Normalize a raw name and validate both pre- and post-normalization.
+   Returns {:normalized-name :error} map."
+  [raw-name is-builtin?]
+  (if (nil? raw-name)
+    {:normalized-name nil :error nil}
+    (let [normalized-name (if is-builtin?
+                            raw-name
+                            (normalize-script-name raw-name))
+          pre-error (when (not is-builtin?)
+                      (validate-script-name raw-name))
+          post-error (when (and (not is-builtin?) (not pre-error)
+                                (.startsWith normalized-name "epupp/"))
+                       "Cannot create scripts in reserved namespace: epupp/")]
+      {:normalized-name normalized-name
+       :error (or pre-error post-error)})))
+
+(defn- resolve-script-name
+  "Extract and normalize script name from manifest and script data.
+   Returns {:raw-name :normalized-name :error} map."
+  [script manifest is-builtin?]
+  (let [raw-name (extract-raw-name script manifest)
+        {:keys [normalized-name error]} (normalize-name-with-validation raw-name is-builtin?)]
+    {:raw-name raw-name
+     :normalized-name normalized-name
+     :error error}))
+
+(defn- compute-enabled-state
+  "Determine whether a script should be enabled."
+  [script derived existing]
+  (let [has-auto-run? (seq (:script/match derived))
+        is-update? (some? existing)]
+    (cond
+      (:script/always-enabled? script) true
+      (:script/web-installer-scan script) (if is-update?
+                                            (:script/enabled existing)
+                                            true)
+      (not has-auto-run?) false
+      is-update? (:script/enabled existing)
+      (some? (:script/enabled derived)) (:script/enabled derived)
+      :else false)))
+
+(defn- merge-and-timestamp
+  "Merge script with existing data and add timestamps."
+  [derived new-enabled existing now-iso]
+  (let [is-update? (some? existing)
+        merged (if is-update?
+                 (-> (merge existing (dissoc derived :script/enabled))
+                     (assoc :script/enabled new-enabled))
+                 (assoc derived :script/enabled new-enabled))]
+    (if is-update?
+      (assoc merged :script/modified now-iso)
+      (assoc merged
+             :script/created now-iso
+             :script/modified now-iso))))
+
 (defn normalize-and-merge-script
   "Pure script normalization and merge. No persistence, no atoms.
    Returns {:script updated-script} or {:error error-message}.
@@ -259,63 +328,23 @@
    - Error handling strategy (throw vs error map)
    - Persistence"
   [script existing manifest {:keys [is-builtin? now-iso]}]
-  (let [has-manifest? (some? manifest)
-        manifest-name (when has-manifest?
-                        (or (get manifest "raw-script-name")
-                            (get manifest "script-name")))
-        raw-name (or (and has-manifest? manifest-name)
-                     (:script/name script))
-        name-error (when (and raw-name (not is-builtin?))
-                     (validate-script-name raw-name))
-        normalized-name (when raw-name
-                          (if is-builtin?
-                            raw-name
-                            (normalize-script-name raw-name)))
-        ;; Post-normalization check: dots become slashes, so "epupp.foo"
-        ;; would normalize to "epupp/foo.cljs" - bypassing raw validation
-        post-norm-error (when (and normalized-name (not is-builtin?) (not name-error))
-                          (when (.startsWith normalized-name "epupp/")
-                            "Cannot create scripts in reserved namespace: epupp/"))]
-    (if (or name-error post-norm-error)
-      {:error (or name-error post-norm-error)}
-      (let [named-script (cond-> script
+  (let [{:keys [normalized-name error]} (resolve-script-name script manifest is-builtin?)]
+    (if error
+      {:error error}
+      (let [has-manifest? (some? manifest)
+            named-script (cond-> script
                            normalized-name (assoc :script/name normalized-name))
-            ;; When no manifest and no match on incoming, fall back to existing
             with-match-fallback (if (and (not has-manifest?)
                                          (nil? (:script/match named-script))
                                          existing)
                                   (assoc named-script :script/match (:script/match existing))
                                   named-script)
-            ;; Apply manifest-derived fields (match, run-at, description, inject)
             derived (derive-script-fields with-match-fallback manifest)
-            ;; derive-script-fields may set raw manifest name; override with normalized
             derived (if normalized-name
                       (assoc derived :script/name normalized-name)
                       derived)
-            ;; Compute enabled state
-            has-auto-run? (seq (:script/match derived))
-            is-update? (some? existing)
-            new-enabled (cond
-                          (:script/always-enabled? script) true
-                          (:script/web-installer-scan script) (if is-update?
-                                                                (:script/enabled existing)
-                                                                true)
-                          (not has-auto-run?) false
-                          is-update? (:script/enabled existing)
-                          (some? (:script/enabled derived)) (:script/enabled derived)
-                          :else false)
-            ;; Merge with existing or create new
-            merged (if is-update?
-                     (-> (merge existing (dissoc derived :script/enabled))
-                         (assoc :script/enabled new-enabled))
-                     (assoc derived :script/enabled new-enabled))
-            ;; Add timestamps
-            timestamped (if is-update?
-                          (assoc merged :script/modified now-iso)
-                          (assoc merged
-                                 :script/created now-iso
-                                 :script/modified now-iso))]
-        {:script timestamped}))))
+            new-enabled (compute-enabled-state script derived existing)]
+        {:script (merge-and-timestamp derived new-enabled existing now-iso)}))))
 
 (defn builtin-script?
   "Check if a script is a built-in script via :script/builtin? metadata."
