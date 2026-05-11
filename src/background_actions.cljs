@@ -1,613 +1,243 @@
 (ns background-actions
-  (:require [background-actions.repl-fs-actions :as repl-fs-actions]
+  "Routes background actions to domain-specific handler modules."
+  (:require [background-actions.msg-actions :as msg-actions]
+            [background-actions.fs-guard-actions :as fs-guard-actions]
+            [background-actions.nav-actions :as nav-actions]
+            [background-actions.dep-actions :as dep-actions]
+            [background-actions.repl-fs-actions :as repl-fs-actions]
             [background-actions.fs-actions :as fs-actions]
             [background-actions.icon-actions :as icon-actions]
             [background-actions.history-actions :as history-actions]
             [background-actions.ws-actions :as ws-actions]
             [background-actions.sponsor-actions :as sponsor-actions]
-            [background-utils :as bg-utils]
-            [dep-resolver :as dep-resolver]
-            [ext-dep :as ext-dep]
-            [script-utils :as script-utils]))
+            [background-utils :as bg-utils]))
 
-(defn- deps-only-plan
-  [plan]
-  (assoc plan :plan/steps
-         (filterv #(not= :root-script (:step/type %))
-                  (:plan/steps plan))))
+(def ^:private msg-action-set
+  {:msg/ax.connect-tab true
+   :msg/ax.check-status true
+   :msg/ax.ensure-scittle true
+   :msg/ax.ensure-scittle-result true
+   :msg/ax.evaluate-script true
+   :msg/ax.e2e-get-storage true
+   :msg/ax.e2e-set-storage true
+   :msg/ax.e2e-find-tab-id true
+   :msg/ax.list-scripts-result true
+   :msg/ax.get-script-result true
+   :msg/ax.inject-libs true
+   :msg/ax.inject-libs-ready true
+   :msg/ax.load-manifest true
+   :msg/ax.load-manifest-ready true
+   :msg/ax.get-connections true
+   :msg/ax.list-scripts true
+   :msg/ax.get-script true
+   :msg/ax.e2e-get-test-events true
+   :msg/ax.handle-permission-granted true
+   :msg/ax.e2e-get-icon-display-state true
+   :msg/ax.log-resolution-error true})
 
-(defn- resolution-error-dxs
-  [errors]
-  (when (seq errors)
-    (vec (cons [:banner/ax.broadcast-resolution-errors errors]
-               (map (fn [error] [:msg/ax.log-resolution-error error]) errors)))))
+(def ^:private fs-guard-action-set
+  {:fs/ax.guard-list-scripts true
+   :fs/ax.guard-get-script true
+   :fs/ax.guard-rename-script true
+   :fs/ax.guard-delete-script true
+   :fs/ax.guard-save-script true})
 
-(defn- resolution-error-response
-  [errors]
-  (let [messages (mapv :error/message errors)]
-    {:success false
-     :error (first messages)
-     :errors messages}))
+(def ^:private nav-action-set
+  {:nav/ax.decide-connection true
+   :nav/ax.handle-navigation true
+   :nav/ax.handle-before-navigate true
+   :tab/ax.handle-removed true
+   :visibility/ax.handle-tab-visible true
+   :visibility/ax.decide-reconnect true})
 
-(defn- known-runtime-errors
-  [errors-by-tab]
-  (->> errors-by-tab
-       vals
-       (mapcat vals)
-       set))
+(def ^:private dep-action-set
+  {:runtime/ax.set-tab-errors true
+   :runtime/ax.get-tab-errors true
+   :runtime/ax.re-resolve-on-change true
+   :ext-dep/ax.resolve-uncached-urls true
+   :ext-dep/ax.cache-results true})
 
-(defn- uncached-ext-dep-urls
-  [libs ext-dep-cache]
-  (let [passed-cache (or ext-dep-cache {})]
-    (->> (ext-dep/extract-ext-dep-urls (or libs []))
-         distinct
-         (remove #(contains? passed-cache %))
-         vec)))
+;; Simple delegation handlers for existing modules
+(def ^:private delegation-handlers
+  {:fs/ax.rename-script
+   (fn [state uf-data args]
+     (let [[from-name to-name force?] args]
+       (repl-fs-actions/rename-script
+        state
+        (cond-> {:fs/now-iso (.toISOString (js/Date. (:system/now uf-data)))
+                 :fs/from-name from-name
+                 :fs/to-name to-name}
+          force? (assoc :fs/force? true)))))
 
-(defn- dedupe-fetch-cache-miss-errors
-  [fetch-errors plan-errors]
-  (let [failed-urls (->> fetch-errors
-                         (filter #(= :ext-dep/fetch-failed (:error/type %)))
-                         (keep :error/dep-raw)
-                         set)]
-    (filterv (fn [error]
-               (not (and (= :ext-dep/cache-miss (:error/type error))
-                         (contains? failed-urls (:error/dep-raw error)))))
-             plan-errors)))
+   :fs/ax.delete-script
+   (fn [state _uf-data args]
+     (let [[payload] args
+           {:keys [script-name bulk-id bulk-index bulk-count]}
+           (if (map? payload) payload {:script-name payload})]
+       (repl-fs-actions/delete-script
+        state
+        {:fs/script-name script-name
+         :fs/bulk-id bulk-id
+         :fs/bulk-index bulk-index
+         :fs/bulk-count bulk-count})))
 
-(defn- combined-resolution-errors
-  [fetch-errors plan-errors]
-  (into (vec fetch-errors)
-        (dedupe-fetch-cache-miss-errors fetch-errors plan-errors)))
+   :fs/ax.save-script
+   (fn [state uf-data args]
+     (let [[script] args]
+       (repl-fs-actions/save-script
+        state
+        {:fs/now-iso (.toISOString (js/Date. (:system/now uf-data)))
+         :fs/script script})))
 
-(defn- manual-dep-ready
-  [state {:keys [send-response tab-id synthetic-script all-scripts fetch-result]}]
-  (let [icon-state (get-in state [:icon/states tab-id] :disconnected)
-        existing-cache (or (:storage/ext-dep-cache state) {})
-        fetched-cache (or (:resolved fetch-result) {})
-        merged-cache (merge existing-cache fetched-cache)
-        plan (dep-resolver/resolve-execution-plan [synthetic-script]
-                                                  (or all-scripts [])
-                                                  merged-cache)
-        errors (combined-resolution-errors (or (:errors fetch-result) [])
-                                           (:plan/errors plan))
-        deps-plan (deps-only-plan plan)
-        response (if (seq errors)
-                   (resolution-error-response errors)
-                   {:success true})
-        base-fxs (cond-> []
-                   (seq fetched-cache) (conj [:storage/fx.persist-ext-dep-cache! merged-cache]))
-        fxs (cond
-              (seq errors)
-              (conj base-fxs [:msg/fx.send-response send-response response])
+   :fs/ax.toggle-sync
+   (fn [state _uf-data args]
+     (let [[tab-id enabled send-response] args]
+       (fs-actions/toggle-sync state {:fs/tab-id tab-id :fs/enabled enabled :fs/send-response send-response})))
 
-              (seq (:plan/steps deps-plan))
-              (into base-fxs [[:uf/await :msg/fx.ensure-scittle-tab tab-id icon-state]
-                              [:uf/await :msg/fx.execute-plan tab-id deps-plan]
-                              [:msg/fx.send-response send-response response]])
+   :fs/ax.get-sync-status
+   (fn [state _uf-data args]
+     (let [[send-response] args]
+       (fs-actions/get-sync-status state {:fs/send-response send-response})))
 
-              :else
-              (conj base-fxs [:msg/fx.send-response send-response response]))]
-    (cond-> {:uf/fxs fxs}
-      (seq fetched-cache) (assoc :uf/db (assoc state :storage/ext-dep-cache merged-cache))
-      (seq errors) (assoc :uf/dxs (resolution-error-dxs errors)))))
+   :icon/ax.set-state
+   (fn [state _uf-data args]
+     (let [[tab-id new-state] args]
+       (icon-actions/set-state state {:icon/tab-id tab-id :icon/new-state new-state})))
 
-(defn- manual-dep-fetch-or-ready
-  [state {:keys [send-response tab-id libs all-scripts synthetic-script ready-dispatch]}]
-  (let [existing-cache (or (:storage/ext-dep-cache state) {})
-        uncached (uncached-ext-dep-urls libs existing-cache)]
-    (if (seq uncached)
-      {:uf/fxs [[:uf/await :ext-dep/fx.fetch-deps uncached existing-cache]]
-       :uf/dxs [(conj ready-dispatch :uf/prev-result)]}
-      (manual-dep-ready state {:send-response send-response
-                               :tab-id tab-id
-                               :synthetic-script synthetic-script
-                               :all-scripts all-scripts}))))
+   :icon/ax.clear
+   (fn [state _uf-data args]
+     (let [[tab-id] args]
+       (icon-actions/clear-state state {:icon/tab-id tab-id})))
+
+   :icon/ax.prune
+   (fn [state _uf-data args]
+     (let [[valid-tab-ids] args]
+       (icon-actions/prune-states state {:icon/valid-tab-ids valid-tab-ids})))
+
+   :history/ax.track
+   (fn [state _uf-data args]
+     (let [[tab-id port] args]
+       (history-actions/track state {:history/tab-id tab-id :history/port port})))
+
+   :history/ax.forget
+   (fn [state _uf-data args]
+     (let [[tab-id] args]
+       (history-actions/forget state {:history/tab-id tab-id})))
+
+   :ws/ax.register
+   (fn [state _uf-data args]
+     (let [[tab-id connection-info] args]
+       (ws-actions/register state {:ws/tab-id tab-id :ws/connection-info connection-info})))
+
+   :ws/ax.unregister
+   (fn [state _uf-data args]
+     (let [[tab-id] args]
+       (ws-actions/unregister state {:ws/tab-id tab-id})))
+
+   :ws/ax.broadcast
+   (fn [state _uf-data _args]
+     {:uf/fxs [[:ws/fx.broadcast-connections-changed! (:ws/connections state)]]})
+
+   :ws/ax.handle-connect
+   (fn [state _uf-data args]
+     (let [[tab-id port] args]
+       (ws-actions/handle-connect state {:ws/tab-id tab-id :ws/port port})))
+
+   :ws/ax.handle-send
+   (fn [state _uf-data args]
+     (let [[tab-id data] args]
+       (ws-actions/handle-send state {:ws/tab-id tab-id :ws/data data})))
+
+   :ws/ax.handle-close
+   (fn [state _uf-data args]
+     (let [[tab-id] args]
+       (ws-actions/handle-close state {:ws/tab-id tab-id})))
+
+   :ws/ax.explicit-disconnect
+   (fn [state _uf-data args]
+     (let [[tab-id] args]
+       (ws-actions/explicit-disconnect state {:ws/tab-id tab-id})))
+
+   :sponsor/ax.set-pending
+   (fn [state uf-data args]
+     (let [[tab-id] args]
+       (sponsor-actions/set-pending state {:sponsor/tab-id tab-id
+                                           :sponsor/now (:system/now uf-data)})))
+
+   :sponsor/ax.consume-pending
+   (fn [state uf-data args]
+     (let [[tab-id tab-url send-response] args]
+       (sponsor-actions/consume-pending state {:sponsor/tab-id tab-id
+                                               :sponsor/now (:system/now uf-data)
+                                               :sponsor/tab-url tab-url
+                                               :sponsor/send-response send-response})))
+
+   :storage/ax.set-ext-dep-cache
+   (fn [state _uf-data args]
+     (let [[cache] args]
+       {:uf/db (assoc state :storage/ext-dep-cache (or cache {}))}))
+
+   :init/ax.clear-promise
+   (fn [state _uf-data _args]
+     {:uf/db (assoc state :init/promise nil)})})
+
+;; Remaining actions handled individually
+(defn- handle-ensure-initialized [state]
+  (if-let [promise (:init/promise state)]
+    {:uf/db state
+     :uf/fxs [[:uf/await :init/fx.await-promise promise]]}
+    (let [resolve-fn (volatile! nil)
+          reject-fn (volatile! nil)
+          promise (js/Promise. (fn [resolve reject]
+                                 (vreset! resolve-fn resolve)
+                                 (vreset! reject-fn reject)))]
+      {:uf/db (assoc state :init/promise promise)
+       :uf/fxs [[:uf/await :init/fx.initialize @resolve-fn @reject-fn]]})))
+
+(defn- handle-alarm-tick [state]
+  (let [connections (or (:ws/connections state) {})]
+    (when (seq connections)
+      {:uf/fxs [[:alarm/fx.log-tick (count connections)]]})))
+
+(defn- handle-banner-broadcast [args]
+  (let [[errors] args
+        messages (mapv :error/message errors)]
+    {:uf/fxs [[:banner/fx.broadcast-system {:event-type "error"
+                                            :operation "library-resolution"
+                                            :error (first messages)
+                                            :errors messages}]]}))
+
+(defn- handle-refresh-toolbar [state args]
+  (let [[tab-id] args
+        display-state (bg-utils/compute-display-icon-state (:icon/states state) tab-id)]
+    {:uf/fxs [[:icon/fx.update-toolbar! tab-id display-state]]}))
+
+(defn- handle-misc-action [state action args]
+  (case action
+    :init/ax.ensure-initialized (handle-ensure-initialized state)
+    :alarm/ax.tick (handle-alarm-tick state)
+    :banner/ax.broadcast-resolution-errors (handle-banner-broadcast args)
+    :icon/ax.refresh-toolbar (handle-refresh-toolbar state args)
+    :uf/unhandled-ax))
 
 (defn handle-action
-  "Pure function - no side effects allowed."
-  [state uf-data [action & args]]
-  (case action
-    :fs/ax.guard-list-scripts
-    (let [[tab-id send-response include-hidden?] args
-          allowed? (bg-utils/fs-access-allowed? (:fs/sync-tab-id state) (:ws/connections state) tab-id)]
-      (if allowed?
-        {:uf/fxs [[:msg/fx.list-scripts send-response include-hidden?]]}
-        {:uf/fxs [[:msg/fx.send-response send-response {:success false
-                                                        :error "FS Sync requires an active REPL connection and FS Sync enabled in settings"}]]}))
+  "Routes background actions to domain-specific handler modules."
+  [state uf-data [action & args :as action-vec]]
+  (cond
+    (get msg-action-set action)
+    (msg-actions/handle-action state uf-data action-vec)
 
-    :fs/ax.guard-get-script
-    (let [[tab-id send-response script-name] args
-          allowed? (bg-utils/fs-access-allowed? (:fs/sync-tab-id state) (:ws/connections state) tab-id)]
-      (if allowed?
-        {:uf/fxs [[:msg/fx.get-script send-response script-name]]}
-        {:uf/fxs [[:msg/fx.send-response send-response {:success false
-                                                        :error "FS Sync requires an active REPL connection and FS Sync enabled in settings"}]]}))
+    (get fs-guard-action-set action)
+    (fs-guard-actions/handle-action state uf-data action-vec)
 
-    :fs/ax.guard-rename-script
-    (let [[tab-id send-response from-name to-name force?] args
-          allowed? (bg-utils/fs-access-allowed? (:fs/sync-tab-id state) (:ws/connections state) tab-id)
-          rename-action (cond-> [:fs/ax.rename-script from-name to-name]
-                          force? (conj true))]
-      (if allowed?
-        (let [name-error (script-utils/validate-script-name to-name)]
-          (if name-error
-            {:uf/fxs [[:msg/fx.send-response send-response {:success false :error name-error}]]}
-            {:uf/fxs [[:fs/fx.dispatch-action send-response rename-action]]}))
-        {:uf/fxs [[:banner/fx.broadcast-system {:event-type "error"
-                                                :operation "rename"
-                                                :error "FS Sync requires an active REPL connection and FS Sync enabled in settings"}]
-                  [:msg/fx.send-response send-response {:success false
-                                                        :error "FS Sync requires an active REPL connection and FS Sync enabled in settings"}]]}))
+    (get nav-action-set action)
+    (nav-actions/handle-action state uf-data action-vec)
 
-    :fs/ax.guard-delete-script
-    (let [[tab-id send-response delete-params] args
-          allowed? (bg-utils/fs-access-allowed? (:fs/sync-tab-id state) (:ws/connections state) tab-id)]
-      (if allowed?
-        {:uf/fxs [[:fs/fx.dispatch-action send-response [:fs/ax.delete-script delete-params]]]}
-        {:uf/fxs [[:banner/fx.broadcast-system {:event-type "error"
-                                                :operation "delete"
-                                                :error "FS Sync requires an active REPL connection and FS Sync enabled in settings"}]
-                  [:msg/fx.send-response send-response {:success false
-                                                        :error "FS Sync requires an active REPL connection and FS Sync enabled in settings"}]]}))
+    (get dep-action-set action)
+    (dep-actions/handle-action state uf-data action-vec)
 
-    :fs/ax.guard-save-script
-    (let [[tab-id send-response raw-data web-install?] args
-          allowed? (or web-install?
-                       (bg-utils/fs-access-allowed? (:fs/sync-tab-id state) (:ws/connections state) tab-id))]
-      (if allowed?
-        {:uf/fxs [[:fs/fx.parse-and-save send-response raw-data]]}
-        {:uf/fxs [[:banner/fx.broadcast-system {:event-type "error"
-                                                :operation "save"
-                                                :error "FS Sync requires an active REPL connection and FS Sync enabled in settings"}]
-                  [:msg/fx.send-response send-response {:success false
-                                                        :error "FS Sync requires an active REPL connection and FS Sync enabled in settings"}]]}))
+    (get delegation-handlers action)
+    ((get delegation-handlers action) state uf-data args)
 
-    :fs/ax.rename-script
-    (let [[from-name to-name force?] args]
-      (repl-fs-actions/rename-script
-       state
-       (cond-> {:fs/now-iso (.toISOString (js/Date. (:system/now uf-data)))
-                :fs/from-name from-name
-                :fs/to-name to-name}
-         force? (assoc :fs/force? true))))
-
-    :fs/ax.delete-script
-    (let [[payload] args
-          {:keys [script-name bulk-id bulk-index bulk-count]} (if (map? payload)
-                                                                payload
-                                                                {:script-name payload})]
-      (repl-fs-actions/delete-script
-       state
-       {:fs/script-name script-name
-        :fs/bulk-id bulk-id
-        :fs/bulk-index bulk-index
-        :fs/bulk-count bulk-count}))
-
-    :fs/ax.save-script
-    (let [[script] args]
-      (repl-fs-actions/save-script
-       state
-       {:fs/now-iso (.toISOString (js/Date. (:system/now uf-data)))
-        :fs/script script}))
-
-    :fs/ax.toggle-sync
-    (let [[tab-id enabled send-response] args]
-      (fs-actions/toggle-sync state {:fs/tab-id tab-id :fs/enabled enabled :fs/send-response send-response}))
-
-    :fs/ax.get-sync-status
-    (let [[send-response] args]
-      (fs-actions/get-sync-status state {:fs/send-response send-response}))
-
-    :icon/ax.set-state
-    (let [[tab-id new-state] args]
-      (icon-actions/set-state
-       state
-       {:icon/tab-id tab-id
-        :icon/new-state new-state}))
-
-    :icon/ax.clear
-    (let [[tab-id] args]
-      (icon-actions/clear-state
-       state
-       {:icon/tab-id tab-id}))
-
-    :icon/ax.prune
-    (let [[valid-tab-ids] args]
-      (icon-actions/prune-states
-       state
-       {:icon/valid-tab-ids valid-tab-ids}))
-
-    :history/ax.track
-    (let [[tab-id port] args]
-      (history-actions/track
-       state
-       {:history/tab-id tab-id
-        :history/port port}))
-
-    :history/ax.forget
-    (let [[tab-id] args]
-      (history-actions/forget
-       state
-       {:history/tab-id tab-id}))
-
-    :ws/ax.register
-    (let [[tab-id connection-info] args]
-      (ws-actions/register
-       state
-       {:ws/tab-id tab-id
-        :ws/connection-info connection-info}))
-
-    :ws/ax.unregister
-    (let [[tab-id] args]
-      (ws-actions/unregister
-       state
-       {:ws/tab-id tab-id}))
-
-    :sponsor/ax.set-pending
-    (let [[tab-id] args]
-      (sponsor-actions/set-pending state {:sponsor/tab-id tab-id
-                                          :sponsor/now (:system/now uf-data)}))
-
-    :sponsor/ax.consume-pending
-    (let [[tab-id tab-url send-response] args]
-      (sponsor-actions/consume-pending state {:sponsor/tab-id tab-id
-                                              :sponsor/now (:system/now uf-data)
-                                              :sponsor/tab-url tab-url
-                                              :sponsor/send-response send-response}))
-
-    :ws/ax.broadcast
-    {:uf/fxs [[:ws/fx.broadcast-connections-changed! (:ws/connections state)]]}
-
-    :ws/ax.handle-connect
-    (let [[tab-id port] args]
-      (ws-actions/handle-connect state {:ws/tab-id tab-id :ws/port port}))
-
-    :ws/ax.handle-send
-    (let [[tab-id data] args]
-      (ws-actions/handle-send state {:ws/tab-id tab-id :ws/data data}))
-
-    :ws/ax.handle-close
-    (let [[tab-id] args]
-      (ws-actions/handle-close state {:ws/tab-id tab-id}))
-
-    :ws/ax.explicit-disconnect
-    (let [[tab-id] args]
-      (ws-actions/explicit-disconnect state {:ws/tab-id tab-id}))
-
-    :init/ax.ensure-initialized
-    (if-let [promise (:init/promise state)]
-      ;; Already initializing/initialized - await existing promise
-      {:uf/db state
-       :uf/fxs [[:uf/await :init/fx.await-promise promise]]}
-      ;; First call - create promise and initialize
-      (let [resolve-fn (volatile! nil)
-            reject-fn (volatile! nil)
-            promise (js/Promise. (fn [resolve reject]
-                                   (vreset! resolve-fn resolve)
-                                   (vreset! reject-fn reject)))]
-        {:uf/db (assoc state :init/promise promise)
-         :uf/fxs [[:uf/await :init/fx.initialize @resolve-fn @reject-fn]]}))
-
-    :init/ax.clear-promise
-    {:uf/db (assoc state :init/promise nil)}
-
-    :storage/ax.set-ext-dep-cache
-    (let [[cache] args]
-      {:uf/db (assoc state :storage/ext-dep-cache (or cache {}))})
-
-    :msg/ax.connect-tab
-    (let [[send-response tab-id ws-port] args
-          icon-state (get-in state [:icon/states tab-id] :disconnected)]
-      {:uf/fxs [[:uf/await :repl/fx.connect-tab tab-id ws-port icon-state]
-                [:msg/fx.send-response send-response :uf/prev-result]]})
-
-    :msg/ax.check-status
-    (let [[send-response tab-id] args]
-      {:uf/fxs [[:uf/await :page/fx.check-status tab-id]
-                [:msg/fx.send-response send-response :uf/prev-result]]})
-
-    :msg/ax.ensure-scittle
-    (let [[send-response tab-id] args
-          icon-state (get-in state [:icon/states tab-id] :disconnected)]
-      {:uf/fxs [[:msg/fx.ensure-scittle send-response tab-id icon-state]]})
-
-    :msg/ax.ensure-scittle-result
-    (let [[send-response {:keys [ok? error]}] args
-          response (cond-> {:success (boolean ok?)}
-                     error (assoc :error error))]
-      {:uf/fxs [[:msg/fx.send-response send-response response]]})
-
-    :msg/ax.evaluate-script
-    (let [[send-response tab-id code libs script-id] args
-          icon-state (get-in state [:icon/states tab-id] :disconnected)
-          ext-dep-cache (or (:storage/ext-dep-cache state) {})
-          script (cond-> {:script/id script-id
-                          :script/name "popup-eval"
-                          :script/code code}
-                   libs (assoc :script/inject libs))]
-      {:uf/fxs [[:uf/await :script/fx.evaluate tab-id script icon-state ext-dep-cache]
-                [:msg/fx.send-response send-response :uf/prev-result]]})
-
-    :msg/ax.e2e-get-storage
-    (let [[send-response key] args]
-      (if key
-        {:uf/fxs [[:uf/await :storage/fx.get-local-storage key]
-                  [:msg/fx.send-response send-response :uf/prev-result]]}
-        {:uf/fxs [[:msg/fx.send-response send-response {:success false
-                                                        :error "Missing key"}]]}))
-
-    :msg/ax.e2e-set-storage
-    (let [[send-response key value] args]
-      (if key
-        {:uf/fxs [[:uf/await :storage/fx.set-local-storage key value]
-                  [:msg/fx.send-response send-response :uf/prev-result]]}
-        {:uf/fxs [[:msg/fx.send-response send-response {:success false
-                                                        :error "Missing key"}]]}))
-
-    :msg/ax.inject-libs
-    (let [[send-response tab-id libs all-scripts] args
-          requested-libs (or libs [])
-          scripts (or all-scripts [])
-          synthetic-script {:script/id "panel-inject"
-                            :script/name "panel-inject"
-                            :script/code ""
-                            :script/inject requested-libs}]
-      (manual-dep-fetch-or-ready
-       state
-       {:send-response send-response
-        :tab-id tab-id
-        :libs requested-libs
-        :all-scripts scripts
-        :synthetic-script synthetic-script
-        :ready-dispatch [:msg/ax.inject-libs-ready
-                         send-response
-                         tab-id
-                         requested-libs
-             scripts]}))
-
-    :msg/ax.inject-libs-ready
-        (let [[send-response tab-id libs all-scripts fetch-result] args
-          synthetic-script {:script/id "panel-inject"
-                            :script/name "panel-inject"
-                            :script/code ""
-                            :script/inject (or libs [])}]
-      (manual-dep-ready state {:send-response send-response
-                               :tab-id tab-id
-                               :synthetic-script synthetic-script
-                               :all-scripts (or all-scripts [])
-                               :fetch-result fetch-result}))
-
-    :msg/ax.list-scripts-result
-    (let [[send-response {:keys [include-hidden? scripts]}] args
-          visible-scripts (script-utils/filter-visible-scripts scripts include-hidden?)
-          public-scripts (mapv repl-fs-actions/script->base-info visible-scripts)]
-      {:uf/fxs [[:msg/fx.send-response send-response {:success true
-                                                      :scripts public-scripts}]]})
-
-    :msg/ax.get-script-result
-    (let [[send-response {:keys [script-name script]}] args
-          response (if script
-                     {:success true :code (:script/code script)}
-                     {:success false :error (str "Script not found: " script-name)})]
-      {:uf/fxs [[:msg/fx.send-response send-response response]]})
-
-    :msg/ax.list-scripts
-    (let [[send-response include-hidden?] args]
-      {:uf/fxs [[:msg/fx.list-scripts send-response include-hidden?]]})
-
-    :msg/ax.get-script
-    (let [[send-response script-name] args]
-      {:uf/fxs [[:msg/fx.get-script send-response script-name]]})
-
-    :msg/ax.load-manifest
-    (let [[send-response tab-id manifest all-scripts] args
-          requested-libs (or (when manifest (vec (aget manifest "inject"))) [])
-          scripts (or all-scripts [])
-          synthetic-script {:script/id "repl-manifest"
-                            :script/name "repl-manifest"
-                            :script/code ""
-                            :script/inject requested-libs}]
-      (manual-dep-fetch-or-ready
-       state
-       {:send-response send-response
-        :tab-id tab-id
-        :libs requested-libs
-        :all-scripts scripts
-        :synthetic-script synthetic-script
-        :ready-dispatch [:msg/ax.load-manifest-ready
-                         send-response
-                         tab-id
-                         manifest
-             scripts]}))
-
-    :msg/ax.load-manifest-ready
-        (let [[send-response tab-id manifest all-scripts fetch-result] args
-          synthetic-script {:script/id "repl-manifest"
-                            :script/name "repl-manifest"
-                            :script/code ""
-                            :script/inject (or (when manifest (vec (aget manifest "inject"))) [])}]
-      (manual-dep-ready state {:send-response send-response
-                               :tab-id tab-id
-                               :synthetic-script synthetic-script
-                               :all-scripts (or all-scripts [])
-                               :fetch-result fetch-result}))
-
-    :msg/ax.get-connections
-    (let [[send-response] args
-          connections (:ws/connections state)]
-      {:uf/fxs [[:msg/fx.get-connections send-response connections]]})
-
-    :msg/ax.e2e-find-tab-id
-    (let [[send-response url-pattern] args]
-      (if url-pattern
-        {:uf/fxs [[:uf/await :tabs/fx.find-by-url-pattern url-pattern]
-                  [:msg/fx.send-response send-response :uf/prev-result]]}
-        {:uf/fxs [[:msg/fx.send-response send-response {:success false
-                                                        :error "Missing urlPattern"}]]}))
-
-    :msg/ax.e2e-get-test-events
-    (let [[send-response] args]
-      {:uf/fxs [[:msg/fx.e2e-get-test-events send-response]]})
-
-    :nav/ax.decide-connection
-    (let [[context] args
-          {:nav/keys [tab-id url]} context
-          icon-state (get-in state [:icon/states tab-id] :disconnected)
-          {:keys [decision port]} (bg-utils/decide-connection
-                                   {:trigger "navigation"
-                                    :auto-connect-level (:nav/auto-connect-level context)
-                                    :reconnect-on-nav? (:nav/auto-reconnect-enabled? context)
-                                    :in-history? (:nav/in-history? context)
-                                    :history-port (:nav/history-port context)
-                                    :saved-port (:nav/saved-port context)})
-          connect-fxs (when (not= decision "none")
-                        [[:uf/await :nav/fx.connect tab-id port icon-state]])]
-      {:uf/fxs (vec (concat connect-fxs
-                            [[:nav/fx.process-navigation tab-id url icon-state]]))})
-
-    :nav/ax.handle-navigation
-    (let [[tab-id url] args
-          history (:connected-tabs/history state)]
-      {:uf/db (update state :runtime/errors dissoc tab-id)
-       :uf/fxs [[:icon/fx.update-icon-disconnected tab-id]
-                [:runtime/fx.broadcast-tab-status tab-id {}]
-                [:uf/await :nav/fx.gather-auto-connect-context tab-id url history]]
-       :uf/dxs [[:nav/ax.decide-connection :uf/prev-result]]})
-
-    :tab/ax.handle-removed
-    (let [[tab-id] args
-          connections (or (:ws/connections state) {})
-          has-ws? (some? (get connections tab-id))]
-      {:uf/db (update state :runtime/errors dissoc tab-id)
-       :uf/fxs (when has-ws?
-                 [[:ws/fx.handle-close connections tab-id]])
-       :uf/dxs [[:icon/ax.clear tab-id]
-                [:history/ax.forget tab-id]]})
-
-    :nav/ax.handle-before-navigate
-    (let [[tab-id] args
-          connections (or (:ws/connections state) {})
-          has-ws? (some? (get connections tab-id))]
-      (when has-ws?
-        {:uf/fxs [[:ws/fx.handle-close connections tab-id]]}))
-
-    :icon/ax.refresh-toolbar
-    (let [[tab-id] args
-          display-state (bg-utils/compute-display-icon-state (:icon/states state) tab-id)]
-      {:uf/fxs [[:icon/fx.update-toolbar! tab-id display-state]]})
-
-    :msg/ax.e2e-get-icon-display-state
-    (let [[send-response tab-id] args
-          display-state (bg-utils/compute-display-icon-state (:icon/states state) tab-id)]
-      {:uf/fxs [[:msg/fx.send-response send-response {:success true :state display-state}]]})
-
-    :msg/ax.handle-permission-granted
-    (let [[tab-id] args
-          icon-state (get-in state [:icon/states tab-id] :disconnected)]
-      {:uf/fxs [[:msg/fx.handle-permission-granted tab-id icon-state]]})
-
-    :visibility/ax.handle-tab-visible
-    (let [[tab-id] args
-          connections (or (:ws/connections state) {})
-          has-ws? (some? (get connections tab-id))]
-      (when-not has-ws?
-        (let [history (:connected-tabs/history state)]
-          {:uf/fxs [[:uf/await :visibility/fx.gather-reconnect-context tab-id history]]
-           :uf/dxs [[:visibility/ax.decide-reconnect :uf/prev-result]]})))
-
-    :visibility/ax.decide-reconnect
-    (let [[context] args
-          {:visibility/keys [tab-id auto-connect-level history-port saved-port]} context
-          icon-state (get-in state [:icon/states tab-id] :disconnected)
-          {:keys [decision port]} (bg-utils/decide-connection
-                                   {:trigger "visibility"
-                                    :auto-connect-level auto-connect-level
-                                    :history-port history-port
-                                    :saved-port saved-port})]
-      (when (not= decision "none")
-        {:uf/fxs [[:uf/await :nav/fx.connect tab-id port icon-state]]}))
-
-    :alarm/ax.tick
-    (let [connections (or (:ws/connections state) {})]
-      (when (seq connections)
-        {:uf/fxs [[:alarm/fx.log-tick (count connections)]]}))
-
-    :banner/ax.broadcast-resolution-errors
-    (let [[errors] args
-          messages (mapv :error/message errors)]
-      {:uf/fxs [[:banner/fx.broadcast-system {:event-type "error"
-                                              :operation "library-resolution"
-                                              :error (first messages)
-                                              :errors messages}]]})
-
-    :msg/ax.log-resolution-error
-    (let [[error-envelope] args]
-      {:uf/fxs [[:msg/fx.log-resolution-error error-envelope]]})
-
-    :runtime/ax.set-tab-errors
-    (let [[tab-id errors] args
-          errors-by-name (into {} (map (fn [e] [(:error/script-name e) e]) errors))]
-      {:uf/db (assoc-in state [:runtime/errors tab-id] errors-by-name)
-       :uf/fxs [[:runtime/fx.broadcast-tab-status tab-id errors-by-name]]})
-
-    :runtime/ax.get-tab-errors
-    (let [[send-response tab-id] args
-          tab-errors (get-in state [:runtime/errors tab-id] {})]
-      {:uf/fxs [[:msg/fx.send-response send-response {:success true :errors tab-errors}]]})
-
-    :runtime/ax.re-resolve-on-change
-    (let [[all-scripts] args
-          errors-by-tab (:runtime/errors state)
-          connected-tabs (set (keys (:ws/connections state)))
-          error-tabs (set (keys errors-by-tab))
-          all-tabs (into connected-tabs error-tabs)]
-      (when (seq all-tabs)
-        (let [scripts-with-deps (filterv #(seq (:script/inject %)) all-scripts)
-              plan (when (seq scripts-with-deps)
-                     (dep-resolver/resolve-execution-plan scripts-with-deps all-scripts
-                                                         (or (:storage/ext-dep-cache state) {})))
-              new-errors (if plan (:plan/errors plan) [])
-              all-known-errors (known-runtime-errors errors-by-tab)
-              truly-new (filterv (fn [error]
-                                   (not (contains? all-known-errors error)))
-                                 new-errors)]
-          {:uf/fxs (cond-> (vec (map (fn [tab-id]
-                                       [:runtime/fx.set-tab-errors tab-id new-errors])
-                                     all-tabs))
-                     (seq truly-new)
-                     (conj [:banner/fx.broadcast-system {:event-type "error"
-                                                        :operation "library-resolution"
-                                                        :error (:error/message (first truly-new))
-                                                        :errors (mapv :error/message truly-new)}]))})))
-
-    :ext-dep/ax.resolve-uncached-urls
-    (let [[ext-urls follow-up-actions] args
-          existing-cache (or (:storage/ext-dep-cache state) {})
-          uncached (filterv #(not (contains? existing-cache %)) ext-urls)]
-      (cond
-        (seq uncached)
-        {:uf/fxs [[:uf/await :ext-dep/fx.fetch-deps uncached existing-cache]]
-         :uf/dxs [[:ext-dep/ax.cache-results :uf/prev-result follow-up-actions]]}
-
-        (seq follow-up-actions)
-        {:uf/dxs follow-up-actions}))
-
-    :ext-dep/ax.cache-results
-    (let [[fetch-result follow-up-actions] args
-          resolved (or (:resolved fetch-result) {})
-          errors (or (:errors fetch-result) [])
-          existing-cache (or (:storage/ext-dep-cache state) {})
-          merged-cache (merge existing-cache resolved)]
-      (cond-> {:uf/db (assoc state :storage/ext-dep-cache merged-cache)
-               :uf/fxs [[:storage/fx.persist-ext-dep-cache! merged-cache]]}
-        (seq follow-up-actions)
-        (assoc :uf/dxs follow-up-actions)
-        (seq errors)
-        (update :uf/fxs conj [:banner/fx.broadcast-system
-                               {:event-type "error"
-                                :operation "ext-dep-resolution"
-                                :error (:error/message (first errors))
-                                :errors (mapv :error/message errors)}])))
-
-    :uf/unhandled-ax))
+    :else
+    (handle-misc-action state action args)))
