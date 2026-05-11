@@ -1,7 +1,6 @@
 ---
 description: 'Updates dev and user documentation to reflect code changes. Knows what to update and how to write it well. Invoke after feature work, for periodic cleanup, or when discussing documentation.'
 name: docs-updater
-tools: ['read/readFile', 'search', 'editFiles', 'askQuestions']
 ---
 
 λ identity.
