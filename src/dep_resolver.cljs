@@ -16,11 +16,13 @@
   "Classify an inject URL by protocol.
    Returns :scittle, :epupp, :ext-dep, or :unknown."
   [url]
-  (cond
-    (and (string? url) (string/starts-with? url "scittle://")) :scittle
-    (and (string? url) (string/starts-with? url "epupp://")) :epupp
-    (ext-dep/valid-ext-dep-url? url) :ext-dep
-    :else :unknown))
+  (let [scittle? (and (string? url) (string/starts-with? url "scittle://"))
+        epupp? (and (string? url) (string/starts-with? url "epupp://"))]
+    (cond
+      scittle? :scittle
+      epupp? :epupp
+      (ext-dep/valid-ext-dep-url? url) :ext-dep
+      :else :unknown)))
 
 (defn parse-epupp-url
   "Parse an epupp:// URL and normalize the script name.
@@ -59,8 +61,8 @@
       (str " (required by " (string/join ", required by " parents) ")"))))
 
 (defn- make-error
-  "Create a runtime error envelope."
-  [error-type script-name dep-raw chain message]
+  "Create a runtime error envelope from a descriptor map."
+  [{:keys [error-type script-name dep-raw chain message]}]
   {:error/type error-type
    :error/phase :resolve
    :error/script-name script-name
@@ -72,6 +74,84 @@
 ;; Graph Resolution
 ;; ============================================================
 
+(defn- resolve-epupp-url
+  "Handle resolution of an epupp:// dependency URL.
+   ctx contains :catalog, :seen, :errors atoms.
+   walk-fn is the recursive walk function from the resolution context."
+  [ctx url chain walk-fn]
+  (let [dep-name (parse-epupp-url url)]
+    (when dep-name
+      (let [new-chain (conj chain dep-name)]
+        (cond
+          (= dep-name (peek chain))
+          (swap! (:errors ctx) conj
+                 (make-error {:error-type :library/self-reference
+                              :script-name (first chain) :dep-raw url :chain new-chain
+                              :message (str "Self-reference: " dep-name " depends on itself")}))
+
+          (some #(= % dep-name) chain)
+          (swap! (:errors ctx) conj
+                 (make-error {:error-type :library/cycle
+                              :script-name (first chain) :dep-raw url :chain new-chain
+                              :message (str "Dependency cycle detected: "
+                                            (string/join " -> " new-chain))}))
+
+          (nil? (get (:catalog ctx) dep-name))
+          (swap! (:errors ctx) conj
+                 (make-error {:error-type :library/not-found
+                              :script-name (first chain) :dep-raw url :chain new-chain
+                              :message (str "Library not found: " dep-name
+                                            (format-required-by new-chain))}))
+
+          (contains? @(:seen ctx) dep-name)
+          nil
+
+          :else
+          (walk-fn (get (:catalog ctx) dep-name) new-chain))))))
+
+(defn- resolve-ext-dep-url
+  "Handle resolution of an external dependency URL.
+   ctx contains :ext-dep-cache, :seen, :errors, :resolved-order atoms.
+   resolve-deps-fn is the recursive resolve function from the resolution context."
+  [ctx url chain resolve-deps-fn]
+  (let [new-chain (conj chain url)]
+    (cond
+      (some #(= % url) chain)
+      (swap! (:errors ctx) conj
+             (make-error {:error-type :ext-dep/cycle
+                          :script-name (first chain) :dep-raw url :chain new-chain
+                          :message (str "Dependency cycle detected: "
+                                        (string/join " -> " new-chain))}))
+
+      (contains? @(:seen ctx) url)
+      nil
+
+      :else
+      (if-let [entry (get (:ext-dep-cache ctx) url)]
+        (let [errors-before (count @(:errors ctx))]
+          (swap! (:seen ctx) conj url)
+          (resolve-deps-fn (get entry :cache/inject []) new-chain)
+          (when (= errors-before (count @(:errors ctx)))
+            (swap! (:resolved-order ctx) conj
+                   {:step/type :ext-dep-script
+                    :step/url url
+                    :step/code (:cache/code entry)
+                    :step/source :ext})))
+        (swap! (:errors ctx) conj
+               (make-error {:error-type :ext-dep/cache-miss
+                            :script-name (first chain) :dep-raw url :chain new-chain
+                            :message (str "External dependency not in cache: " url
+                                          (format-required-by new-chain))}))))))
+
+(defn- walk-and-collect
+  "Walk a script node: mark as seen, resolve its deps, collect if no errors added."
+  [ctx current-script chain resolve-deps-fn]
+  (let [errors-before (count @(:errors ctx))]
+    (swap! (:seen ctx) conj (:script/name current-script))
+    (resolve-deps-fn (get current-script :script/inject []) chain)
+    (when (= errors-before (count @(:errors ctx)))
+      (swap! (:resolved-order ctx) conj current-script))))
+
 (defn- resolve-script-deps
   "Resolve transitive dependencies for a single script.
    Walks depth-first, collecting vendor URLs and resolved scripts in order.
@@ -79,98 +159,55 @@
    ext-dep-cache is a map of URL->cache-entry for external dependencies (may be nil).
    Returns {:resolved [items-in-order] :errors [envelopes] :vendor-urls [strings]}"
   [root-script catalog ext-dep-cache]
-  (let [errors (atom [])
-        vendor-urls (atom [])
-        resolved-order (atom [])
-        seen (atom #{})
-        error-count (fn [] (count @errors))]
+  (let [ctx {:catalog catalog
+             :ext-dep-cache ext-dep-cache
+             :errors (atom [])
+             :vendor-urls (atom [])
+             :resolved-order (atom [])
+             :seen (atom #{})}]
     (letfn [(resolve-deps [inject-urls chain]
               (doseq [url inject-urls]
                 (let [kind (classify-inject-url url)]
                   (cond
-                    (= kind :scittle)
-                    (swap! vendor-urls conj url)
-
-                    (= kind :epupp)
-                    (let [dep-name (parse-epupp-url url)]
-                      (when dep-name
-                        (let [new-chain (conj chain dep-name)]
-                          (cond
-                            (= dep-name (peek chain))
-                            (swap! errors conj
-                                   (make-error :library/self-reference
-                                               (first chain) url new-chain
-                                               (str "Self-reference: " dep-name " depends on itself")))
-
-                            (some #(= % dep-name) chain)
-                            (swap! errors conj
-                                   (make-error :library/cycle
-                                               (first chain) url new-chain
-                                               (str "Dependency cycle detected: "
-                                                    (string/join " -> " new-chain))))
-
-                            (nil? (get catalog dep-name))
-                            (swap! errors conj
-                                   (make-error :library/not-found
-                                               (first chain) url new-chain
-                                               (str "Library not found: " dep-name
-                                                    (format-required-by new-chain))))
-
-                            (contains? @seen dep-name)
-                            nil
-
-                            :else
-                            (walk (get catalog dep-name) new-chain)))))
-
-                    (= kind :ext-dep)
-                    (walk-ext-dep url chain)))))
-
-            (walk-ext-dep [url chain]
-              (let [new-chain (conj chain url)]
-                (cond
-                  (some #(= % url) chain)
-                  (swap! errors conj
-                         (make-error :ext-dep/cycle
-                                     (first chain) url new-chain
-                                     (str "Dependency cycle detected: "
-                                          (string/join " -> " new-chain))))
-
-                  (contains? @seen url)
-                  nil
-
-                  :else
-                  (if-let [entry (get ext-dep-cache url)]
-                    (let [errors-before (error-count)]
-                      (swap! seen conj url)
-                      (resolve-deps (get entry :cache/inject []) new-chain)
-                      (when (= errors-before (error-count))
-                        (swap! resolved-order conj
-                               {:step/type :ext-dep-script
-                                :step/url url
-                                :step/code (:cache/code entry)
-                                :step/source :ext})))
-                    (swap! errors conj
-                           (make-error :ext-dep/cache-miss
-                                       (first chain) url new-chain
-                                       (str "External dependency not in cache: " url
-                                            (format-required-by new-chain))))))))
-
+                    (= kind :scittle) (swap! (:vendor-urls ctx) conj url)
+                    (= kind :epupp) (resolve-epupp-url ctx url chain walk)
+                    (= kind :ext-dep) (resolve-ext-dep-url ctx url chain resolve-deps)))))
             (walk [current-script chain]
-              (let [script-name (:script/name current-script)]
-                (when-not (contains? @seen script-name)
-                  (let [errors-before (error-count)]
-                  (swap! seen conj script-name)
-                  (resolve-deps (get current-script :script/inject []) chain)
-                  (when (= errors-before (error-count))
-                    (swap! resolved-order conj current-script))))))]
+              (when-not (contains? @(:seen ctx) (:script/name current-script))
+                (walk-and-collect ctx current-script chain resolve-deps)))]
       (walk root-script [(:script/name root-script)])
-      {:resolved @resolved-order
-       :errors @errors
-       :vendor-urls @vendor-urls})))
+      {:resolved @(:resolved-order ctx)
+       :errors @(:errors ctx)
+       :vendor-urls @(:vendor-urls ctx)})))
 
 ;; ============================================================
 ;; Public API
 ;; ============================================================
+
+(defn- dedup-resolved-items
+  "Deduplicate resolved items by script ID or ext-dep URL, preserving order."
+  [items]
+  (let [seen-ids (atom #{})]
+    (reduce (fn [acc item]
+              (let [id (or (:script/id item) (:step/url item))]
+                (if (or (nil? id) (contains? @seen-ids id))
+                  acc
+                  (do (swap! seen-ids conj id)
+                      (conj acc item)))))
+            []
+            items)))
+
+(defn- item-to-step
+  "Convert a resolved item to an execution step with the appropriate type."
+  [root-ids item]
+  (if (= :ext-dep-script (:step/type item))
+    item
+    (let [is-root? (contains? root-ids (:script/id item))]
+      {:step/type (if is-root? :root-script :library-script)
+       :step/id (:script/id item)
+       :step/name (:script/name item)
+       :step/code (:script/code item)
+       :step/source :epupp})))
 
 (defn resolve-execution-plan
   "Resolve a complete execution plan for a set of root scripts.
@@ -196,39 +233,15 @@
                        [{:script/inject all-vendor-urls}])
          vendor-namespaces (scittle-libs/collect-lib-namespaces
                             [{:script/inject all-vendor-urls}])
-         all-resolved (mapcat :resolved results)
-         seen-ids (atom #{})
-         deduped (reduce (fn [acc item]
-                           (let [id (or (:script/id item) (:step/url item))]
-                             (if (or (nil? id) (contains? @seen-ids id))
-                               acc
-                               (do (swap! seen-ids conj id)
-                                   (conj acc item)))))
-                         []
-                         all-resolved)
-         non-roots (filterv #(not (contains? root-ids (:script/id %))) deduped)
-         root-scripts-ordered (filterv #(contains? root-ids (:script/id %)) deduped)
+         deduped (dedup-resolved-items (mapcat :resolved results))
          vendor-steps (mapv (fn [file]
                               {:step/type :vendor-file
                                :step/path (str "vendor/" file)
                                :step/source :scittle})
                             vendor-files)
-         non-root-steps (mapv (fn [item]
-                                (if (= :ext-dep-script (:step/type item))
-                                  item
-                                  {:step/type :library-script
-                                   :step/id (:script/id item)
-                                   :step/name (:script/name item)
-                                   :step/code (:script/code item)
-                                   :step/source :epupp}))
-                              non-roots)
-         root-steps (mapv (fn [script]
-                            {:step/type :root-script
-                             :step/id (:script/id script)
-                             :step/name (:script/name script)
-                             :step/code (:script/code script)
-                             :step/source :epupp})
-                          root-scripts-ordered)]
+         script-steps (mapv #(item-to-step root-ids %) deduped)
+         non-root-steps (filterv #(not= :root-script (:step/type %)) script-steps)
+         root-steps (filterv #(= :root-script (:step/type %)) script-steps)]
      {:plan/steps (vec (concat vendor-steps non-root-steps root-steps))
       :plan/vendor-namespaces vendor-namespaces
       :plan/errors all-errors})))
