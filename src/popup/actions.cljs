@@ -28,8 +28,8 @@
     :popup/ax.load-saved-ports {:uf/fxs [[:popup/fx.load-saved-ports (:settings/default-nrepl-port state) (:settings/default-ws-port state)]]}
     :popup/ax.init-ports {:uf/fxs [[:popup/fx.init-ports]]}
     :popup/ax.apply-init-ports (port-actions/apply-init-ports state (first args))
-    :popup/ax.set-default-nrepl-port (port-actions/set-default-port state :ports/nrepl :settings/default-nrepl-port (first args))
-    :popup/ax.set-default-ws-port (port-actions/set-default-port state :ports/ws :settings/default-ws-port (first args))
+    :popup/ax.set-default-nrepl-port (port-actions/set-default-port state :settings/default-nrepl-port (first args))
+    :popup/ax.set-default-ws-port (port-actions/set-default-port state :settings/default-ws-port (first args))
     :popup/ax.load-default-ports-setting {:uf/fxs [[:popup/fx.load-default-ports-setting]]}
     :popup/ax.on-default-ports-changed (let [[new-defaults domain-ports] args] (port-actions/on-default-ports-changed state new-defaults domain-ports))
     :popup/ax.run-port-migration {:uf/fxs [[:popup/fx.run-port-migration]]}

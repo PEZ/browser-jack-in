@@ -40,7 +40,7 @@
     (dispatch [[:popup/ax.show-system-banner "info" (str "Waiting for server on :" port "...") {:favicon tab-favicon} "connection"]])
     (js-await (retry-connect! dispatch tab port tab-title tab-favicon))))
 
-(defn ^:async check-status! [dispatch _ws-port]
+(defn ^:async check-status! [_dispatch _ws-port]
   (let [tab (js-await (popup-utils/get-active-tab))]
     (try
       (js/Promise.

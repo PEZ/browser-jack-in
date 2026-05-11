@@ -1,4 +1,4 @@
-(ns epupp.utils)
+(ns utils)
 
 (defn kw-namespace [k]
   (let [s (str k)

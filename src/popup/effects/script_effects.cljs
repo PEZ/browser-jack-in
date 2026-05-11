@@ -32,7 +32,7 @@
                             :code (:script/code script)
                             :description (:script/description script)}}))
 
-(defn ^:async evaluate-script! [dispatch script]
+(defn ^:async evaluate-script! [_dispatch script]
   (let [tab (js-await (popup-utils/get-active-tab))]
     (js/chrome.runtime.sendMessage
      #js {:type "evaluate-script"

@@ -14,7 +14,6 @@
             [background-actions :as bg-actions]
             [bg-fs-dispatch :as fs-dispatch]
             [bg-icon :as bg-icon]
-            [bg-ws :as bg-ws]
             [bg-inject :as bg-inject]
             [dep-resolver :as dep-resolver]
             [ext-dep :as ext-dep]

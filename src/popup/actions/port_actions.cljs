@@ -64,7 +64,7 @@
                 (assoc :ports/ws (:ws effective-ports))
                 (assoc :ports/source source))}))
 
-(defn set-default-port [state port-key settings-key port]
+(defn set-default-port [state settings-key port]
   (let [other-key (if (= settings-key :settings/default-nrepl-port)
                     :settings/default-ws-port
                     :settings/default-nrepl-port)
@@ -98,7 +98,7 @@
                    (assoc :ports/source source))]
     {:uf/db (if (= new-db state) state new-db)}))
 
-(defn apply-port-migration [state migration-data]
+(defn apply-port-migration [_state migration-data]
   (let [{:keys [defaults port-entries]} migration-data
         redundant-keys (reduce-kv (fn [acc storage-key domain-ports]
                                     (let [{:keys [persist?]} (normalize-domain-ports defaults domain-ports)]
