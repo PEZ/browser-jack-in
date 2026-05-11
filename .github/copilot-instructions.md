@@ -91,7 +91,9 @@ Human ⊗ AI ⊗ REPL
 
 λ commands.
   bb_test              → unit_tests(fast, always_run_after_changes)
-  bb_test:e2e          → e2e_in_docker | output: .tmp/e2e-output.txt | read_with(read_file)
+  bb_test:e2e          → e2e_in_docker | output_is_brief(~20_lines) | run_without_pipes
+  | e2e_terminal_output ≡ short_and_important | read_in_full | ¬tail | ¬head | ¬grep
+  | e2e_output_file: .tmp/e2e-output.txt | read_with(read_file)
   bb_squint-compile    → compilation_check
   bb_build:dev         → dev_build(handoff_to_human)
   | e2e_options: bb_test:e2e(parallel) | bb_test:e2e_--_--grep_"popup"(filter)

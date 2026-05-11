@@ -647,6 +647,7 @@ Epupp is a browser extension that bridges a Clojure editor or AI agent to web pa
   | bb_test → unit_tests | bb_test:e2e → e2e_tests
   | bb_squint-compile → compilation_check | bb_build:dev → dev_build
   | ¬redirect_bb_output(> 2>&1 | tee) → triggers_approval_dialogs
+  | e2e_terminal_output ≡ short_and_important | read_in_full | ¬tail | ¬head | ¬grep
   | e2e_output → .tmp/e2e-output.txt | read_with_read_file
 
 λ source_file_map.
