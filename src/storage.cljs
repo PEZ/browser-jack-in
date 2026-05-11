@@ -151,50 +151,64 @@
     (log/debug "Storage" "Loaded" (count scripts) "scripts")
     @!db))
 
+(defn- handle-scripts-change [scripts-change]
+  (let [new-scripts (script-utils/parse-scripts (.-newValue scripts-change)
+                                                {:extract-manifest mp/extract-manifest})
+        bundled-ids (bundled-builtin-ids)
+        bundled-ids-set (set bundled-ids)
+        missing-builtin? (some (fn [builtin-id]
+                                 (not (some #(= (:script/id %) builtin-id) new-scripts)))
+                               bundled-ids)
+        stale-builtin? (some (fn [script]
+                               (and (script-utils/builtin-script? script)
+                                    (not (contains? bundled-ids-set (:script/id script)))))
+                             new-scripts)
+        needs-resync? (and (not @!syncing-builtins?)
+                           (or missing-builtin? stale-builtin?))]
+    (swap! !db assoc :storage/scripts new-scripts)
+    (when needs-resync?
+      (sync-builtin-scripts!))))
+
+(defn- handle-schema-change [changes]
+  (when-let [schema-change (.-schemaVersion changes)]
+    (when-let [new-version (.-newValue schema-change)]
+      (swap! !db assoc :storage/schema-version new-version))))
+
+(defn- handle-origins-change [changes]
+  (when-let [origins-change (or (.-grantedOrigins changes)
+                                (aget changes "granted-origins"))]
+    (let [new-origins (if (.-newValue origins-change)
+                        (vec (.-newValue origins-change))
+                        [])]
+      (swap! !db assoc :storage/granted-origins new-origins))))
+
+(defn- handle-ext-dep-cache-change [changes]
+  (when-let [ext-dep-cache-change (.-extDepCache changes)]
+    (let [new-cache (or (.-newValue ext-dep-cache-change) {})]
+      (swap! !db assoc :storage/ext-dep-cache new-cache))))
+
+(defn- handle-sponsor-changes [changes]
+  (when-let [sponsor-change (.-sponsorStatus changes)]
+    (swap! !db assoc :sponsor/status (boolean (.-newValue sponsor-change))))
+  (when-let [checked-change (.-sponsorCheckedAt changes)]
+    (swap! !db assoc :sponsor/checked-at (.-newValue checked-change))))
+
+(defn- handle-storage-change [changes area]
+  (when (= area "local")
+    (when-let [scripts-change (.-scripts changes)]
+      (handle-scripts-change scripts-change))
+    (handle-schema-change changes)
+    (handle-origins-change changes)
+    (handle-ext-dep-cache-change changes)
+    (handle-sponsor-changes changes)
+    (log/debug "Storage" "Updated from external change")))
+
 (defn ^:async init!
   "Initialize storage: load existing data and set up onChanged listener.
    Returns a promise that resolves when storage is loaded.
    Call this once from background worker on startup."
   []
-  ;; Listen for changes from other contexts (popup, devtools panel)
-  (js/chrome.storage.onChanged.addListener
-   (fn [changes area]
-     (when (= area "local")
-       (when-let [scripts-change (.-scripts changes)]
-         (let [new-scripts (script-utils/parse-scripts (.-newValue scripts-change)
-                                                       {:extract-manifest mp/extract-manifest})
-               bundled-ids (bundled-builtin-ids)
-               bundled-ids-set (set bundled-ids)
-               missing-builtin? (some (fn [builtin-id]
-                                        (not (some #(= (:script/id %) builtin-id) new-scripts)))
-                                      bundled-ids)
-               stale-builtin? (some (fn [script]
-                                      (and (script-utils/builtin-script? script)
-                                           (not (contains? bundled-ids-set (:script/id script)))))
-                                    new-scripts)]
-           (swap! !db assoc :storage/scripts new-scripts)
-           ;; Re-sync built-ins if missing or stale (e.g., by storage.clear())
-           ;; Skip during active sync to prevent cascading re-syncs
-           (when (and (not @!syncing-builtins?)
-                      (or missing-builtin? stale-builtin?))
-             (sync-builtin-scripts!))))
-       (when-let [schema-change (.-schemaVersion changes)]
-         (when-let [new-version (.-newValue schema-change)]
-           (swap! !db assoc :storage/schema-version new-version)))
-       (when-let [origins-change (or (.-grantedOrigins changes)
-                                     (aget changes "granted-origins"))]
-         (let [new-origins (if (.-newValue origins-change)
-                             (vec (.-newValue origins-change))
-                             [])]
-           (swap! !db assoc :storage/granted-origins new-origins)))
-       (when-let [ext-dep-cache-change (.-extDepCache changes)]
-         (let [new-cache (or (.-newValue ext-dep-cache-change) {})]
-           (swap! !db assoc :storage/ext-dep-cache new-cache)))
-       (when-let [sponsor-change (.-sponsorStatus changes)]
-         (swap! !db assoc :sponsor/status (boolean (.-newValue sponsor-change))))
-       (when-let [checked-change (.-sponsorCheckedAt changes)]
-         (swap! !db assoc :sponsor/checked-at (.-newValue checked-change)))
-       (log/debug "Storage" "Updated from external change"))))
+  (js/chrome.storage.onChanged.addListener handle-storage-change)
   (js-await (load!))
   (js-await (sync-builtin-scripts!))
   @!db)
@@ -230,6 +244,20 @@
   (some #(= % "epupp/auto-run-match")
         (get manifest "found-keys")))
 
+(defn- update-script-list [scripts script-id updated-script existing?]
+  (if existing?
+    (mapv #(if (= (:script/id %) script-id) updated-script %) scripts)
+    (conj scripts updated-script)))
+
+(defn- try-extract-manifest [script]
+  (when (:script/code script)
+    (try (mp/extract-manifest (:script/code script))
+         (catch :default _ nil))))
+
+(defn- throw-if-error! [result]
+  (when (:error result)
+    (throw (js/Error. (:error result)))))
+
 (defn ^:async save-script!
   "Create or update a script. Extracts metadata from manifest in code.
    Delegates to normalize-and-merge-script for shared normalization/merge logic.
@@ -243,25 +271,18 @@
   (let [script-id (:script/id script)
         now (.toISOString (js/Date.))
         existing (get-script script-id)
-        code (:script/code script)
-        manifest (when code
-                   (try (mp/extract-manifest code)
-                        (catch :default _ nil)))
+        manifest (try-extract-manifest script)
         is-builtin? (script-utils/builtin-script? script)
         result (script-utils/normalize-and-merge-script
-                 script existing manifest
-                 {:is-builtin? is-builtin?
-                  :now-iso now})]
-    (when (:error result)
-      (throw (js/Error. (:error result))))
-    (let [updated-script (:script result)]
-      (swap! !db update :storage/scripts
-             (fn [scripts]
-               (if existing
-                 (mapv #(if (= (:script/id %) script-id) updated-script %) scripts)
-                 (conj scripts updated-script))))
-      (js-await (persist!))
-      updated-script)))
+                script existing manifest
+                {:is-builtin? is-builtin?
+                 :now-iso now})
+        _ (throw-if-error! result)
+        updated-script (:script result)]
+    (swap! !db update :storage/scripts
+           update-script-list script-id updated-script (some? existing))
+    (js-await (persist!))
+    updated-script))
 
 (defn delete-script!
   "Remove a script by id. Built-in scripts cannot be deleted."
@@ -353,27 +374,35 @@
                        (not (contains? bundled-ids (:script/id script))))))
            scripts))
 
+(defn- normalize-inject [inject-raw]
+  (cond
+    (nil? inject-raw) []
+    (string? inject-raw) [inject-raw]
+    (js/Array.isArray inject-raw) (vec inject-raw)
+    :else []))
+
+(defn- extract-bundled-manifest-data [manifest]
+  (when manifest
+    (let [has-auto-run-key? (manifest-has-auto-run-key? manifest)
+          raw-match (normalize-auto-run-match (get manifest "auto-run-match"))]
+      {:manifest/name (or (get manifest "script-name")
+                          (get manifest "raw-script-name"))
+       :manifest/run-at (script-utils/normalize-run-at (get manifest "run-at"))
+       :manifest/description (get manifest "description")
+       :manifest/inject (normalize-inject (get manifest "inject"))
+       :manifest/match (if has-auto-run-key? (or raw-match []) [])})))
+
 (defn build-bundled-script
   "Build a built-in script map from bundled code and manifest metadata."
   [bundled code]
   (let [manifest (try (mp/extract-manifest code)
                       (catch :default _ nil))
-        manifest-name (when manifest
-                        (or (get manifest "script-name")
-                            (get manifest "raw-script-name")))
-        raw-name (or manifest-name (:name bundled))
-        run-at (when manifest
-                 (script-utils/normalize-run-at (get manifest "run-at")))
-        manifest-description (when manifest (get manifest "description"))
-        manifest-inject (when manifest (get manifest "inject"))
-        inject (cond
-                 (nil? manifest-inject) []
-                 (string? manifest-inject) [manifest-inject]
-                 (js/Array.isArray manifest-inject) (vec manifest-inject)
-                 :else [])
-        manifest-match (when manifest (normalize-auto-run-match (get manifest "auto-run-match")))
-        has-auto-run-key? (when manifest (manifest-has-auto-run-key? manifest))
-        match (when manifest (if has-auto-run-key? (or manifest-match []) []))]
+        mdata (extract-bundled-manifest-data manifest)
+        raw-name (or (:manifest/name mdata) (:name bundled))
+        run-at (:manifest/run-at mdata)
+        description (:manifest/description mdata)
+        inject (or (:manifest/inject mdata) [])
+        match (:manifest/match mdata)]
     (cond-> {:script/id (:script/id bundled)
              :script/code code
              :script/builtin? true
@@ -381,7 +410,7 @@
       raw-name (assoc :script/name raw-name)
       (some? match) (assoc :script/match match)
       (some? run-at) (assoc :script/run-at run-at)
-      manifest-description (assoc :script/description manifest-description)
+      description (assoc :script/description description)
       (seq inject) (assoc :script/inject inject)
       (:always-enabled? bundled) (assoc :script/always-enabled? true)
       (:special? bundled) (assoc :script/special? true)
@@ -399,6 +428,22 @@
       (not= (:script/inject existing) (:script/inject desired))
       (not= (:script/special? existing) (:script/special? desired))
       (not= (:script/web-installer-scan existing) (:script/web-installer-scan desired))))
+
+(defn- ^:async sync-single-builtin! [bundled]
+  (let [response (js-await (js/fetch (js/chrome.runtime.getURL (:path bundled))))]
+    (when-not (.-ok response)
+      (throw (js/Error. (str "Failed to fetch built-in script "
+                             (:script/id bundled)
+                             " ("
+                             (:path bundled)
+                             ") status "
+                             (.-status response)))))
+    (let [code (js-await (.text response))
+          desired (build-bundled-script bundled code)
+          existing (get-script (:script/id bundled))]
+      (js-await (save-script! desired))
+      (when (builtin-update-needed? existing desired)
+        (log/debug "Storage" "Synced built-in" (:script/id bundled))))))
 
 (defn ^:async sync-builtin-scripts!
   "Synchronize built-in scripts with bundled versions.
@@ -418,20 +463,7 @@
         (log/debug "Storage" "Removed stale built-ins" stale-ids))
       (doseq [bundled bundled-builtins]
         (try
-          (let [response (js-await (js/fetch (js/chrome.runtime.getURL (:path bundled))))]
-            (when-not (.-ok response)
-              (throw (js/Error. (str "Failed to fetch built-in script "
-                                     (:script/id bundled)
-                                     " ("
-                                     (:path bundled)
-                                     ") status "
-                                     (.-status response)))))
-            (let [code (js-await (.text response))
-                  desired (build-bundled-script bundled code)
-                  existing (get-script (:script/id bundled))]
-              (js-await (save-script! desired))
-              (when (builtin-update-needed? existing desired)
-                (log/debug "Storage" "Synced built-in" (:script/id bundled)))))
+          (js-await (sync-single-builtin! bundled))
           (catch :default err
             (log/error "Storage" "Failed to sync built-in" (:script/id bundled) ":" err)))))
     (finally
