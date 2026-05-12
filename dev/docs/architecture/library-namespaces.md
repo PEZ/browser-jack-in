@@ -10,8 +10,11 @@ Four dependency styles are supported in `:epupp/inject`:
 |---|---|---|
 | `scittle://` | `scittle://reagent.js` | Bundled vendor library from `scittle_libs.cljs` catalog |
 | `epupp://` | `epupp://utils/dom.cljs` | Stored userscript, looked up by normalized name |
+| `epupp://` | `epupp://epupp/web_installer.css` | CSS file from the extension's `userscripts/` directory |
 | `https://` | `https://raw.githubusercontent.com/user/repo/SHA/path.cljs` | External dependency from a trusted GitHub raw host, resolved from `extDepCache` |
 | `https://` | `https://gist.githubusercontent.com/user/ID/raw/SHA/file.cljs` | GitHub gist file from a trusted raw host, resolved from `extDepCache` |
+
+Any URL ending in `.css` (regardless of protocol) is classified as `:css` and injected as a `<link rel="stylesheet">` tag rather than a script tag.
 
 Only supported protocols participate in dependency resolution. Unsupported or unknown inject URLs are classified as `:unknown` and ignored - they do not become execution-plan steps.
 
@@ -61,7 +64,7 @@ Built-ins also dogfood the same mechanism. `epupp/web_userscript_installer.cljs`
 Represents a single parsed dependency reference from `:epupp/inject`:
 
 ```clojure
-{:dep/kind    :scittle|:epupp|:ext-dep  ; protocol classification
+{:dep/kind    :css|:scittle|:epupp|:ext-dep  ; protocol classification
  :dep/raw     "epupp://utils/dom.cljs" ; original manifest string
  :dep/name    "utils/dom.cljs"      ; normalized lookup key
  :dep/script  {... script data ...}} ; resolved script record, or nil
@@ -73,7 +76,10 @@ The resolver produces an ordered plan of injection steps:
 
 ```clojure
 {:plan/steps
- [{:step/type :vendor-file           ; :vendor-file | :library-script | :ext-dep-script | :root-script
+ [{:step/type :css-file              ; :css-file | :vendor-file | :library-script | :ext-dep-script | :root-script
+   :step/path "userscripts/epupp/web_installer.css"
+   :step/source :epupp}              ; or :external for non-epupp:// CSS URLs
+  {:step/type :vendor-file
    :step/path "vendor/scittle.reagent.js"
    :step/source :scittle}
   {:step/type :library-script
@@ -94,7 +100,7 @@ The resolver produces an ordered plan of injection steps:
  :plan/errors []}
 ```
 
-Steps are ordered: vendor files first, then library scripts and external dependency scripts in dependency order, then root scripts. Vendor steps carry `:step/path`; external dependency steps carry `:step/url` and `:step/code`; script steps carry `:step/id`, `:step/name`, and `:step/code`. Each file, URL, and script appears at most once (deduplicated). Roots are represented by `:step/type :root-script` entries inside `:plan/steps`; there is no separate `:plan/roots` collection.
+Steps are ordered: CSS files first, then vendor files, then library scripts and external dependency scripts in dependency order, then root scripts. CSS steps carry `:step/path` (for `epupp://`) or `:step/url` (for external CSS); vendor steps carry `:step/path`; external dependency steps carry `:step/url` and `:step/code`; script steps carry `:step/id`, `:step/name`, and `:step/code`. Each file, URL, and script appears at most once (deduplicated). CSS dedup is also tracked at injection time via `window.__epuppInjectedStyles`. Roots are represented by `:step/type :root-script` entries inside `:plan/steps`; there is no separate `:plan/roots` collection.
 
 ### Resolution Error Envelope
 

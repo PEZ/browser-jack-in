@@ -263,7 +263,7 @@ The manifest is a plain Clojure map at the top of the file. Your code runs in th
 | `:epupp/auto-run-match` | No | - | URL glob pattern(s). String or vector of strings. Omit for manual-only scripts. |
 | `:epupp/description` | No | - | Shown in the popup UI. |
 | `:epupp/run-at` | No | `"document-idle"` | When to run: `"document-start"`, `"document-end"`, or `"document-idle"`. |
-| `:epupp/inject` | No | `[]` | Dependency URLs to load before the script runs. Supports `scittle://` (bundled libraries), `epupp://` (user library scripts), and raw HTTPS URLs from `raw.githubusercontent.com` or `gist.githubusercontent.com` pinned to full SHAs. |
+| `:epupp/inject` | No | `[]` | Dependency URLs to load before the script runs. Supports `scittle://` (bundled libraries), `epupp://` (user library scripts and CSS files), CSS files (any URL ending in `.css`), and raw HTTPS URLs from `raw.githubusercontent.com` or `gist.githubusercontent.com` pinned to full SHAs. |
 | `:epupp/library?` | No | `false` | Mark as a library script. Library-only scripts (no `:epupp/auto-run-match`) appear in a dedicated Libraries section in the popup. Scripts with both `:epupp/library?` and `:epupp/auto-run-match` appear in their auto-run section. |
 
 Scripts with `:epupp/auto-run-match` start disabled. Enable them in the popup for auto-injection on matching pages. Scripts without this key only run when you click the Play button in the popup.
@@ -344,6 +344,18 @@ Userscripts can load bundled Scittle ecosystem libraries via `:epupp/inject`:
 | `scittle://cljs-ajax.js` | `cljs-http.client` |
 
 Dependencies resolve automatically: `scittle://re-frame.js` loads Reagent and React.
+
+**CSS injection:**
+
+CSS files can also be declared in `:epupp/inject`. Any URL ending in `.css` is injected as a `<link rel="stylesheet">` tag in `document.head` before any scripts run:
+
+```clojure
+{:epupp/script-name "my/styled_widget.cljs"
+ :epupp/inject ["scittle://replicant.js"
+                "epupp://my/styles.css"]}
+```
+
+`epupp://` CSS files are resolved from the extension's `userscripts/` directory. External CSS URLs (`https://`) are also supported. CSS files are deduplicated per page.
 
 **Built-in Epupp libraries:**
 

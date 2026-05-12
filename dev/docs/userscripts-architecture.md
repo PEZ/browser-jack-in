@@ -73,7 +73,8 @@ See [architecture/state-management.md](architecture/state-management.md) for com
 
 **`:script/inject` values:**
 - Vector of `scittle://` URLs for bundled Scittle ecosystem libraries
-- Vector of `epupp://` URLs for user library scripts (any stored userscript)
+- Vector of `epupp://` URLs for user library scripts (any stored userscript) or CSS files
+- CSS files (any URL ending in `.css`) are injected as `<link rel="stylesheet">` tags before any scripts run
 - Both protocols can be mixed in the same vector
 - Dependencies are resolved transitively (e.g., `scittle://reagent.js` loads React; `epupp://my_lib.cljs` loads that library's own dependencies)
 - See [architecture/library-namespaces.md](architecture/library-namespaces.md) for the full design
