@@ -352,10 +352,10 @@ CSS files can also be declared in `:epupp/inject`. Any URL ending in `.css` is i
 ```clojure
 {:epupp/script-name "my/styled_widget.cljs"
  :epupp/inject ["scittle://replicant.js"
-                "epupp://my/styles.css"]}
+                "https://example.com/my-styles.css"]}
 ```
 
-`epupp://` CSS files are resolved from the extension's `userscripts/` directory. External CSS URLs (`https://`) are also supported. CSS files are deduplicated per page.
+External CSS URLs are supported alongside `scittle://` and `epupp://` dependencies. CSS files are deduplicated per page.
 
 **Built-in Epupp libraries:**
 
