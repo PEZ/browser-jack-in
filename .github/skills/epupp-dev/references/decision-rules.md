@@ -93,6 +93,8 @@ When the system chooses path A vs B: injection, connection, port resolution, aut
   | required_key: :epupp/script-name → string
   | optional_keys: :epupp/auto-run-match :epupp/description :epupp/inject :epupp/run-at :epupp/library?
   | :epupp/inject URL_schemes: scittle:// ∧ epupp:// ∧ https://raw.githubusercontent.com/owner/repo/sha/path ∧ https://gist.githubusercontent.com/owner/id/raw/sha/file
+  | :epupp/inject CSS_support: any_URL_ending_.css → classify(:css) → :css-file_step | ordered_first
+  | classify-inject-url_returns: :css(any_.css) ∧ :scittle ∧ :epupp ∧ :ext-dep ∧ :unknown
   | unknown_keys → :manifest/unknown-keys warning | ¬error
   | name_normalization: trim ∧ lowercase_extension | validate_format
 ```

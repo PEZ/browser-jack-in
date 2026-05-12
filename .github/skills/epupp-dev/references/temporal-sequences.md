@@ -88,9 +88,10 @@ Lifecycle and ordering rules for Epupp extension activation, connection, evaluat
   3_group_by_run_at: document_start ∧ document_end ∧ document_idle
   4_resolve_dependencies: dep_resolver → topological_sort(epupp:// ∧ HTTPS_ext_dep_refs) → inject_plan
   | https://_ext_deps: resolved_from_ext-dep-cache(storage) | cache_miss → :ext-dep/cache-miss_error
-  | step_types: :vendor-file ∧ :library-script ∧ :ext-dep-script ∧ :root-script
-  5_inject_required_libs: execute_plan! → inject_scittle_plugins ∧ library_scripts ∧ ext-dep_scripts
-  6_inject_scripts: execute_in_page(script_code) | per_script | ordered_by_run_at
+  | step_types: :css-file ∧ :vendor-file ∧ :library-script ∧ :ext-dep-script ∧ :root-script
+  5_inject_css: execute_plan! → inject_css_steps_first(via_"inject-css"_message ∨ <link>_tag)
+  6_inject_required_libs: execute_plan! → inject_scittle_plugins ∧ library_scripts ∧ ext-dep_scripts
+  7_inject_scripts: execute_in_page(script_code) | per_script | ordered_by_run_at
   | userscript_loader.cljs ≡ Squint_compiled_content_script | reads_storage(scripts ∧ extDepCache) ∧ resolves_deps
   | resolution_errors → "loader-resolution-errors" → background → broadcast
   | page_context_execution → full_DOM_access

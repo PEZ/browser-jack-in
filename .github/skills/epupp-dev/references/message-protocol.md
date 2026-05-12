@@ -50,6 +50,10 @@ Message contracts governing communication between Epupp's six architectural laye
   | background → popup/panel: runtime_error_status_broadcasts
   | e2e_test_types: "e2e-get-storage" "e2e-set-storage" "e2e-get-test-events" "e2e-find-tab-id"
   | response: sendResponse(result) | async_requires_return_true
+  background → content_bridge: chrome.tabs.sendMessage(tabId, {type, ...params})
+  | type_strings: "bridge-ping" "inject-script" "inject-css" "clear-userscripts"
+  | "inject-css" → content_bridge_creates_<link>_tag | dedup_via_window.__epuppInjectedStyles
+  | response: sendResponse(result) | async_requires_return_true
 ```
 
 ## WebSocket Bridge Message Contract
