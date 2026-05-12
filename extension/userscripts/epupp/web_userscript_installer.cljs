@@ -543,92 +543,107 @@
    [:h2 {:class (str "epupp-modal__action-title" (when error? " is-error"))}
     action-title]])
 
+(defn- inject-deps-cell
+  "Renders the dependencies cell for the manifest details table."
+  [inject inject-invalid?]
+  [:td
+   (let [has-epupp-deps? (some #(string/starts-with? % "epupp://") inject)]
+     (if (seq inject)
+       [:div
+        (for [url inject]
+          [:div [:code url]
+           (when (string/starts-with? url "epupp://")
+             [:span.epupp-modal__note " (user library)"])])
+        (when has-epupp-deps?
+          [:div.epupp-modal__note
+           {:style {:margin-top "4px"}
+            :data-e2e-epupp-deps-note true}
+           "User library dependencies must be installed separately"])]
+       [:em "None"]))
+   (when inject-invalid?
+     [:span
+      [:br]
+      [:span.epupp-modal__note.is-warning
+       "Invalid :epupp/inject value - keeping string entries only"]])])
+
+(defn- manifest-details-table
+  "Renders the property table showing manifest metadata."
+  [{:keys [script-name raw-script-name name-normalized?
+           auto-run-match description inject inject-invalid?
+           run-at run-at-invalid? raw-run-at]}]
+  [:table.epupp-modal__table
+   [:tbody
+    [:tr
+     [:td "Name"]
+     [:td
+      [:code script-name]
+      (when name-normalized?
+        [:span
+         [:br]
+         [:span.epupp-modal__note
+          "Normalized from: " raw-script-name]])]]
+    [:tr
+     [:td "Auto-run pattern"]
+     [:td (or auto-run-match [:em "None, script configured for manual run"])]]
+    [:tr
+     [:td "Description"]
+     [:td (or description [:em "Not specified"])]]
+    [:tr
+     [:td "Dependencies"]
+     (inject-deps-cell inject inject-invalid?)]
+    [:tr
+     [:td "Run At"]
+     [:td
+      (run-at-label run-at)
+      (when run-at-invalid?
+        [:span
+         [:br]
+         [:span.epupp-modal__note.is-warning
+          "Invalid value \"" raw-run-at "\" - using default"]])]]]])
+
+(defn- modal-actions
+  "Renders install/update/cancel buttons or a simple OK for non-whitelisted domains."
+  [{:keys [install-allowed? is-update? id code]}]
+  (let [confirm-text (if is-update? "Update" "Install")]
+    [:div.epupp-modal__actions
+     (if install-allowed?
+       (list
+        [:button.epupp-btn.epupp-btn--secondary
+         {:id "epupp-cancel"
+          :on {:click [:db/assoc :modal {:visible? false :mode nil :block-id nil :error-message nil}]}}
+         "Cancel"]
+        [:button.epupp-btn.epupp-btn--primary
+         {:id "epupp-confirm"
+          :on {:click [[:db/assoc :modal {:visible? false :mode nil :block-id nil}]
+                       [:block/update-status id :installing]
+                       [:block/save-script id code]]}}
+         confirm-text])
+       [:button.epupp-btn.epupp-btn--primary
+        {:id "epupp-ok"
+         :on {:click [:db/assoc :modal {:visible? false :mode nil :block-id nil :error-message nil}]}}
+        "OK"])]))
+
 (defn installation-modal [{:keys [id manifest code status]} install-allowed?]
-  (let [{:keys [script-name raw-script-name name-normalized?
-                auto-run-match description inject inject-invalid?
-                run-at run-at-invalid? raw-run-at]} manifest
-        page-url js/window.location.href
-        is-update? (= status :update)
+  (let [is-update? (= status :update)
         modal-title (if is-update? "Update Userscript" "Install Userscript")
-        action-text (if is-update? "update" "install")
-        confirm-text (string/capitalize action-text)]
+        action-text (if is-update? "update" "install")]
     [:div.epupp-modal-overlay
      {:on {:click [:db/assoc :modal {:visible? false :mode nil :block-id nil :error-message nil}]}}
      [:div.epupp-modal
       {:on {:click [:block/modal-click]}}
       (modal-header {:action-title modal-title})
-      ;; Property table
-      [:table.epupp-modal__table
-       [:tbody
-        [:tr
-         [:td "Name"]
-         [:td
-          [:code script-name]
-          (when name-normalized?
-            [:span
-             [:br]
-             [:span.epupp-modal__note
-              "Normalized from: " raw-script-name]])]]
-        [:tr
-         [:td "Auto-run pattern"]
-         [:td (or auto-run-match [:em "None, script configured for manual run"])]]
-        [:tr
-         [:td "Description"]
-         [:td (or description [:em "Not specified"])]]
-        [:tr
-         [:td "Dependencies"]
-         [:td
-          (let [has-epupp-deps? (some #(string/starts-with? % "epupp://") inject)]
-            (if (seq inject)
-              [:div
-               (for [url inject]
-                 [:div [:code url]
-                  (when (string/starts-with? url "epupp://")
-                    [:span.epupp-modal__note " (user library)"])])
-               (when has-epupp-deps?
-                 [:div.epupp-modal__note
-                  {:style {:margin-top "4px"}
-                   :data-e2e-epupp-deps-note true}
-                  "User library dependencies must be installed separately"])]
-              [:em "None"]))
-          (when inject-invalid?
-            [:span
-             [:br]
-             [:span.epupp-modal__note.is-warning
-              "Invalid :epupp/inject value - keeping string entries only"]])]]
-        [:tr
-         [:td "Run At"]
-         [:td
-          (run-at-label run-at)
-          (when run-at-invalid?
-            [:span
-             [:br]
-             [:span.epupp-modal__note.is-warning
-              "Invalid value \"" raw-run-at "\" - using default"]])]]]]
+      (manifest-details-table manifest)
       [:p [:strong "Source:"]]
       [:p
-       [:code {:style {:word-break "break-all"}} page-url]]
+       [:code {:style {:word-break "break-all"}} js/window.location.href]]
       (when-not install-allowed?
         [:p.epupp-modal__note {:data-e2e-not-whitelisted true}
          "This domain is not whitelisted for direct installation. "
          "Copy the code and paste it in the " [:strong "Development Tools"] " Epupp panel to " action-text " it."])
-      [:div.epupp-modal__actions
-       (if install-allowed?
-         (list
-          [:button.epupp-btn.epupp-btn--secondary
-           {:id "epupp-cancel"
-            :on {:click [:db/assoc :modal {:visible? false :mode nil :block-id nil :error-message nil}]}}
-           "Cancel"]
-          [:button.epupp-btn.epupp-btn--primary
-           {:id "epupp-confirm"
-            :on {:click [[:db/assoc :modal {:visible? false :mode nil :block-id nil}]
-                         [:block/update-status id :installing]
-                         [:block/save-script id code]]}}
-           confirm-text])
-         [:button.epupp-btn.epupp-btn--primary
-          {:id "epupp-ok"
-           :on {:click [:db/assoc :modal {:visible? false :mode nil :block-id nil :error-message nil}]}}
-          "OK"])]]]))
+      (modal-actions {:install-allowed? install-allowed?
+                      :is-update? is-update?
+                      :id id
+                      :code code})]]))
 
 (defn error-dialog [{:keys [error-message is-update?]}]
   (let [title (if is-update? "Update Failed" "Installation Failed")]
