@@ -16,19 +16,22 @@
   "Classify an inject URL by type.
    Returns :css (any .css URL), :scittle, :epupp, :ext-dep, or :unknown."
   [url]
-  (cond
-    (and (string? url) (string/ends-with? url ".css")) :css
-    (and (string? url) (string/starts-with? url "scittle://")) :scittle
-    (and (string? url) (string/starts-with? url "epupp://")) :epupp
-    (ext-dep/valid-ext-dep-url? url) :ext-dep
-    :else :unknown))
+  (if (string? url)
+    (cond
+      (string/ends-with? url ".css") :css
+      (string/starts-with? url "scittle://") :scittle
+      (string/starts-with? url "epupp://") :epupp
+      (ext-dep/valid-ext-dep-url? url) :ext-dep
+      :else :unknown)
+    :unknown))
 
 (defn parse-epupp-url
   "Parse an epupp:// URL and normalize the script name.
    CSS files (.css) are returned as-is without normalization.
    Returns normalized name string, or nil for invalid URLs."
   [url]
-  (when (and (string? url) (string/starts-with? url "epupp://"))
+  (when (and (string? url)
+             (string/starts-with? url "epupp://"))
     (let [raw-name (subs url 8)]
       (when (seq raw-name)
         (if (string/ends-with? raw-name ".css")
