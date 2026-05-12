@@ -1,0 +1,266 @@
+.epupp-install-btn {
+  padding: 4px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  transition: all 150ms;
+}
+
+.epupp-action-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.epupp-action-btn {
+  padding: 4px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  transition: all 150ms;
+}
+
+.epupp-install-btn.is-install {
+  background: #2ea44f;
+  color: white;
+  border-color: rgba(27,31,36,0.15);
+  cursor: pointer;
+}
+
+.epupp-install-btn.is-update {
+  background: #d97706;
+  color: white;
+  border-color: rgba(27,31,36,0.15);
+  cursor: pointer;
+}
+
+.epupp-install-btn.is-installed {
+  background: transparent;
+  color: black;
+  border-color: transparent;
+  cursor: default;
+}
+
+.epupp-install-btn.is-installing {
+  background: #2ea44f;
+  color: white;
+  border-color: rgba(27,31,36,0.15);
+  cursor: default;
+}
+
+.epupp-install-btn.is-error {
+  background: #dc3545;
+  color: white;
+  border-color: rgba(27,31,36,0.15);
+  cursor: default;
+}
+
+.epupp-copy-btn {
+  background: #f6f8fa;
+  color: #24292f;
+  border-color: #d0d7de;
+  cursor: pointer;
+}
+
+.epupp-copy-btn:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.epupp-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 9998;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.epupp-modal {
+  background: white;
+  padding: 24px;
+  border-radius: 8px;
+  max-width: 500px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  z-index: 9999;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #1a1a1a;
+}
+
+.epupp-modal * {
+  box-sizing: border-box;
+  color: #1a1a1a;
+}
+
+.epupp-modal p {
+  margin: 0 0 12px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.epupp-modal h2 {
+  margin-top: 0;
+}
+
+.epupp-modal h2.is-error {
+  color: #dc3545;
+}
+
+/* Modal table */
+.epupp-modal__table {
+  width: 100%;
+  border-collapse: collapse;
+  border: none;
+  margin-bottom: 16px;
+}
+
+.epupp-modal__table td {
+  padding: 6px 0;
+  border: none;
+  vertical-align: top;
+  font-size: 14px;
+  line-height: 1.5;
+  background: transparent;
+}
+
+.epupp-modal__table td:first-child {
+  color: #666;
+  width: 100px;
+  font-weight: normal;
+}
+
+.epupp-modal__note {
+  font-size: 12px;
+}
+
+.epupp-modal__note.is-warning {
+  color: #d97706;
+}
+
+.epupp-modal__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.epupp-modal code {
+  font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 12px;
+  word-break: break-all;
+  color: #1a1a1a;
+  background: transparent;
+  padding: 0;
+  border: none;
+}
+
+.epupp-modal {
+   * {
+   }
+}
+.epupp-modal strong {
+  font-weight: 600;
+}
+
+.epupp-modal__context {
+  color: #666;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+.epupp-btn {
+  padding: 6px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.epupp-btn--secondary {
+  background: #f6f8fa;
+  border: 1px solid #d0d7de;
+}
+
+.epupp-btn--primary {
+  background: #2ea44f;
+  color: white;
+  border: 1px solid rgba(27,31,36,0.15);
+}
+
+.epupp-btn-container {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.epupp-btn-container.is-overlay {
+  position: absolute;
+  top: 8px;
+  right: 48px;
+  z-index: 2;
+  margin: 0;
+}
+
+.epupp-btn-container.is-overlay-inset {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 10;
+  margin: 0;
+}
+
+.epupp-overlay-parent {
+  position: relative !important;
+  flex-grow: 1;
+}
+
+.epupp-overlay-parent.is-textarea-wrapper {
+  display: inline-block;
+}
+
+.epupp-overlay-parent.is-textarea-wrapper .epupp-btn-container.is-overlay-inset {
+  top: 5px;
+  right: 5px;
+}
+
+.epupp-action-btn .epupp-icon {
+  flex-shrink: 0;
+  margin: 0;
+  margin-top: 2px;
+  margin-bottom: -2px;
+}
+
+.epupp-copy-action__icons {
+  display: inline-flex;
+  align-items: center;
+}
+
+.epupp-copy-icon {
+  display: inline-flex;
+  align-items: center;
+  margin-left: -4px;
+  padding: 1px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.9);
+}
+
+.epupp-modal__header { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e1e4e8; color: #1a1a1a; }
+.epupp-modal__brand { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.epupp-modal__icon { width: 32px; height: 32px; }
+.epupp-modal__title { font-size: 16px; font-weight: 600; display: flex; align-items: baseline; gap: 8px; }
+.epupp-modal__tagline { font-size: 16px; font-weight: 400; font-style: italic; }
+.epupp-modal__action-title { margin: 0; font-size: 16px; font-weight: 500; }
+.epupp-modal__action-title.is-error { color: #dc3545; }

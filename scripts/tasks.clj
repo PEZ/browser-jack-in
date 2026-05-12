@@ -111,6 +111,7 @@
     (fs/create-dirs "build/userscripts")
     (fs/create-dirs "build/userscripts/epupp")
     (fs/copy "extension/userscripts/epupp/web_userscript_installer.cljs" "build/userscripts/epupp/web_userscript_installer.cljs" {:replace-existing true})
+    (fs/copy "extension/userscripts/epupp/web_installer.css" "build/userscripts/epupp/web_installer.css" {:replace-existing true})
     (println "✓ Squint + esbuild compilation complete")))
 
 (defn- adjust-manifest
