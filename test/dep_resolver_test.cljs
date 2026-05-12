@@ -687,6 +687,92 @@
     (-> (expect (:step/code ext-step)) (.toBe "(ns lib-a)"))
     (-> (expect (:step/source ext-step)) (.toBe :ext))))
 
+(defn- test-classify-css-epupp-url []
+  (-> (expect (resolver/classify-inject-url "epupp://epupp/installer.css"))
+      (.toBe :css)))
+
+(defn- test-classify-css-https-url []
+  (-> (expect (resolver/classify-inject-url "https://example.com/style.css"))
+      (.toBe :css)))
+
+(defn- test-classify-css-ext-dep-url []
+  (-> (expect (resolver/classify-inject-url
+               (str "https://raw.githubusercontent.com/user/repo/"
+                    "abcdef0123456789abcdef0123456789abcdef01"
+                    "/theme.css")))
+      (.toBe :css)))
+
+(defn- test-classify-epupp-cljs-still-epupp []
+  (-> (expect (resolver/classify-inject-url "epupp://some/lib.cljs"))
+      (.toBe :epupp)))
+
+(defn- test-parse-css-url-no-normalize []
+  (-> (expect (resolver/parse-epupp-url "epupp://epupp/installer.css"))
+      (.toBe "epupp/installer.css")))
+
+(def script-with-css
+  {:script/id "id-css" :script/name "uses_css.cljs" :script/code "(ns uses-css)"
+   :script/inject ["epupp://epupp/installer.css" "scittle://replicant.js" "epupp://b.cljs"]
+   :script/enabled true})
+
+(def script-with-dup-css
+  {:script/id "id-dup-css" :script/name "dup_css.cljs" :script/code "(ns dup-css)"
+   :script/inject ["epupp://epupp/installer.css"] :script/enabled true})
+
+(defn- test-css-steps-in-plan []
+  (let [all [script-with-css script-b]
+        plan (resolver/resolve-execution-plan [script-with-css] all)
+        steps (:plan/steps plan)
+        css-steps (filterv #(= :css-file (:step/type %)) steps)]
+    (-> (expect (count (:plan/errors plan)))
+        (.toBe 0))
+    (-> (expect (count css-steps))
+        (.toBe 1))
+    (let [step (first css-steps)]
+      (-> (expect (:step/source step))
+          (.toBe :epupp))
+      (-> (expect (:step/path step))
+          (.toBe "userscripts/epupp/installer.css")))))
+
+(defn- test-css-steps-before-vendor []
+  (let [all [script-with-css script-b]
+        plan (resolver/resolve-execution-plan [script-with-css] all)
+        steps (:plan/steps plan)
+        css-steps (filterv #(= :css-file (:step/type %)) steps)
+        vendor-steps (filterv #(= :vendor-file (:step/type %)) steps)]
+    (when (and (seq css-steps) (seq vendor-steps))
+      (let [types (mapv :step/type steps)
+            first-css-idx (.indexOf types :css-file)
+            first-vendor-idx (.indexOf types :vendor-file)]
+        (-> (expect (< first-css-idx first-vendor-idx))
+            (.toBe true))))))
+
+(defn- test-css-dedup []
+  (let [all [script-with-css script-with-dup-css script-b]
+        plan (resolver/resolve-execution-plan [script-with-css script-with-dup-css] all)
+        steps (:plan/steps plan)
+        css-steps (filterv #(= :css-file (:step/type %)) steps)]
+    (-> (expect (count css-steps))
+        (.toBe 1))))
+
+(defn- test-css-no-transitive-resolution []
+  (let [script-css-only {:script/id "id-css-only" :script/name "css_only.cljs"
+                          :script/code "(ns css-only)"
+                          :script/inject ["epupp://theme.css"]
+                          :script/enabled true}
+        plan (resolver/resolve-execution-plan [script-css-only] [script-css-only])
+        steps (:plan/steps plan)
+        css-steps (filterv #(= :css-file (:step/type %)) steps)
+        root-steps (filterv #(= :root-script (:step/type %)) steps)]
+    (-> (expect (count (:plan/errors plan)))
+        (.toBe 0))
+    (-> (expect (count css-steps))
+        (.toBe 1))
+    (-> (expect (count root-steps))
+        (.toBe 1))
+    (-> (expect (:step/path (first css-steps)))
+        (.toBe "userscripts/theme.css"))))
+
 (describe "dep-resolver"
           (fn []
             (describe "classify-inject-url"
@@ -698,7 +784,11 @@
                         (test "classifies non-string as unknown" test-classify-non-string)
                         (test "classifies raw.githubusercontent.com URL as :ext-dep" test-classify-ext-dep-repo-url)
                         (test "classifies gist.githubusercontent.com URL as :ext-dep" test-classify-ext-dep-gist-url)
-                        (test "classifies untrusted HTTPS host as :unknown" test-classify-untrusted-https-as-unknown)))
+                        (test "classifies untrusted HTTPS host as :unknown" test-classify-untrusted-https-as-unknown)
+                        (test "classifies epupp:// .css URL as :css" test-classify-css-epupp-url)
+                        (test "classifies https:// .css URL as :css" test-classify-css-https-url)
+                        (test "classifies ext-dep .css URL as :css (not :ext-dep)" test-classify-css-ext-dep-url)
+                        (test "classifies epupp:// .cljs URL as :epupp (no regression)" test-classify-epupp-cljs-still-epupp)))
 
             (describe "parse-epupp-url"
                       (fn []
@@ -706,7 +796,8 @@
                         (test "normalizes script name" test-parse-url-normalizes-name)
                         (test "returns nil for non-epupp URLs" test-parse-url-nil-for-non-epupp)
                         (test "returns nil for empty name" test-parse-url-nil-for-empty-name)
-                        (test "returns nil for nil input" test-parse-url-nil-for-nil)))
+                        (test "returns nil for nil input" test-parse-url-nil-for-nil)
+                        (test "CSS URL preserved without normalization" test-parse-css-url-no-normalize)))
 
             (describe "build-catalog"
                       (fn []
@@ -744,4 +835,11 @@
                         (test "detects cycles across ext deps" test-ext-dep-cycle-detection)
                         (test "ext dep with scittle inject produces vendor steps" test-ext-dep-with-scittle-inject)
                         (test "deduplicates ext deps across multiple roots" test-ext-dep-dedup-across-roots)
-                        (test "ext dep steps have correct shape" test-ext-dep-step-shape)))))
+                        (test "ext dep steps have correct shape" test-ext-dep-step-shape)))
+
+            (describe "resolve-execution-plan with CSS"
+                      (fn []
+                        (test "CSS inject produces :css-file step" test-css-steps-in-plan)
+                        (test "CSS steps ordered before vendor steps" test-css-steps-before-vendor)
+                        (test "deduplicates CSS entries across roots" test-css-dedup)
+                        (test "CSS entries don't participate in transitive resolution" test-css-no-transitive-resolution)))))
