@@ -190,19 +190,19 @@
          (filter string?))
     []))
 
+(defn- matches-repo? [owner repo candidate]
+  (and (= (:owner candidate) owner)
+       (= (:repo candidate) repo)))
+
 (defn- resolve-repo-commit-sha [element owner repo]
-  (when (and (nonblank-string? owner)
-             (nonblank-string? repo))
+  (when (every? nonblank-string? [owner repo])
     (let [root (github-repo-root-element element)]
       (->> (concat (query-hrefs root github-repo-commit-link-selectors)
                    (query-hrefs js/document github-repo-commit-link-selectors))
            (map absolute-url)
            (filter string?)
            (keep parse-github-commit-url)
-           (filter (fn [{candidate-owner :owner
-                         candidate-repo :repo}]
-                     (and (= candidate-owner owner)
-                          (= candidate-repo repo))))
+           (filter (partial matches-repo? owner repo))
            (map :sha)
            first))))
 
