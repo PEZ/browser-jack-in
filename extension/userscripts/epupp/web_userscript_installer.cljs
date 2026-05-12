@@ -791,13 +791,13 @@
 (defn dispatch!
   "Uniflow dispatch loop: for each action, call handle-action, apply state, execute effects."
   [actions]
-  (doseq [action actions]
-    (when-let [result (handle-action @!state action)]
-      (when-let [new-state (:state result)]
-        (reset! !state new-state))
-      (when-let [effects (:effects result)]
-        (doseq [effect effects]
-          (perform-effect! dispatch! effect))))))
+  (doseq [action actions
+          :let [result (handle-action @!state action)]
+          :when result]
+    (when-let [new-state (:state result)]
+      (reset! !state new-state))
+    (doseq [effect (:effects result)]
+      (perform-effect! dispatch! effect))))
 
 ;; ============================================================
 ;; Replicant Bridge
@@ -895,51 +895,62 @@
    :pre            {:tag "span" :insert :overlay-inset}
    :textarea       {:tag "span" :insert :overlay-wrap}})
 
+(defn- insert-append!
+  [target-container block-data tag script-name]
+  (when-not (.querySelector target-container ".epupp-btn-container")
+    (let [btn-container (create-button-container! tag script-name (:id block-data))]
+      (.appendChild target-container btn-container)
+      (render-button-into-container! btn-container block-data))))
+
+(defn- insert-overlay!
+  [element block-data tag script-name]
+  (when-not (.querySelector element ".epupp-btn-container")
+    (let [btn-container (create-button-container! tag script-name (:id block-data))]
+      (.add (.-classList btn-container) "is-overlay")
+      (.appendChild element btn-container)
+      (render-button-into-container! btn-container block-data))))
+
+(defn- insert-before!
+  [element block-data tag script-name]
+  (let [existing-btn (.-previousElementSibling element)]
+    (when-not (and existing-btn (= (.-className existing-btn) "epupp-btn-container"))
+      (let [btn-container (create-button-container! tag script-name (:id block-data))
+            parent (.-parentElement element)]
+        (.insertBefore parent btn-container element)
+        (render-button-into-container! btn-container block-data)))))
+
+(defn- insert-overlay-inset!
+  [element block-data tag script-name]
+  (when-not (.querySelector element (str "[data-epupp-script='" script-name "']"))
+    (.add (.-classList element) "epupp-overlay-parent")
+    (let [btn-container (create-button-container! tag script-name (:id block-data))]
+      (.add (.-classList btn-container) "is-overlay-inset")
+      (.appendChild element btn-container)
+      (render-button-into-container! btn-container block-data))))
+
+(defn- insert-overlay-wrap!
+  [element block-data tag script-name]
+  (let [wrapper (js/document.createElement "div")
+        parent (.-parentElement element)]
+    (.add (.-classList wrapper) "epupp-overlay-parent" "is-textarea-wrapper")
+    (.insertBefore parent wrapper element)
+    (.appendChild wrapper element)
+    (let [btn-container (create-button-container! tag script-name (:id block-data))]
+      (.add (.-classList btn-container) "is-overlay-inset")
+      (.appendChild wrapper btn-container)
+      (render-button-into-container! btn-container block-data))))
+
 (defn- attach-button!
   "Button attachment using format specs."
   [element script-name block-data format]
   (let [{:keys [tag get-container insert]} (get format-specs format)]
     (case insert
-      :append
-      (when-let [target-container (get-container element)]
-        (when-not (.querySelector target-container ".epupp-btn-container")
-          (let [btn-container (create-button-container! tag script-name (:id block-data))]
-            (.appendChild target-container btn-container)
-            (render-button-into-container! btn-container block-data))))
-
-      :overlay
-      (when-not (.querySelector element ".epupp-btn-container")
-        (let [btn-container (create-button-container! tag script-name (:id block-data))]
-          (.add (.-classList btn-container) "is-overlay")
-          (.appendChild element btn-container)
-          (render-button-into-container! btn-container block-data)))
-
-      :before
-      (let [existing-btn (.-previousElementSibling element)]
-        (when-not (and existing-btn (= (.-className existing-btn) "epupp-btn-container"))
-          (let [btn-container (create-button-container! tag script-name (:id block-data))
-                parent (.-parentElement element)]
-            (.insertBefore parent btn-container element)
-            (render-button-into-container! btn-container block-data))))
-
-      :overlay-inset
-      (when-not (.querySelector element (str "[data-epupp-script='" script-name "']"))
-        (.add (.-classList element) "epupp-overlay-parent")
-        (let [btn-container (create-button-container! tag script-name (:id block-data))]
-          (.add (.-classList btn-container) "is-overlay-inset")
-          (.appendChild element btn-container)
-          (render-button-into-container! btn-container block-data)))
-
-      :overlay-wrap
-      (let [wrapper (js/document.createElement "div")
-            parent (.-parentElement element)]
-        (.add (.-classList wrapper) "epupp-overlay-parent" "is-textarea-wrapper")
-        (.insertBefore parent wrapper element)
-        (.appendChild wrapper element)
-        (let [btn-container (create-button-container! tag script-name (:id block-data))]
-          (.add (.-classList btn-container) "is-overlay-inset")
-          (.appendChild wrapper btn-container)
-          (render-button-into-container! btn-container block-data))))))
+      :append        (when-let [target (get-container element)]
+                       (insert-append! target block-data tag script-name))
+      :overlay       (insert-overlay! element block-data tag script-name)
+      :before        (insert-before! element block-data tag script-name)
+      :overlay-inset (insert-overlay-inset! element block-data tag script-name)
+      :overlay-wrap  (insert-overlay-wrap! element block-data tag script-name))))
 
 (defn attach-button-to-block!
   "Attach install button to a code block based on format."
@@ -952,7 +963,7 @@
 
 (defn- create-and-attach-block!
   "Create block-data from processing results and attach button to DOM."
-  [block-info block-id manifest code-text install-state copy-url]
+  [{:keys [block-info block-id manifest code-text install-state copy-url]}]
   (let [block-data {:id block-id
                     :manifest (select-installer-manifest manifest)
                     :code code-text
@@ -962,6 +973,26 @@
     (dispatch! [[:db/update :blocks conj block-data]])
     (attach-button-to-block! block-info block-data)))
 
+(defn- extractable-manifest
+  "Extract manifest from code text if it looks like a manifest block.
+   Returns nil if too short, doesn't start with '{', or has no valid manifest."
+  [code-text]
+  (let [trimmed (string/trim code-text)]
+    (when (and (> (count trimmed) 10)
+               (string/starts-with? trimmed "{"))
+      (h/extract-manifest code-text))))
+
+(defn- ensure-block-id!
+  "Ensure element has an ID, assigning a random UUID if needed.
+   Returns the block ID."
+  [element]
+  (let [existing-id (aget element "id")]
+    (if (and existing-id (pos? (count existing-id)))
+      existing-id
+      (let [block-id (str "block-" (random-uuid))]
+        (aset element "id" block-id)
+        block-id))))
+
 (defn- ^:async process-code-block!+
   "Process a single code block. Returns promise.
    block-info is {:element :format :code-text}
@@ -970,28 +1001,48 @@
    (shows 'Copy to install' on non-whitelisted domains)."
   [block-info]
   (let [element (:element block-info)
-        code-text (:code-text block-info)
-        trimmed-text (string/trim code-text)]
+        code-text (:code-text block-info)]
     (.setAttribute element "data-epupp-processed" "true")
-    (when (and (> (count trimmed-text) 10)
-               (string/starts-with? trimmed-text "{"))
-      (when-let [manifest (h/extract-manifest code-text)]
-        (let [script-name (:script-name manifest)
-              copy-url (derive-block-copy-url element manifest)
-              existing-id (aget element "id")
-              block-id (if (and existing-id (pos? (count existing-id)))
-                         existing-id
-                         (str "block-" (random-uuid)))]
-          (when-not (and existing-id (pos? (count existing-id)))
-            (aset element "id" block-id))
-          (try
-            (perf-log! (str "check-status start: " script-name))
-            (let [install-state (await (check-script-status!+ script-name code-text))]
-              (perf-log! (str "check-status done: " script-name " -> " install-state))
-              (create-and-attach-block! block-info block-id manifest code-text install-state copy-url))
-            (catch :default e
-              (js/console.error "[Web Userscript Installer] Error checking script status:" script-name e)
-              (create-and-attach-block! block-info block-id manifest code-text :install copy-url))))))))
+    (when-let [manifest (extractable-manifest code-text)]
+      (let [script-name (:script-name manifest)
+            copy-url (derive-block-copy-url element manifest)
+            block-id (ensure-block-id! element)
+            block-opts {:block-info block-info
+                        :block-id block-id
+                        :manifest manifest
+                        :code-text code-text
+                        :copy-url copy-url}]
+        (try
+          (perf-log! (str "check-status start: " script-name))
+          (let [install-state (await (check-script-status!+ script-name code-text))]
+            (perf-log! (str "check-status done: " script-name " -> " install-state))
+            (create-and-attach-block! (assoc block-opts :install-state install-state)))
+          (catch :default e
+            (js/console.error "[Web Userscript Installer] Error checking script status:" script-name e)
+            (create-and-attach-block! (assoc block-opts :install-state :install))))))))
+
+(defn- try-rederive-copy-url
+  "Attempt to derive copy-url for a block from current DOM state.
+   Returns [block-id url] pair or nil."
+  [block]
+  (when-let [element (js/document.getElementById (:id block))]
+    (when-let [url (derive-block-copy-url element (:manifest block))]
+      [(:id block) url])))
+
+(defn- apply-rederived-urls
+  "Apply rederived copy-urls to a blocks vector."
+  [blocks rederived]
+  (mapv (fn [b]
+          (if-let [url (get rederived (:id b))]
+            (assoc b :copy-url url)
+            b))
+        blocks))
+
+(defn- update-scan-debug-marker!
+  "Update the hidden debug marker element text."
+  [text]
+  (when-let [marker (js/document.getElementById "epupp-installer-debug")]
+    (set! (.-textContent marker) text)))
 
 (defn- rederive-missing-copy-urls!
   "Re-derive copy-url for library blocks where it was nil at scan time.
@@ -1004,23 +1055,34 @@
                                   (and (get-in b [:manifest :library?])
                                        (nil? (:copy-url b))))
                                 blocks)
-        rederived (vec (keep (fn [block]
-                               (when-let [element (js/document.getElementById (:id block))]
-                                 (when-let [url (derive-block-copy-url element (:manifest block))]
-                                   [(:id block) url])))
-                             needs-rederive))]
-    (doseq [[id url] rederived]
-      (dispatch! [[:db/update :blocks
-                   (fn [blks]
-                     (mapv (fn [b]
-                             (if (= (:id b) id) (assoc b :copy-url url) b))
-                           blks))]]))
+        rederived (into {} (keep try-rederive-copy-url) needs-rederive)]
+    (when (seq rederived)
+      (dispatch! [[:db/update :blocks apply-rederived-urls rederived]]))
     (- (count needs-rederive) (count rederived))))
+
+(defn- scan-rederive-only
+  "When no unprocessed blocks exist, check pending copy-url rederivation.
+   Returns 0 if still pending, :done if nothing left to do."
+  []
+  (let [still-pending (rederive-missing-copy-urls!)]
+    (perf-log! (str "processing 0 blocks, " still-pending " pending copy-url"))
+    (if (pos? still-pending) 0 :done)))
+
+(defn- ^:async process-unprocessed-blocks!+
+  "Process unprocessed code blocks concurrently and rederive copy-urls.
+   Returns count of new blocks found, or 0 if still pending rederivation."
+  [unprocessed blocks-before]
+  (perf-log! (str "processing " (count unprocessed) " blocks"))
+  (await (js/Promise.all
+          (to-array (map #(process-code-block!+ %) unprocessed))))
+  (let [new-found (- (count (:blocks @!state)) blocks-before)
+        still-pending (rederive-missing-copy-urls!)]
+    (perf-log! (str "scan complete: " new-found " new, " (count (:blocks @!state)) " total, " still-pending " pending copy-url"))
+    (update-scan-debug-marker! (str "Scan complete: " (count (:blocks @!state)) " blocks found"))
+    (if (pos? still-pending) 0 new-found)))
 
 (defn ^:async scan-code-blocks!
   "Scan DOM for code blocks, process unprocessed ones in parallel.
-   Also re-derives copy-url for library blocks where initial derivation
-   returned nil (GitHub lazily renders Raw link buttons).
    Returns the number of new blocks found, or :done when there are
    no unprocessed blocks and no pending copy-url rederivations."
   []
@@ -1033,25 +1095,11 @@
         (let [blocks-before (count (:blocks @!state))
               all-blocks (detect-all-code-blocks)
               unprocessed (filter #(not (.getAttribute (:element %) "data-epupp-processed")) all-blocks)]
-          ;; Debug: set marker with scan info
-          (when-let [marker (js/document.getElementById "epupp-installer-debug")]
-            (set! (.-textContent marker) (str "Scanning: " (count all-blocks) " code blocks, " (count unprocessed) " unprocessed")))
+          (update-scan-debug-marker! (str "Scanning: " (count all-blocks) " code blocks, " (count unprocessed) " unprocessed"))
           (if (empty? unprocessed)
-            ;; No new blocks to process - but check pending copy-url rederivation
-            (let [still-pending (rederive-missing-copy-urls!)]
-              (perf-log! (str "processing 0 blocks, " still-pending " pending copy-url"))
-              (if (pos? still-pending) 0 :done))
-            ;; Process all unprocessed blocks concurrently
+            (scan-rederive-only)
             (try
-              (perf-log! (str "processing " (count unprocessed) " blocks"))
-              (await (js/Promise.all
-                      (to-array (map #(process-code-block!+ %) unprocessed))))
-              (let [new-found (- (count (:blocks @!state)) blocks-before)
-                    still-pending (rederive-missing-copy-urls!)]
-                (perf-log! (str "scan complete: " new-found " new, " (count (:blocks @!state)) " total, " still-pending " pending copy-url"))
-                (when-let [marker (js/document.getElementById "epupp-installer-debug")]
-                  (set! (.-textContent marker) (str "Scan complete: " (count (:blocks @!state)) " blocks found")))
-                (if (pos? still-pending) 0 new-found))
+              (await (process-unprocessed-blocks!+ unprocessed blocks-before))
               (catch :default error
                 (js/console.error "[Web Userscript Installer] Scan error:" error)
                 0))))
