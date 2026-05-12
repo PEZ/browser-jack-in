@@ -55,7 +55,8 @@
         "vendor/react-dom.production.min.js",
         "ws-bridge.js",
         "trigger-scittle.js",
-        "disable-scittle-auto-eval.js"
+        "disable-scittle-auto-eval.js",
+        "userscripts/epupp/*.css"
       ],
       "matches": [
         "<all_urls>"

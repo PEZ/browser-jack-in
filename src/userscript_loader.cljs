@@ -183,6 +183,25 @@
       (js/console.log "[Epupp Loader] Injecting" (count vendor-steps) "vendor files")
       (js-await (inject-vendor-files! vendor-steps)))))
 
+(defn- inject-css-file!
+  "Inject a CSS file as a <link rel=\"stylesheet\"> tag.
+   Resolves epupp:// paths via chrome.runtime.getURL."
+  [step]
+  (let [url (if (= :epupp (:step/source step))
+              (.getURL js/chrome.runtime (:step/path step))
+              (:step/url step))
+        link (js/document.createElement "link")]
+    (set! (.-rel link) "stylesheet")
+    (set! (.-href link) url)
+    (.appendChild (or js/document.head js/document.documentElement) link)
+    (js/console.log "[Epupp Loader] Injected CSS:" url)))
+
+(defn- inject-css-files!
+  "Inject all CSS file steps synchronously (no load waiting needed for CSS)."
+  [css-steps]
+  (doseq [step css-steps]
+    (inject-css-file! step)))
+
 (defn- inject-scripts-and-trigger!
   "Inject library/root scripts and trigger Scittle evaluation."
   [script-steps]
@@ -197,7 +216,7 @@
 
 (defn ^:async load-scripts!
   "Main loader: read storage, parse manifests, resolve dependencies,
-   inject Scittle + vendor files + scripts in correct order."
+   inject CSS + Scittle + vendor files + scripts in correct order."
   [current-url]
   (try
     (let [result (js-await (.get js/chrome.storage.local
@@ -218,12 +237,16 @@
           (let [plan (dep-resolver/resolve-execution-plan (vec matching) all-scripts ext-dep-cache)
                 errors (:plan/errors plan)
                 steps (:plan/steps plan)
+                css-steps (filterv #(= :css-file (:step/type %)) steps)
                 vendor-steps (filterv #(= :vendor-file (:step/type %)) steps)
                 script-steps (filterv #(contains? #{:library-script :root-script :ext-dep-script} (:step/type %))
                                       steps)]
             (when (seq errors)
               (report-resolution-errors! errors current-url test-mode?))
             (js/console.log "[Epupp Loader] Found" (count matching) "matching scripts")
+            (when (seq css-steps)
+              (js/console.log "[Epupp Loader] Injecting" (count css-steps) "CSS files")
+              (inject-css-files! css-steps))
             (js-await (inject-scittle-and-vendor! vendor-steps))
             (inject-scripts-and-trigger! script-steps)))))
     (catch :default err

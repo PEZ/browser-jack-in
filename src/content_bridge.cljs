@@ -192,6 +192,33 @@
           (handle-local-message! msg-type msg))))))
 
 ;; Script injection helpers
+(defn- inject-css-tag!
+  "Inject a <link rel=\"stylesheet\"> tag into the page.
+   Tracks injected CSS URLs via __epuppInjectedStyles to prevent duplicates."
+  [url send-response]
+  (when-not js/window.__epuppInjectedStyles
+    (set! js/window.__epuppInjectedStyles (js/Set.)))
+  (if (.has js/window.__epuppInjectedStyles url)
+    (do
+      (log/debug "Bridge" "CSS already injected, skipping:" url)
+      (send-response #js {:success true :skipped true}))
+    (do
+      (.add js/window.__epuppInjectedStyles url)
+      (let [link (js/document.createElement "link")]
+        (set! (.-rel link) "stylesheet")
+        (set! (.-href link) url)
+        (set! (.-onload link)
+              (fn []
+                (log/debug "Bridge" "CSS loaded:" url)
+                (send-response #js {:success true})))
+        (set! (.-onerror link)
+              (fn [e]
+                (log/error "Bridge" "CSS load error:" url e)
+                (.delete js/window.__epuppInjectedStyles url)
+                (send-response #js {:success false :error (str "Failed to load CSS " url)})))
+        (.appendChild js/document.head link)
+        (log/debug "Bridge" "Injecting CSS:" url)))))
+
 (defn- inject-script-tag!
   "Inject a script tag with src URL into the page.
    Tracks injected URLs to prevent duplicates.
@@ -293,6 +320,11 @@
       (do
         (log/debug "Bridge" "Responding to ping")
         (send-response #js {:ready true})
+        true)
+
+      "inject-css"
+      (do
+        (inject-css-tag! (.-url message) send-response)
         true)
 
       "inject-script"

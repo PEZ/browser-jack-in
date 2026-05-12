@@ -348,9 +348,25 @@
                                            :tab-id tab-id}))
         (recur (rest remaining))))))
 
+(defn- ^:async inject-css-steps!
+  "Inject CSS files by sending inject-css messages to the content bridge.
+   Resolves epupp:// paths via chrome.runtime.getURL."
+  [tab-id css-steps]
+  (loop [remaining css-steps]
+    (when (seq remaining)
+      (let [step (first remaining)
+            url (if (= :epupp (:step/source step))
+                  (.getURL js/chrome.runtime (:step/path step))
+                  (:step/url step))]
+        (js-await (send-tab-message tab-id {:type "inject-css" :url url}))
+        (js-await (test-logger/log-event! "CSS_INJECTED"
+                                          {:path (or (:step/path step) (:step/url step))
+                                           :tab-id tab-id}))
+        (recur (rest remaining))))))
+
 (defn ^:async execute-plan!
   "Execute a resolved dependency plan on a tab.
-   Processes steps in order: vendor files -> library scripts -> root scripts -> trigger.
+   Processes steps in order: CSS files -> vendor files -> library scripts -> root scripts -> trigger.
    The plan comes from dep-resolver/resolve-execution-plan.
 
    Parameters:
@@ -359,18 +375,21 @@
   [tab-id plan]
   (let [steps (:plan/steps plan)
         vendor-namespaces (:plan/vendor-namespaces plan)
+        css-steps (filterv #(= :css-file (:step/type %)) steps)
         vendor-steps (filterv #(= :vendor-file (:step/type %)) steps)
         script-steps (filterv #(contains? #{:library-script :root-script :ext-dep-script} (:step/type %))
                               steps)]
     (js-await (test-logger/log-event! "EXECUTE_PLAN_START"
                                       {:tab-id tab-id
+                                       :css-count (count css-steps)
                                        :vendor-count (count vendor-steps)
                                        :script-count (count script-steps)}))
-    (when (or (seq vendor-steps) (seq script-steps))
+    (when (or (seq css-steps) (seq vendor-steps) (seq script-steps))
       (try
         (js-await (inject-content-script tab-id "content-bridge.js"))
         (js-await (wait-for-bridge-ready tab-id))
         (js-await (send-tab-message tab-id {:type "clear-userscripts"}))
+        (js-await (inject-css-steps! tab-id css-steps))
         (js-await (inject-vendor-steps! tab-id vendor-steps vendor-namespaces))
         (js-await (inject-script-steps! tab-id script-steps))
         (js-await (execute-in-page tab-id trigger-scittle-fn))
