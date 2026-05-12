@@ -1154,45 +1154,47 @@
   (scan-with-retry!)
   (setup-mutation-observer!))
 
+(defn- ensure-debug-marker!
+  "Create a hidden debug marker element if not already present."
+  []
+  (when-not (js/document.getElementById "epupp-installer-debug")
+    (let [marker (js/document.createElement "div")]
+      (set! (.-id marker) "epupp-installer-debug")
+      (set! (.. marker -style -display) "none")
+      (when js/document.body
+        (.appendChild js/document.body marker)))))
+
+(defn- setup-navigation-listener!
+  "Register SPA navigation listener (once). Debounces URL changes
+   and triggers a rescan after navigation settles."
+  [!db]
+  (when js/window.navigation
+    (let [!nav-timeout (atom nil)
+          !last-url (atom js/window.location.href)]
+      (.addEventListener js/window.navigation "navigate"
+                         (fn [evt]
+                           (let [new-url (.-url (.-destination evt))]
+                             (when (not= new-url @!last-url)
+                               (reset! !last-url new-url)
+                               (cleanup-buttons! !db)
+                               (when-let [tid @!nav-timeout]
+                                 (js/clearTimeout tid))
+                               (reset! !nav-timeout
+                                       (js/setTimeout (partial rescan! !db) 500)))))))))
+
 (defn ^:async init! [!db]
   (when-not (:initialized? @!db)
     (swap! !db assoc :initialized? true :perf/t0 (js/performance.now))
-    (let [state @!db]
-      (js/console.log "[Web Userscript Installer] Initializing...")
-
-      ;; Debug marker (idempotent)
-      (when-not (js/document.getElementById "epupp-installer-debug")
-        (let [marker (js/document.createElement "div")]
-          (set! (.-id marker) "epupp-installer-debug")
-          (set! (.. marker -style -display) "none")
-          (when js/document.body
-            (.appendChild js/document.body marker))))
-
-      (swap! !db assoc :install-allowed? (install-allowed?))
-      (setup-ui! !db)
-
-      ;; Initial scan
-      (if (= js/document.readyState "loading")
-        (.addEventListener js/document "DOMContentLoaded" (partial rescan! !db))
-        (rescan! !db))
-
-      ;; SPA navigation listener (once)
-      (when-not (:nav-registered? state)
-        (dispatch! [[:db/assoc :nav-registered? true]])
-        (when js/window.navigation
-          (let [!nav-timeout (atom nil)
-                !last-url (atom js/window.location.href)]
-            (.addEventListener js/window.navigation "navigate"
-                               (fn [evt]
-                                 (let [new-url (.-url (.-destination evt))]
-                                   (when (not= new-url @!last-url)
-                                     (reset! !last-url new-url)
-                                     (cleanup-buttons! !db)
-                                     (when-let [tid @!nav-timeout]
-                                       (js/clearTimeout tid))
-                                     (reset! !nav-timeout
-                                             (js/setTimeout (partial rescan! !db) 500)))))))))
-
-      (js/console.log "[Web Userscript Installer] Ready"))))
+    (js/console.log "[Web Userscript Installer] Initializing...")
+    (ensure-debug-marker!)
+    (swap! !db assoc :install-allowed? (install-allowed?))
+    (setup-ui! !db)
+    (if (= js/document.readyState "loading")
+      (.addEventListener js/document "DOMContentLoaded" (partial rescan! !db))
+      (rescan! !db))
+    (when-not (:nav-registered? @!db)
+      (dispatch! [[:db/assoc :nav-registered? true]])
+      (setup-navigation-listener! !db))
+    (js/console.log "[Web Userscript Installer] Ready")))
 
 (init! !state)
