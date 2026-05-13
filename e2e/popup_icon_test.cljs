@@ -21,15 +21,19 @@
       (let [state (try
                     (js-await (fixtures/get-icon-display-state popup tab-id))
                     (catch :default _e nil))]
-        (if (and state (.includes allowed-states state))
+        (cond
+          (and state (.includes allowed-states state))
           state
-          (if (> (- (.now js/Date) start) timeout-ms)
-            (throw (js/Error. (str "Timeout waiting for icon state for tab " tab-id
-                                   ". Current state: " state
-                                   ". Expected one of: " (js/JSON.stringify allowed-states))))
-            (do
-              (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 20))))
-              (recur))))))))
+
+          (> (- (.now js/Date) start) timeout-ms)
+          (throw (js/Error. (str "Timeout waiting for icon state for tab " tab-id
+                                 ". Current state: " state
+                                 ". Expected one of: " (js/JSON.stringify allowed-states))))
+
+          :else
+          (do
+            (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 20))))
+            (recur)))))))
 
 (defn- ^:async test_toolbar_icon_reflects_connection_state []
   (.setTimeout test 10000)
