@@ -1,8 +1,10 @@
 (ns e2e.panel-icon-test
   "E2E tests for panel logo connection state reactivity."
   (:require ["@playwright/test" :refer [test expect]]
-            [fixtures :as fixtures :refer [launch-browser get-extension-id create-popup-page
-                                           assert-no-errors!]]))
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-popup-page create-panel-page-for-tab]]
+            [fixtures.messaging :refer [find-tab-id connect-tab wait-for-connection send-runtime-message]]
+            [fixtures.events :refer [assert-no-errors!]]))
 
 ;; =============================================================================
 ;; Panel Icon: Connection State Reactivity
@@ -39,11 +41,11 @@
 
         ;; Find the tab ID for this page
         (let [popup (js-await (create-popup-page context ext-id))
-              tab-id (js-await (fixtures/find-tab-id popup "http://localhost:18080/basic.html"))]
+              tab-id (js-await (find-tab-id popup "http://localhost:18080/basic.html"))]
           (js-await (.close popup))
 
           ;; Create panel that thinks it's inspecting this tab
-          (let [panel (js-await (fixtures/create-panel-page-for-tab context ext-id tab-id))]
+          (let [panel (js-await (create-panel-page-for-tab context ext-id tab-id))]
 
             ;; Panel should start disconnected
             (let [state (js-await (wait-for-panel-connected-state panel "false" 2000))]
@@ -52,8 +54,8 @@
 
             ;; Connect REPL to this tab
             (let [popup (js-await (create-popup-page context ext-id))]
-              (js-await (fixtures/connect-tab popup tab-id ws-port-1))
-              (js-await (fixtures/wait-for-connection popup 5000))
+              (js-await (connect-tab popup tab-id ws-port-1))
+              (js-await (wait-for-connection popup 5000))
               (js-await (.close popup)))
 
             ;; Panel should now show connected
@@ -63,7 +65,7 @@
 
             ;; Disconnect by requesting disconnect from popup
             (let [popup (js-await (create-popup-page context ext-id))]
-              (js-await (fixtures/send-runtime-message popup "disconnect-tab" #js {:tabId tab-id}))
+              (js-await (send-runtime-message popup "disconnect-tab" #js {:tabId tab-id}))
               (js-await (.close popup)))
 
             ;; Panel should return to disconnected

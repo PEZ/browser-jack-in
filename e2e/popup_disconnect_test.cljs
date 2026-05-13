@@ -1,9 +1,12 @@
 (ns e2e.popup-disconnect-test
   "E2E tests for popup connection API and disconnect functionality."
   (:require ["@playwright/test" :refer [test expect]]
-            [fixtures :as fixtures :refer [launch-browser get-extension-id create-popup-page
-                                           wait-for-popup-ready
-                                           wait-for-connection ws-port-1 assert-no-errors!]]))
+            [fixtures.constants :refer [ws-port-1]]
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-popup-page]]
+            [fixtures.wait :refer [wait-for-popup-ready]]
+            [fixtures.messaging :refer [wait-for-connection get-connections find-tab-id connect-tab]]
+            [fixtures.events :refer [assert-no-errors!]]))
 
 ;; =============================================================================
 ;; Popup User Journey: Connection API
@@ -25,22 +28,22 @@
           (js-await (wait-for-popup-ready popup))
 
           ;; Check initial state - no connections yet
-          (let [initial-conns (js-await (fixtures/get-connections popup))]
+          (let [initial-conns (js-await (get-connections popup))]
             (js/console.log "Initial connections:" (.-length initial-conns))
             (js-await (-> (expect (.-length initial-conns))
                           (.toBe 0))))
 
           ;; Find the test page tab and connect
-          (let [tab-id (js-await (fixtures/find-tab-id popup "http://localhost:18080/*"))]
+          (let [tab-id (js-await (find-tab-id popup "http://localhost:18080/*"))]
             (js/console.log "Found test page tab ID:" tab-id)
-            (js-await (fixtures/connect-tab popup tab-id ws-port-1))
+            (js-await (connect-tab popup tab-id ws-port-1))
             (js/console.log "Connected to tab via WebSocket port" ws-port-1)
 
             ;; Wait for connection event
             (js-await (wait-for-connection popup 5000))
 
             ;; Now get-connections should return the connection
-            (let [connections (js-await (fixtures/get-connections popup))
+            (let [connections (js-await (get-connections popup))
                   conn-count (.-length connections)]
               (js/console.log "Connections after connect:" conn-count)
               (js/console.log "Connection data:" (js/JSON.stringify connections))
@@ -85,8 +88,8 @@
             (js/console.log "Initial state: no connections shown"))
 
           ;; Connect to the test page while popup is still open
-          (let [tab-id (js-await (fixtures/find-tab-id popup "http://localhost:18080/*"))]
-            (js-await (fixtures/connect-tab popup tab-id ws-port-1))
+          (let [tab-id (js-await (find-tab-id popup "http://localhost:18080/*"))]
+            (js-await (connect-tab popup tab-id ws-port-1))
             (js/console.log "Connected to tab" tab-id)
 
             ;; Wait for connection event
@@ -119,8 +122,8 @@
           (js-await (wait-for-popup-ready popup))
 
           ;; Connect via direct API
-          (let [tab-id (js-await (fixtures/find-tab-id popup "http://localhost:18080/basic.html"))]
-            (js-await (fixtures/connect-tab popup tab-id ws-port-1))
+          (let [tab-id (js-await (find-tab-id popup "http://localhost:18080/basic.html"))]
+            (js-await (connect-tab popup tab-id ws-port-1))
             (js-await (wait-for-connection popup 5000))
 
             ;; Ensure the connected tab is the active tab for popup actions

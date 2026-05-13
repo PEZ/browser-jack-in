@@ -5,9 +5,11 @@
    - check-script-exists works from any domain
    - save-script (REPL path) requires FS REPL Sync even with URL-based scriptSource"
   (:require ["@playwright/test" :refer [test expect]]
-            ["./../fixtures.mjs" :refer [launch-browser get-extension-id create-popup-page
-                                          wait-for-popup-ready send-runtime-message
-                                          clear-fs-scripts assert-no-errors!]]
+            ["./../fixtures/browser.mjs" :refer [launch-browser get-extension-id]]
+            ["./../fixtures/pages.mjs" :refer [create-popup-page]]
+            ["./../fixtures/messaging.mjs" :refer [send-runtime-message clear-fs-scripts]]
+            ["./../fixtures/wait.mjs" :refer [wait-for-popup-ready]]
+            ["./../fixtures/events.mjs" :refer [assert-no-errors!]]
             ["./helpers.mjs" :as h]))
 
 ;; ============================================================

@@ -2,10 +2,12 @@
   "E2E tests for running scripts from popup."
   (:require ["@playwright/test" :refer [test expect]]
             [clojure.string :as str]
-            [fixtures :refer [launch-browser get-extension-id create-popup-page
-                              find-tab-id create-panel-page
-                              wait-for-save-status assert-no-errors!
-                              http-port clear-test-events! wait-for-event]]))
+            [fixtures.constants :refer [http-port]]
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-popup-page create-panel-page]]
+            [fixtures.messaging :refer [find-tab-id]]
+            [fixtures.wait :refer [wait-for-save-status]]
+            [fixtures.events :refer [assert-no-errors! clear-test-events! wait-for-event]]))
 
 (defn code-with-manifest
   "Generate test code with epupp manifest metadata."

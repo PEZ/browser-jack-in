@@ -1,16 +1,14 @@
 (ns integration-test
   (:require ["@playwright/test" :refer [test expect]]
             [clojure.string :as str]
-            [fixtures :refer [launch-browser
-                              get-extension-id
-                              create-panel-page
-                              create-popup-page
-                              clear-storage
-                              wait-for-save-status
-                              wait-for-checkbox-state
-                              wait-for-edit-hint
-                              wait-for-panel-ready
-                              assert-no-errors!]]))
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-panel-page create-popup-page]]
+            [fixtures.messaging :refer [clear-storage]]
+            [fixtures.wait :refer [wait-for-save-status
+                                   wait-for-checkbox-state
+                                   wait-for-edit-hint
+                                   wait-for-panel-ready]]
+            [fixtures.events :refer [assert-no-errors!]]))
 
 (defn code-with-manifest
   "Generate test code with epupp manifest metadata."

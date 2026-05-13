@@ -1,9 +1,11 @@
 (ns e2e.web-installer.installation-test
   "E2E tests for basic web userscript installation flows."
   (:require ["@playwright/test" :refer [test expect]]
-            ["./../fixtures.mjs" :refer [launch-browser get-extension-id create-popup-page
-                                          wait-for-popup-ready wait-for-event assert-no-errors!
-                                          send-runtime-message clear-test-events!]]
+            ["./../fixtures/browser.mjs" :refer [launch-browser get-extension-id]]
+            ["./../fixtures/pages.mjs" :refer [create-popup-page]]
+            ["./../fixtures/messaging.mjs" :refer [send-runtime-message]]
+            ["./../fixtures/wait.mjs" :refer [wait-for-popup-ready]]
+            ["./../fixtures/events.mjs" :refer [wait-for-event assert-no-errors! clear-test-events!]]
             ["./helpers.mjs" :as h]))
 
 (def git-raw-url

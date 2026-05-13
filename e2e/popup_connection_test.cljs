@@ -1,9 +1,12 @@
 (ns e2e.popup-connection-test
   "E2E tests for popup REPL connection tracking and status."
   (:require ["@playwright/test" :refer [test expect]]
-            [fixtures :as fixtures :refer [launch-browser get-extension-id create-popup-page
-                                           wait-for-popup-ready
-                                           wait-for-connection ws-port-1 assert-no-errors!]]))
+            [fixtures.constants :refer [ws-port-1]]
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-popup-page]]
+            [fixtures.wait :refer [wait-for-popup-ready]]
+            [fixtures.messaging :refer [wait-for-connection find-tab-id connect-tab]]
+            [fixtures.events :refer [assert-no-errors!]]))
 
 ;; =============================================================================
 ;; Popup User Journey: Connection Tracking and Management
@@ -29,8 +32,8 @@
                           (.toBeVisible))))
 
           ;; Find and connect the page
-          (let [tab-id (js-await (fixtures/find-tab-id popup "http://localhost:18080/basic.html"))]
-            (js-await (fixtures/connect-tab popup tab-id ws-port-1))
+          (let [tab-id (js-await (find-tab-id popup "http://localhost:18080/basic.html"))]
+            (js-await (connect-tab popup tab-id ws-port-1))
 
             ;; Wait for connection event then reload popup
             (js-await (wait-for-connection popup 5000))
@@ -125,8 +128,8 @@
                           (.toBeVisible))))
 
           ;; Connect via direct API (bypasses UI button permission issues)
-          (let [tab-id (js-await (fixtures/find-tab-id popup "http://localhost:18080/basic.html"))]
-            (js-await (fixtures/connect-tab popup tab-id ws-port-1))
+          (let [tab-id (js-await (find-tab-id popup "http://localhost:18080/basic.html"))]
+            (js-await (connect-tab popup tab-id ws-port-1))
 
             ;; Wait for connection event then reload popup
             (js-await (wait-for-connection popup 5000))

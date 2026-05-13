@@ -4,9 +4,10 @@
    with valid userscript manifests on a whitelisted origin should NOT
    produce install buttons."
   (:require ["@playwright/test" :refer [test expect]]
-            ["./../fixtures.mjs" :refer [launch-browser get-extension-id create-popup-page
-                                         wait-for-popup-ready wait-for-checkbox-state
-                                         assert-no-errors!]]
+            ["./../fixtures/browser.mjs" :refer [launch-browser get-extension-id]]
+            ["./../fixtures/pages.mjs" :refer [create-popup-page]]
+            ["./../fixtures/wait.mjs" :refer [wait-for-popup-ready wait-for-checkbox-state]]
+            ["./../fixtures/events.mjs" :refer [assert-no-errors!]]
             ["./helpers.mjs" :as h]))
 
 ;; =============================================================================

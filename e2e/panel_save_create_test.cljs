@@ -1,10 +1,14 @@
 (ns e2e.panel-save-create-test
   "E2E tests for DevTools panel save create functionality."
   (:require ["@playwright/test" :refer [test expect]]
-            [fixtures :refer [builtin-script-count launch-browser get-extension-id create-panel-page
-                              clear-storage wait-for-panel-ready wait-for-popup-ready
-                              wait-for-save-status wait-for-script-count wait-for-edit-hint
-                              wait-for-property-value assert-no-errors!]]
+            [fixtures.constants :refer [builtin-script-count]]
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-panel-page]]
+            [fixtures.messaging :refer [clear-storage]]
+            [fixtures.wait :refer [wait-for-panel-ready wait-for-popup-ready
+                                   wait-for-save-status wait-for-script-count
+                                   wait-for-edit-hint wait-for-property-value]]
+            [fixtures.events :refer [assert-no-errors!]]
             [panel-save-helpers :as panel-save-helpers]))
 
 ;; =============================================================================

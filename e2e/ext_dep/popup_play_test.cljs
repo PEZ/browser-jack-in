@@ -5,14 +5,16 @@
    1. Popup play button: consumer loads ext-dep from git raw URL cache
    2. Popup play button: consumer loads ext-dep from gist raw URL cache"
   (:require ["@playwright/test" :refer [test expect]]
-            [fixtures :refer [launch-browser get-extension-id create-popup-page
-                              wait-for-event clear-test-events!
-                              assert-no-errors! find-tab-id get-script-item
-                              http-port]]
+            [fixtures.constants :refer [http-port]]
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-popup-page]]
+            [fixtures.messaging :refer [find-tab-id]]
+            [fixtures.wait :refer [get-script-item]]
+            [fixtures.events :refer [wait-for-event clear-test-events! assert-no-errors!]]
             [ext-dep-helpers :refer [git-raw-url gist-raw-url pez-test-lib-code
-                                         code-with-manifest save-script-via-panel
-                                         set-ext-dep-cache! make-ext-dep-cache
-                                         poll-for-window-property!]]))
+                                     code-with-manifest save-script-via-panel
+                                     set-ext-dep-cache! make-ext-dep-cache
+                                     poll-for-window-property!]]))
 
 (defn- ^:async activate-tab!
   "Activate a browser tab by ID."

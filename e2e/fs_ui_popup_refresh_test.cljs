@@ -1,6 +1,7 @@
 (ns e2e.fs-ui-popup-refresh-test
   (:require ["@playwright/test" :refer [test expect]]
-            [fixtures :refer [assert-no-errors! wait-for-script-count wait-for-popup-ready]]
+            [fixtures.wait :refer [wait-for-script-count wait-for-popup-ready]]
+            [fixtures.events :refer [assert-no-errors!]]
             [fs-ui-reactivity-helpers :as helpers]))
 
 (defn- ^:async popup_refreshes_script_list_after_save []

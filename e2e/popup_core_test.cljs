@@ -2,10 +2,12 @@
   "E2E tests for popup core functionality - REPL setup, scripts, hints."
   (:require ["@playwright/test" :refer [test expect]]
             [clojure.string :as str]
-            [fixtures :as fixtures :refer [builtin-script-count launch-browser get-extension-id create-popup-page
-                                           create-panel-page clear-storage wait-for-popup-ready
-                                           wait-for-save-status wait-for-script-count
-                                           wait-for-checkbox-state assert-no-errors!]]))
+            [fixtures.constants :refer [builtin-script-count]]
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-popup-page create-panel-page]]
+            [fixtures.messaging :refer [clear-storage]]
+            [fixtures.wait :refer [wait-for-popup-ready wait-for-save-status wait-for-script-count wait-for-checkbox-state]]
+            [fixtures.events :refer [assert-no-errors!]]))
 
 
 (defn code-with-manifest

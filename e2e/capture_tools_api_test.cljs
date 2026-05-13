@@ -3,8 +3,10 @@
    Exercises capture-visible, capture-selector, and error paths
    via nREPL evaluation in the page's Scittle context."
   (:require ["@playwright/test" :refer [test expect chromium]]
-            [fixtures :refer [extension-path get-extension-id http-port ws-port-1
-                              send-runtime-message assert-no-errors!]]
+            [fixtures.constants :refer [extension-path http-port ws-port-1]]
+            [fixtures.browser :refer [get-extension-id]]
+            [fixtures.messaging :refer [send-runtime-message]]
+            [fixtures.events :refer [assert-no-errors!]]
             [fs-write-helpers :refer [eval-in-browser sleep wait-for-script-tag]]))
 
 (def !context (atom nil))

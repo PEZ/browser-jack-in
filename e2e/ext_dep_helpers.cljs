@@ -1,10 +1,10 @@
 (ns ext-dep-helpers
   "Shared helpers and constants for ext-dep E2E tests."
   (:require [clojure.string :as str]
-            [fixtures :refer [create-popup-page create-panel-page
-                              wait-for-save-status wait-for-popup-ready
-                              get-script-item wait-for-checkbox-state
-                              send-runtime-message]]))
+            [fixtures.pages :refer [create-popup-page create-panel-page]]
+            [fixtures.messaging :refer [send-runtime-message]]
+            [fixtures.wait :refer [wait-for-save-status wait-for-popup-ready
+                                   get-script-item wait-for-checkbox-state]]))
 
 ;; =============================================================================
 ;; Constants

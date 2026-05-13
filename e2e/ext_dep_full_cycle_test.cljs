@@ -4,13 +4,13 @@
    the real network fetch path: save script -> storage change -> fetch -> cache -> inject."
   (:require ["@playwright/test" :refer [test expect]]
             [clojure.string :as str]
-            [fixtures :refer [launch-browser get-extension-id create-popup-page
-                              create-panel-page create-panel-page-for-tab
-                              wait-for-event wait-for-save-status
-                              wait-for-popup-ready get-script-item
-                              wait-for-checkbox-state send-runtime-message
-                              find-tab-id http-port
-                              assert-no-errors! clear-test-events!]]))
+            [fixtures.constants :refer [http-port]]
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-popup-page create-panel-page create-panel-page-for-tab]]
+            [fixtures.messaging :refer [send-runtime-message find-tab-id]]
+            [fixtures.wait :refer [wait-for-save-status wait-for-popup-ready get-script-item
+                                   wait-for-checkbox-state]]
+            [fixtures.events :refer [wait-for-event assert-no-errors! clear-test-events!]]))
 
 ;; =============================================================================
 ;; Constants - SHA-pinned, permanently available URLs

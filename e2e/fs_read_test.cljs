@@ -2,9 +2,9 @@
   "E2E tests for REPL file system read operations: epupp.fs/show, epupp.fs/ls"
   (:require ["@playwright/test" :refer [test expect chromium]]
             ["path" :as path]
-            [fixtures :refer [http-port ws-port-1
-                              send-runtime-message get-extension-id
-                              find-tab-id connect-tab]]
+            [fixtures.constants :refer [http-port ws-port-1]]
+            [fixtures.browser :refer [get-extension-id]]
+            [fixtures.messaging :refer [send-runtime-message find-tab-id connect-tab]]
             [fs-write-helpers :refer [eval-in-browser eval-async-and-poll!
                                       wait-for-builtin-script wait-for-script-tag]]))
 

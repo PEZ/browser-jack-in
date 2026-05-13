@@ -8,13 +8,12 @@
    4. Adding missing library and reloading clears the error"
   (:require ["@playwright/test" :refer [test expect]]
             [clojure.string :as str]
-            [fixtures :refer [launch-browser get-extension-id create-popup-page
-                              create-panel-page
-                              wait-for-event
-                              wait-for-save-status
-                              wait-for-popup-ready get-script-item
-                              wait-for-checkbox-state find-tab-id
-                              assert-no-errors! clear-test-events!]]))
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-popup-page create-panel-page]]
+            [fixtures.messaging :refer [find-tab-id]]
+            [fixtures.wait :refer [wait-for-save-status wait-for-popup-ready get-script-item
+                                   wait-for-checkbox-state]]
+            [fixtures.events :refer [wait-for-event assert-no-errors! clear-test-events!]]))
 
 ;; =============================================================================
 ;; Helpers

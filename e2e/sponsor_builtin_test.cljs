@@ -1,9 +1,11 @@
 (ns e2e.sponsor-builtin-test
   "E2E tests for built-in sponsor script presence and behavior in popup."
   (:require ["@playwright/test" :refer [test expect]]
-            [fixtures :refer [launch-browser get-extension-id create-popup-page
-                              get-script-item
-                              send-runtime-message assert-no-errors!]]))
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-popup-page]]
+            [fixtures.wait :refer [get-script-item]]
+            [fixtures.messaging :refer [send-runtime-message]]
+            [fixtures.events :refer [assert-no-errors!]]))
 
 (def ^:private builtin-id "epupp-builtin-sponsor-check")
 (def ^:private builtin-name "epupp/sponsor.cljs")

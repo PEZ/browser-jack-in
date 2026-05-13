@@ -1,8 +1,10 @@
 (ns e2e.web-installer.format-test
   "E2E tests for web installer format detection (GitHub, GitLab, etc.)."
   (:require ["@playwright/test" :refer [test expect]]
-            ["./../fixtures.mjs" :refer [launch-browser get-extension-id create-popup-page
-                                          wait-for-popup-ready assert-no-errors!]]
+            ["./../fixtures/browser.mjs" :refer [launch-browser get-extension-id]]
+            ["./../fixtures/pages.mjs" :refer [create-popup-page]]
+            ["./../fixtures/wait.mjs" :refer [wait-for-popup-ready]]
+            ["./../fixtures/events.mjs" :refer [assert-no-errors!]]
             ["./helpers.mjs" :as h]))
 
 (def expected-gist-library-copy-url

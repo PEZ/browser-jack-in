@@ -11,13 +11,11 @@
    3. Missing library reports LOADER_RESOLUTION_ERROR"
   (:require ["@playwright/test" :refer [test expect]]
             [clojure.string :as str]
-            [fixtures :refer [launch-browser get-extension-id create-popup-page
-                              create-panel-page wait-for-event
-                              wait-for-save-status
-                              wait-for-popup-ready
-                              get-script-item wait-for-checkbox-state
-                              poll-until
-                              assert-no-errors! clear-test-events!]]))
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-popup-page create-panel-page]]
+            [fixtures.wait :refer [wait-for-save-status wait-for-popup-ready get-script-item
+                                   wait-for-checkbox-state poll-until]]
+            [fixtures.events :refer [wait-for-event assert-no-errors! clear-test-events!]]))
 
 ;; =============================================================================
 ;; Helpers

@@ -6,9 +6,11 @@
    Tests cover: no-manifest pages, manifest pages, non-whitelisted origins,
    and SPA navigation with retry scanning."
   (:require ["@playwright/test" :refer [test expect]]
-            [fixtures :refer [launch-browser get-extension-id create-popup-page
-                              wait-for-popup-ready assert-no-errors!
-                              http-port]]
+            [fixtures.constants :refer [http-port]]
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-popup-page]]
+            [fixtures.wait :refer [wait-for-popup-ready]]
+            [fixtures.events :refer [assert-no-errors!]]
             ["./web_installer/helpers.mjs" :as h]))
 
 ;; ============================================================

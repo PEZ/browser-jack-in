@@ -4,11 +4,12 @@
    converts it to a manual-only script with no auto-run UI."
   (:require ["@playwright/test" :refer [test expect]]
             [clojure.string :as str]
-            [fixtures :refer [launch-browser get-extension-id create-popup-page
-                              create-panel-page clear-storage
-                              wait-for-panel-ready wait-for-popup-ready
-                              wait-for-save-status
-                              assert-no-errors! get-script-item]]
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-popup-page create-panel-page]]
+            [fixtures.messaging :refer [clear-storage]]
+            [fixtures.wait :refer [wait-for-panel-ready wait-for-popup-ready
+                                   wait-for-save-status get-script-item]]
+            [fixtures.events :refer [assert-no-errors!]]
             [fs-write-helpers :refer [setup-browser! eval-async-and-poll!]]))
 
 ;; =============================================================================

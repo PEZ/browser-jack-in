@@ -1,9 +1,11 @@
 (ns e2e.popup-autoconnect-test
   "E2E tests for popup auto-connect level functionality."
   (:require ["@playwright/test" :refer [test expect]]
-            [fixtures :as fixtures :refer [launch-browser get-extension-id create-popup-page
-                                           clear-storage wait-for-popup-ready
-                                           assert-no-errors!]]))
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-popup-page]]
+            [fixtures.messaging :refer [clear-storage]]
+            [fixtures.wait :refer [wait-for-popup-ready]]
+            [fixtures.events :refer [assert-no-errors! wait-for-event]]))
 
 
 
@@ -91,7 +93,7 @@
         ;; Wait for SCITTLE_LOADED event - indicates auto-connect triggered
         (let [popup (js-await (create-popup-page context ext-id))
               _ (js/console.log "Waiting for SCITTLE_LOADED event...")
-              event (js-await (fixtures/wait-for-event popup "SCITTLE_LOADED" 10000))]
+              event (js-await (wait-for-event popup "SCITTLE_LOADED" 10000))]
           (js/console.log "SCITTLE_LOADED event:" (js/JSON.stringify event))
           (js-await (-> (expect (.-event event)) (.toBe "SCITTLE_LOADED")))
           (js-await (assert-no-errors! popup))

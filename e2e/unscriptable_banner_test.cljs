@@ -3,8 +3,10 @@
    Verifies that a banner appears when the active tab URL is not scriptable
    (e.g., chrome://, about:, extension pages) and does not appear on normal pages."
   (:require ["@playwright/test" :refer [test expect]]
-            [fixtures :as fixtures :refer [launch-browser get-extension-id create-popup-page
-                                           wait-for-popup-ready assert-no-errors!]]))
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-popup-page]]
+            [fixtures.wait :refer [wait-for-popup-ready]]
+            [fixtures.events :refer [assert-no-errors!]]))
 
 ;; =============================================================================
 ;; Popup User Journey: Unscriptable Page Banner

@@ -1,10 +1,12 @@
 (ns e2e.panel-save-rename-test
   "E2E tests for DevTools panel rename functionality."
   (:require ["@playwright/test" :refer [test expect]]
-            [fixtures :refer [launch-browser get-extension-id create-panel-page
-                              clear-storage wait-for-panel-ready wait-for-popup-ready
-                              wait-for-save-status wait-for-edit-hint
-                              assert-no-errors!]]
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-panel-page]]
+            [fixtures.messaging :refer [clear-storage]]
+            [fixtures.wait :refer [wait-for-panel-ready wait-for-popup-ready
+                                   wait-for-save-status wait-for-edit-hint]]
+            [fixtures.events :refer [assert-no-errors!]]
             [panel-save-helpers :as panel-save-helpers]))
 
 ;; =============================================================================

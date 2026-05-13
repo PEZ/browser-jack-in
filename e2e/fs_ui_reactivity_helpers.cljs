@@ -1,9 +1,10 @@
 (ns fs-ui-reactivity-helpers
   (:require ["@playwright/test" :refer [chromium]]
             ["path" :as path]
-            [fixtures :refer [http-port ws-port-1
-                              clear-fs-scripts send-runtime-message
-                              get-extension-id find-tab-id connect-tab]]
+            [fixtures.constants :refer [http-port ws-port-1]]
+            [fixtures.browser :refer [get-extension-id]]
+            [fixtures.messaging :refer [clear-fs-scripts send-runtime-message
+                                        find-tab-id connect-tab]]
             [fs-write-helpers :as fs-write-helpers
              :refer [wait-for-script-tag]]))
 

@@ -5,12 +5,15 @@
    1. Panel eval: consumer loads ext-dep from git raw URL cache
    2. Panel eval: consumer loads ext-dep from gist raw URL cache"
   (:require ["@playwright/test" :refer [test expect]]
-            [fixtures :refer [launch-browser get-extension-id create-popup-page
-                              create-panel-page-for-tab wait-for-popup-ready
-                              assert-no-errors! find-tab-id http-port]]
+            [fixtures.constants :refer [http-port]]
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-popup-page create-panel-page-for-tab]]
+            [fixtures.messaging :refer [find-tab-id]]
+            [fixtures.wait :refer [wait-for-popup-ready]]
+            [fixtures.events :refer [assert-no-errors!]]
             [ext-dep-helpers :refer [git-raw-url gist-raw-url pez-test-lib-code
-                                         set-ext-dep-cache! make-ext-dep-cache
-                                         poll-for-scittle-eval!]]))
+                                     set-ext-dep-cache! make-ext-dep-cache
+                                     poll-for-scittle-eval!]]))
 
 (defn- ^:async test_panel_eval_consumer_loads_ext_dep_from_git_cache []
   (let [context (js-await (launch-browser))

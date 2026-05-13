@@ -1,6 +1,6 @@
 (ns e2e.fs-ui-errors-test
   (:require ["@playwright/test" :refer [test expect]]
-            [fixtures :refer [assert-no-errors!]]
+            [fixtures.events :refer [assert-no-errors!]]
             [fs-ui-reactivity-helpers :as helpers]
             [fs-write-helpers :refer [sleep eval-in-browser unquote-result]]))
 

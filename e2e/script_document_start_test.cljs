@@ -6,10 +6,12 @@
    - document-start scripts are injected via registration system"
   (:require ["@playwright/test" :refer [test expect]]
             [clojure.string :as str]
-            [fixtures :refer [builtin-script-count launch-browser get-extension-id create-panel-page
-                              create-popup-page wait-for-panel-ready wait-for-popup-ready
-                              wait-for-save-status wait-for-script-count poll-until
-                              assert-no-errors!]]
+            [fixtures.constants :refer [builtin-script-count]]
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-panel-page create-popup-page]]
+            [fixtures.wait :refer [wait-for-panel-ready wait-for-popup-ready
+                                   wait-for-save-status wait-for-script-count poll-until]]
+            [fixtures.events :refer [assert-no-errors!]]
             [panel-save-helpers :as panel-save-helpers]))
 
 ;; =============================================================================

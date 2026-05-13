@@ -2,9 +2,11 @@
   "E2E tests for DevTools panel evaluation functionality."
   (:require ["@playwright/test" :refer [test expect]]
             [clojure.string :as str]
-            [fixtures :as fixtures :refer [launch-browser get-extension-id create-panel-page
-                                           clear-storage wait-for-panel-ready wait-for-save-status
-                                           assert-no-errors!]]))
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-panel-page]]
+            [fixtures.messaging :refer [clear-storage]]
+            [fixtures.wait :refer [wait-for-panel-ready wait-for-save-status]]
+            [fixtures.events :refer [assert-no-errors!]]))
 
 (defn code-with-manifest
   "Generate test code with epupp manifest metadata.
@@ -77,7 +79,7 @@
 
         ;; 8. Save and verify (first save = Created since it's a new script)
         (js-await (.click save-btn))
-        (js-await (fixtures/wait-for-save-status panel "Created"))
+        (js-await (wait-for-save-status panel "Created"))
 
         ;; 9. Name field still shows normalized name after save
         (js-await (-> (expect name-field) (.toContainText "test_userscript.cljs")))

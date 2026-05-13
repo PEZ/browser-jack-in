@@ -3,9 +3,10 @@
   (:require ["@playwright/test" :refer [chromium]]
             ["net" :as net]
             ["path" :as path]
-            [fixtures :refer [http-port nrepl-port-1 ws-port-1
-                              clear-fs-scripts send-runtime-message
-                              find-tab-id connect-tab get-extension-id]]))
+            [fixtures.constants :refer [http-port nrepl-port-1 ws-port-1]]
+            [fixtures.browser :refer [get-extension-id]]
+            [fixtures.messaging :refer [clear-fs-scripts send-runtime-message
+                                        find-tab-id connect-tab]]))
 
 (defn ^:async sleep [ms]
   (js/Promise. (fn [resolve] (js/setTimeout resolve ms))))

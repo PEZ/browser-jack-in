@@ -7,9 +7,10 @@
    3. Library with auto-run-match appears in matching section, NOT Libraries"
   (:require ["@playwright/test" :refer [test expect]]
             [clojure.string :as str]
-            [fixtures :refer [launch-browser get-extension-id create-popup-page
-                              create-panel-page wait-for-popup-ready
-                              wait-for-save-status assert-no-errors!]]))
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-popup-page create-panel-page]]
+            [fixtures.wait :refer [wait-for-popup-ready wait-for-save-status]]
+            [fixtures.events :refer [assert-no-errors!]]))
 
 ;; =============================================================================
 ;; Helpers

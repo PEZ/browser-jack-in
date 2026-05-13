@@ -2,8 +2,8 @@
   "Helper functions for web userscript installer E2E tests.
    Consolidates common setup and selector patterns."
   (:require ["@playwright/test" :refer [expect]]
-            ["./../fixtures.mjs" :as fixtures-external :refer [create-popup-page
-                                                                wait-for-popup-ready]]))
+            ["./../fixtures/pages.mjs" :refer [create-popup-page]]
+            ["./../fixtures/wait.mjs" :refer [wait-for-popup-ready]]))
 
 ;; =============================================================================
 ;; Installer Action Selectors (using data-e2e and related attributes)

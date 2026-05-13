@@ -2,10 +2,11 @@
   "E2E tests for DevTools panel state management - initialization, new script, undo."
   (:require ["@playwright/test" :refer [test expect]]
             [clojure.string :as str]
-            [fixtures :refer [launch-browser get-extension-id create-panel-page
-                              clear-storage wait-for-panel-ready wait-for-popup-ready
-                              wait-for-save-status wait-for-panel-state-saved
-                              get-test-events assert-no-errors!]]))
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-panel-page]]
+            [fixtures.messaging :refer [clear-storage]]
+            [fixtures.wait :refer [wait-for-panel-ready wait-for-popup-ready wait-for-save-status]]
+            [fixtures.events :refer [get-test-events assert-no-errors!]]))
 
 (defn code-with-manifest
   "Generate test code with epupp manifest metadata.
@@ -52,6 +53,31 @@
       (finally
         (js-await (.close context))))))
 
+
+(defn ^:async wait-for-panel-state-saved
+  "Wait for panel state to be saved to storage for the test hostname."
+  [panel expected-code-pattern]
+  (let [check-fn (str "() => new Promise((resolve, reject) => {
+      const key = 'panelState:test.example.com';
+      const pattern = " (js/JSON.stringify expected-code-pattern) ";
+      let attempts = 0;
+      const maxAttempts = 50;
+      const check = () => {
+        attempts++;
+        chrome.storage.local.get([key], (result) => {
+          const saved = result[key];
+          if (saved && saved.code && saved.code.includes(pattern)) {
+            resolve(true);
+          } else if (attempts >= maxAttempts) {
+            reject(new Error('Panel state not saved after ' + attempts + ' attempts. Code: ' + (saved ? saved.code : 'null')));
+          } else {
+            setTimeout(check, 100);
+          }
+        });
+      };
+      check();
+    })")]
+    (js-await (.evaluate panel check-fn))))
 
 (defn- ^:async save-persisted-test-script!
   "Create, fill, save, and close a persisted test script via the panel."

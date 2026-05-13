@@ -3,9 +3,12 @@
    When a connected tab becomes visible after being hidden, if the WebSocket
    was lost, the extension should automatically reconnect."
   (:require ["@playwright/test" :refer [test expect]]
-            [fixtures :as fixtures :refer [launch-browser get-extension-id create-popup-page
-                                           wait-for-popup-ready
-                                           wait-for-connection ws-port-1 assert-no-errors!]]))
+            [fixtures.constants :refer [ws-port-1]]
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-popup-page]]
+            [fixtures.wait :refer [wait-for-popup-ready]]
+            [fixtures.messaging :refer [wait-for-connection send-runtime-message find-tab-id connect-tab get-connections clear-storage]]
+            [fixtures.events :refer [assert-no-errors! clear-test-events! assert-no-new-event-within wait-for-event]]))
 
 (defn- ^:async simulate-tab-visible!
   "Trigger the visibility-aware reconnect flow for a tab.
@@ -13,14 +16,14 @@
    visibility/ax.handle-tab-visible directly - bypassing the content bridge's
    DOM event listener that can't be reliably triggered cross-world."
   [ext-page tab-id]
-  (js-await (fixtures/send-runtime-message ext-page "e2e/simulate-tab-visible" #js {:tabId tab-id})))
+  (js-await (send-runtime-message ext-page "e2e/simulate-tab-visible" #js {:tabId tab-id})))
 
 (defn- ^:async wait-for-no-connections
   "Poll until connection count drops to 0."
   [ext-page timeout-ms]
   (let [start (.now js/Date)]
     (loop []
-      (let [connections (js-await (fixtures/get-connections ext-page))
+      (let [connections (js-await (get-connections ext-page))
             count (.-length connections)]
         (if (zero? count)
           true
@@ -52,32 +55,32 @@
                       (.toContainText "ready")))
 
         (let [popup (js-await (create-popup-page context ext-id))
-              tab-id (js-await (fixtures/find-tab-id popup "http://localhost:18080/*"))]
-          (js-await (fixtures/connect-tab popup tab-id ws-port-1))
+              tab-id (js-await (find-tab-id popup "http://localhost:18080/*"))]
+          (js-await (connect-tab popup tab-id ws-port-1))
           (js-await (wait-for-connection popup 5000))
           (js/console.log "Connected to tab" tab-id)
 
-          (let [connections (js-await (fixtures/get-connections popup))]
+          (let [connections (js-await (get-connections popup))]
             (js-await (-> (expect (.-length connections)) (.toBe 1))))
 
           ;; === PHASE 3: Explicit disconnect (user action via popup) ===
-          (js-await (fixtures/send-runtime-message popup "disconnect-tab" #js {:tabId tab-id}))
+          (js-await (send-runtime-message popup "disconnect-tab" #js {:tabId tab-id}))
           (js-await (wait-for-no-connections popup 2000))
           (js/console.log "Tab explicitly disconnected")
 
           ;; Clear test events for clean baseline
-          (js-await (fixtures/clear-test-events! popup))
+          (js-await (clear-test-events! popup))
 
           ;; === PHASE 4: Simulate tab becoming visible - should NOT reconnect ===
           (js-await (simulate-tab-visible! popup tab-id))
           (js/console.log "Simulated tab-became-visible after explicit disconnect")
 
           ;; Assert no NAV_AUTO_CONNECT event occurs
-          (js-await (fixtures/assert-no-new-event-within popup "NAV_AUTO_CONNECT" 0 300))
+          (js-await (assert-no-new-event-within popup "NAV_AUTO_CONNECT" 0 300))
           (js/console.log "Verified: no reconnection after explicit disconnect")
 
           ;; Verify still disconnected
-          (let [connections (js-await (fixtures/get-connections popup))]
+          (let [connections (js-await (get-connections popup))]
             (js-await (-> (expect (.-length connections)) (.toBe 0))))
 
           (js-await (assert-no-errors! popup))
@@ -114,26 +117,26 @@
                       (.toContainText "ready")))
 
         (let [popup (js-await (create-popup-page context ext-id))
-              tab-id (js-await (fixtures/find-tab-id popup "http://localhost:18080/*"))]
-          (js-await (fixtures/connect-tab popup tab-id ws-port-1))
+              tab-id (js-await (find-tab-id popup "http://localhost:18080/*"))]
+          (js-await (connect-tab popup tab-id ws-port-1))
           (js-await (wait-for-connection popup 5000))
 
-          (js-await (fixtures/send-runtime-message popup "disconnect-tab" #js {:tabId tab-id}))
+          (js-await (send-runtime-message popup "disconnect-tab" #js {:tabId tab-id}))
           (js-await (wait-for-no-connections popup 2000))
           (js/console.log "Tab disconnected with auto-reconnect disabled")
 
           ;; Clear test events for clean baseline
-          (js-await (fixtures/clear-test-events! popup))
+          (js-await (clear-test-events! popup))
 
           ;; === PHASE 3: Simulate visibility and verify NO reconnection ===
           (js-await (simulate-tab-visible! popup tab-id))
           (js/console.log "Simulated tab-became-visible")
 
           ;; Assert no NAV_AUTO_CONNECT event occurs
-          (js-await (fixtures/assert-no-new-event-within popup "NAV_AUTO_CONNECT" 0 300))
+          (js-await (assert-no-new-event-within popup "NAV_AUTO_CONNECT" 0 300))
           (js/console.log "Verified: no reconnection when auto-reconnect disabled")
 
-          (let [connections (js-await (fixtures/get-connections popup))]
+          (let [connections (js-await (get-connections popup))]
             (js-await (-> (expect (.-length connections)) (.toBe 0))))
 
           (js-await (assert-no-errors! popup))
@@ -158,24 +161,24 @@
                       (.toContainText "ready")))
 
         (let [popup (js-await (create-popup-page context ext-id))
-              tab-id (js-await (fixtures/find-tab-id popup "http://localhost:18080/*"))]
-          (js-await (fixtures/connect-tab popup tab-id ws-port-1))
+              tab-id (js-await (find-tab-id popup "http://localhost:18080/*"))]
+          (js-await (connect-tab popup tab-id ws-port-1))
           (js-await (wait-for-connection popup 5000))
           (js/console.log "Tab connected")
 
           ;; Clear test events for clean baseline
-          (js-await (fixtures/clear-test-events! popup))
+          (js-await (clear-test-events! popup))
 
           ;; === PHASE 2: Trigger visibility WITHOUT disconnect ===
           (js-await (simulate-tab-visible! popup tab-id))
           (js/console.log "Simulated tab-became-visible while still connected")
 
           ;; Assert no reconnection attempt (action short-circuits when WS exists)
-          (js-await (fixtures/assert-no-new-event-within popup "NAV_AUTO_CONNECT" 0 300))
+          (js-await (assert-no-new-event-within popup "NAV_AUTO_CONNECT" 0 300))
           (js/console.log "Verified: no reconnect when already connected")
 
           ;; Verify still connected (exactly 1 connection, unchanged)
-          (let [connections (js-await (fixtures/get-connections popup))]
+          (let [connections (js-await (get-connections popup))]
             (js-await (-> (expect (.-length connections)) (.toBe 1))))
 
           (js-await (assert-no-errors! popup))
@@ -197,7 +200,7 @@
     (try
       ;; === PHASE 1: Navigate and connect manually with auto-connect off ===
       (let [popup (js-await (create-popup-page context ext-id))]
-        (js-await (fixtures/clear-storage popup))
+        (js-await (clear-storage popup))
         (js-await (.reload popup))
         (js-await (wait-for-popup-ready popup))
         ;; Keep auto-connect off during setup
@@ -211,13 +214,13 @@
                       (.toContainText "ready")))
 
         (let [popup (js-await (create-popup-page context ext-id))
-              tab-id (js-await (fixtures/find-tab-id popup "http://localhost:18080/*"))]
-          (js-await (fixtures/connect-tab popup tab-id ws-port-1))
+              tab-id (js-await (find-tab-id popup "http://localhost:18080/*"))]
+          (js-await (connect-tab popup tab-id ws-port-1))
           (js-await (wait-for-connection popup 5000))
           (js/console.log "Connected to tab" tab-id)
 
           ;; Explicit disconnect
-          (js-await (fixtures/send-runtime-message popup "disconnect-tab" #js {:tabId tab-id}))
+          (js-await (send-runtime-message popup "disconnect-tab" #js {:tabId tab-id}))
           (js-await (wait-for-no-connections popup 2000))
           (js/console.log "Tab explicitly disconnected")
 
@@ -233,18 +236,18 @@
           (js/console.log "Auto-connect level set to all-pages (verified after reload)")
 
           ;; Clear test events for clean baseline
-          (js-await (fixtures/clear-test-events! popup))
+          (js-await (clear-test-events! popup))
 
           ;; === PHASE 3: Simulate tab becoming visible - should NOT reconnect ===
           (js-await (simulate-tab-visible! popup tab-id))
           (js/console.log "Simulated tab-became-visible at all-pages level")
 
           ;; At all-pages level, visibility should NOT trigger reconnect
-          (js-await (fixtures/assert-no-new-event-within popup "NAV_AUTO_CONNECT" 0 300))
+          (js-await (assert-no-new-event-within popup "NAV_AUTO_CONNECT" 0 300))
           (js/console.log "Verified: no visibility reconnect at all-pages level")
 
           ;; Verify still disconnected
-          (let [connections (js-await (fixtures/get-connections popup))]
+          (let [connections (js-await (get-connections popup))]
             (js-await (-> (expect (.-length connections)) (.toBe 0))))
 
           (js-await (assert-no-errors! popup))
@@ -264,7 +267,7 @@
     (try
       ;; === PHASE 1: Navigate and connect manually with auto-connect off ===
       (let [popup (js-await (create-popup-page context ext-id))]
-        (js-await (fixtures/clear-storage popup))
+        (js-await (clear-storage popup))
         (js-await (.reload popup))
         (js-await (wait-for-popup-ready popup))
         ;; Set the default WS port so all-tabs auto-connect uses the correct port
@@ -283,13 +286,13 @@
                       (.toContainText "ready")))
 
         (let [popup (js-await (create-popup-page context ext-id))
-              tab-id (js-await (fixtures/find-tab-id popup "http://localhost:18080/*"))]
-          (js-await (fixtures/connect-tab popup tab-id ws-port-1))
+              tab-id (js-await (find-tab-id popup "http://localhost:18080/*"))]
+          (js-await (connect-tab popup tab-id ws-port-1))
           (js-await (wait-for-connection popup 5000))
           (js/console.log "Connected to tab" tab-id)
 
           ;; Explicit disconnect
-          (js-await (fixtures/send-runtime-message popup "disconnect-tab" #js {:tabId tab-id}))
+          (js-await (send-runtime-message popup "disconnect-tab" #js {:tabId tab-id}))
           (js-await (wait-for-no-connections popup 2000))
           (js/console.log "Tab explicitly disconnected")
 
@@ -305,20 +308,20 @@
           (js/console.log "Auto-connect level set to all-tabs (verified after reload)")
 
           ;; Clear test events for clean baseline
-          (js-await (fixtures/clear-test-events! popup))
+          (js-await (clear-test-events! popup))
 
           ;; === PHASE 3: Simulate tab becoming visible - SHOULD reconnect ===
           (js-await (simulate-tab-visible! popup tab-id))
           (js/console.log "Simulated tab-became-visible at all-tabs level")
 
           ;; At all-tabs level, visibility SHOULD trigger reconnect
-          (let [event (js-await (fixtures/wait-for-event popup "NAV_AUTO_CONNECT" 5000))]
+          (let [event (js-await (wait-for-event popup "NAV_AUTO_CONNECT" 5000))]
             (js/console.log "NAV_AUTO_CONNECT event:" (js/JSON.stringify event)))
           (js/console.log "Verified: visibility reconnect triggered at all-tabs level")
 
           ;; Verify reconnected
           (js-await (wait-for-connection popup 5000))
-          (let [connections (js-await (fixtures/get-connections popup))]
+          (let [connections (js-await (get-connections popup))]
             (js-await (-> (expect (.-length connections)) (.toBe 1))))
 
           (js-await (assert-no-errors! popup))

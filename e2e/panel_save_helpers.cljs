@@ -1,10 +1,12 @@
 (ns panel-save-helpers
   (:require ["@playwright/test" :refer [expect]]
             [clojure.string :as string]
-            [fixtures :refer [builtin-script-count create-panel-page
-                              clear-storage wait-for-panel-ready wait-for-popup-ready
-                              wait-for-save-status wait-for-script-count wait-for-edit-hint
-                              assert-no-errors!]]))
+            [fixtures.constants :refer [builtin-script-count]]
+            [fixtures.pages :refer [create-panel-page]]
+            [fixtures.messaging :refer [clear-storage]]
+            [fixtures.wait :refer [wait-for-panel-ready wait-for-popup-ready
+                                   wait-for-save-status wait-for-script-count wait-for-edit-hint]]
+            [fixtures.events :refer [assert-no-errors!]]))
 
 (defn code-with-manifest
   "Generate test code with epupp manifest metadata.

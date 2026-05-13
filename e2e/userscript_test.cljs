@@ -7,11 +7,10 @@
    - Performance reporting"
   (:require ["@playwright/test" :refer [test expect]]
             [clojure.string :as str]
-            [fixtures :as fixtures :refer [launch-browser get-extension-id create-popup-page
-                                           create-panel-page wait-for-event
-                                           get-test-events wait-for-save-status wait-for-popup-ready
-                                           generate-timing-report print-timing-report
-                                           assert-no-errors!]]))
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-popup-page create-panel-page]]
+            [fixtures.wait :refer [wait-for-save-status wait-for-popup-ready]]
+            [fixtures.events :refer [get-test-events wait-for-event assert-no-errors!]]))
 
 (defn- code-with-manifest
   "Generate test code with epupp manifest metadata."
@@ -150,6 +149,45 @@
 ;; =============================================================================
 ;; Performance Reporting
 ;; =============================================================================
+
+(defn- timing-delta [from-perf to-perf]
+  (when (and from-perf to-perf)
+    (- to-perf from-perf)))
+
+(defn generate-timing-report [events]
+  (let [by-event (group-by #(.-event %) events)
+        get-perf (fn [event-name]
+                   (when-let [evt (first (get by-event event-name))]
+                     (.-perf evt)))
+        extension-start (get-perf "EXTENSION_STARTED")
+        scittle-loaded (get-perf "SCITTLE_LOADED")
+        script-injected (get-perf "SCRIPT_INJECTED")
+        bridge-ready (get-perf "BRIDGE_READY_CONFIRMED")
+        loader-run (get-perf "LOADER_RUN")]
+    {:scittle-load-ms (timing-delta extension-start scittle-loaded)
+     :injection-overhead-ms (timing-delta scittle-loaded script-injected)
+     :bridge-setup-ms (timing-delta extension-start bridge-ready)
+     :document-start-delta-ms loader-run
+     :all-events (map #(.-event %) events)}))
+
+(defn- format-metric [label ms threshold warning]
+  (str label (.toFixed ms 2) "ms" (when (> ms threshold) (str " ⚠️  " warning))))
+
+(defn print-timing-report [report]
+  (println "\n=== Performance Report ===")
+  (when-let [ms (:scittle-load-ms report)]
+    (println (format-metric "Scittle load time: " ms 200 "(target: <200ms)")))
+  (when-let [ms (:injection-overhead-ms report)]
+    (println (format-metric "Injection overhead: " ms 50 "(target: <50ms)")))
+  (when-let [ms (:bridge-setup-ms report)]
+    (println (format-metric "Bridge setup: " ms 100 "(target: <100ms)")))
+  (when-let [ms (:document-start-delta-ms report)]
+    (println (str "Document-start timing: " (.toFixed ms 2) "ms"
+                  (if (>= ms 0)
+                    " ⚠️  (loader should run before page scripts)"
+                    " ✓ (ran before page scripts)"))))
+  (println "\nAll events captured:" (clj->js (:all-events report)))
+  (println "==========================\n"))
 
 (defn- ^:async test_generate_performance_report_from_events []
   (let [context (js-await (launch-browser))

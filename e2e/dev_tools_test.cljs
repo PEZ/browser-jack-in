@@ -8,9 +8,11 @@
    - Reset Sponsor Status functionality
    - Dev log button visibility"
   (:require ["@playwright/test" :refer [test expect]]
-            [fixtures :refer [launch-browser get-extension-id create-popup-page
-                              wait-for-popup-ready send-runtime-message
-                              assert-no-errors!]]))
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-popup-page]]
+            [fixtures.wait :refer [wait-for-popup-ready]]
+            [fixtures.messaging :refer [send-runtime-message]]
+            [fixtures.events :refer [assert-no-errors!]]))
 
 ;; =============================================================================
 ;; Dev Tools Section Visibility

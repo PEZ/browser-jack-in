@@ -6,14 +6,16 @@
    2. Missing ext-dep cache produces resolution error
    3. Consumer loads ext-dep from gist raw URL cache (auto-run)"
   (:require ["@playwright/test" :refer [test expect]]
-            [fixtures :refer [launch-browser get-extension-id create-popup-page
-                              wait-for-event clear-test-events!
-                              assert-no-errors! send-runtime-message http-port]]
+            [fixtures.constants :refer [http-port]]
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-popup-page]]
+            [fixtures.messaging :refer [send-runtime-message]]
+            [fixtures.events :refer [wait-for-event clear-test-events! assert-no-errors!]]
             [ext-dep-helpers :refer [ext-dep-url ext-dep-lib-code
-                                         gist-raw-url pez-test-lib-code
-                                         code-with-manifest save-script-via-panel
-                                         enable-script-via-popup set-ext-dep-cache!
-                                         make-ext-dep-cache poll-for-window-property!]]))
+                                     gist-raw-url pez-test-lib-code
+                                     code-with-manifest save-script-via-panel
+                                     enable-script-via-popup set-ext-dep-cache!
+                                     make-ext-dep-cache poll-for-window-property!]]))
 
 (defn- ^:async get-event-summary [popup]
   (let [response (js-await (send-runtime-message popup "e2e/get-test-events" nil))

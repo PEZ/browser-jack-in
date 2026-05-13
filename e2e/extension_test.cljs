@@ -6,9 +6,10 @@
    - Test infrastructure (dev log button)
    - Error checking during normal operation"
   (:require ["@playwright/test" :refer [test expect]]
-            [fixtures :refer [launch-browser get-extension-id create-popup-page
-                              get-test-events wait-for-event wait-for-popup-ready
-                              assert-no-errors!]]))
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-popup-page]]
+            [fixtures.wait :refer [wait-for-popup-ready]]
+            [fixtures.events :refer [get-test-events wait-for-event assert-no-errors!]]))
 
 ;; =============================================================================
 ;; Extension Startup

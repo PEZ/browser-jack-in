@@ -1,8 +1,9 @@
 (ns e2e.web-installer.state-test
   "E2E tests for web installer state and idempotency."
   (:require ["@playwright/test" :refer [test expect]]
-            ["./../fixtures.mjs" :refer [launch-browser get-extension-id create-popup-page
-                                         assert-no-errors!]]
+            ["./../fixtures/browser.mjs" :refer [launch-browser get-extension-id]]
+            ["./../fixtures/pages.mjs" :refer [create-popup-page]]
+            ["./../fixtures/events.mjs" :refer [assert-no-errors!]]
             ["./helpers.mjs" :as h]))
 
 (defn- ^:async test_idempotency []

@@ -1,7 +1,8 @@
 (ns e2e.fs-write-rm-test
   "E2E tests for REPL file system rm! operations"
   (:require ["@playwright/test" :refer [test expect]]
-            [fixtures :refer [assert-no-errors! get-extension-id]]
+            [fixtures.browser :refer [get-extension-id]]
+            [fixtures.events :refer [assert-no-errors!]]
             [fs-write-helpers :refer [eval-in-browser eval-async-and-poll! setup-browser!]]))
 
 (def ^:private !context (atom nil))

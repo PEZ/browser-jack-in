@@ -6,9 +6,11 @@
   (:require ["@playwright/test" :refer [test expect chromium]]
             ["net" :as net]
             ["path" :as path]
-            [fixtures :refer [http-port nrepl-port-1 ws-port-1 nrepl-port-2 ws-port-2
-                              assert-no-errors! wait-for-connection-count
-                              get-extension-id send-runtime-message]]
+            [fixtures.constants :refer [http-port nrepl-port-1 ws-port-1 nrepl-port-2 ws-port-2]]
+            [fixtures.browser :refer [get-extension-id]]
+            [fixtures.messaging :refer [send-runtime-message]]
+            [fixtures.wait :refer [wait-for-connection-count]]
+            [fixtures.events :refer [assert-no-errors!]]
             [fs-write-helpers :refer [eval-in-browser sleep parse-nrepl-response
                                       wait-for-script-tag]]))
 

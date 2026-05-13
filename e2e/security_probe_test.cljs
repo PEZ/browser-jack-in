@@ -4,10 +4,12 @@
    and asserts the expected access control pattern across message types
    and sources."
   (:require ["@playwright/test" :refer [test expect]]
-            [fixtures :refer [launch-browser get-extension-id create-popup-page
-                              find-tab-id
-                              wait-for-popup-ready assert-no-errors!
-                              http-port]]))
+            [fixtures.constants :refer [http-port]]
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-popup-page]]
+            [fixtures.messaging :refer [find-tab-id]]
+            [fixtures.wait :refer [wait-for-popup-ready]]
+            [fixtures.events :refer [assert-no-errors!]]))
 
 (def ^:private test-page-url (str "http://localhost:" http-port "/basic.html"))
 (def ^:private probe-builtin-id "epupp-builtin-security-probe")

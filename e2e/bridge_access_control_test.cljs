@@ -3,9 +3,11 @@
    Verifies that unregistered message types and wrong-source messages
    are silently dropped by the bridge."
   (:require ["@playwright/test" :refer [test expect]]
-            [fixtures :as fixtures :refer [launch-browser get-extension-id create-popup-page
-                                           find-tab-id connect-tab wait-for-connection
-                                           assert-no-errors!]]))
+            [fixtures.constants :refer [ws-port-1]]
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-popup-page]]
+            [fixtures.messaging :refer [find-tab-id connect-tab wait-for-connection]]
+            [fixtures.events :refer [assert-no-errors!]]))
 
 (def ^:private test-page-url "http://localhost:18080/bridge-test.html")
 
@@ -30,7 +32,7 @@
                   (.toContainText "ready")))
     ;; Trigger bridge injection by connecting REPL
     (let [tab-id (js-await (find-tab-id popup (str test-page-url "*")))]
-      (js-await (connect-tab popup tab-id fixtures/ws-port-1))
+      (js-await (connect-tab popup tab-id ws-port-1))
       (js-await (wait-for-connection popup 5000)))
     ;; Wait for bridge-ready via DOM attribute (set by bridge-test.html inline script)
     (js-await (-> (expect (.locator page "html"))

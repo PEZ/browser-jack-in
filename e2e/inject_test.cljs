@@ -6,10 +6,11 @@
    2. Libraries are injected before userscript execution"
   (:require ["@playwright/test" :refer [test expect]]
             [clojure.string :as str]
-            [fixtures :refer [launch-browser get-extension-id create-popup-page
-                              create-panel-page wait-for-event
-                              get-test-events wait-for-save-status wait-for-popup-ready
-                              clear-test-events! assert-no-errors!]]))
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-popup-page create-panel-page]]
+            [fixtures.wait :refer [wait-for-save-status wait-for-popup-ready]]
+            [fixtures.events :refer [wait-for-event get-test-events
+                                     clear-test-events! assert-no-errors!]]))
 
 (defn code-with-manifest
   "Generate test code with epupp manifest metadata including inject."

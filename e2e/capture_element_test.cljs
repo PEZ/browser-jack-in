@@ -3,8 +3,10 @@
    Tests the full message flow: page postMessage -> content bridge -> background
    -> captureVisibleTab (+ optional crop) -> response back to page."
   (:require ["@playwright/test" :refer [test expect chromium]]
-            [fixtures :refer [extension-path get-extension-id http-port ws-port-1
-                              send-runtime-message assert-no-errors!]]))
+            [fixtures.constants :refer [extension-path http-port ws-port-1]]
+            [fixtures.browser :refer [get-extension-id]]
+            [fixtures.messaging :refer [send-runtime-message]]
+            [fixtures.events :refer [assert-no-errors!]]))
 
 (def !context (atom nil))
 (def !ext-page (atom nil))

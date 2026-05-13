@@ -2,10 +2,13 @@
   "E2E tests for DevTools panel save and rename functionality."
   (:require ["@playwright/test" :refer [test expect]]
             [clojure.string :as str]
-            [fixtures :refer [launch-browser get-extension-id create-panel-page
-                              clear-storage wait-for-panel-ready wait-for-popup-ready
-                              wait-for-save-status wait-for-script-count wait-for-edit-hint
-                              assert-no-errors!]]))
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-panel-page]]
+            [fixtures.messaging :refer [clear-storage]]
+            [fixtures.wait :refer [wait-for-panel-ready wait-for-popup-ready
+                                   wait-for-save-status wait-for-script-count
+                                   wait-for-edit-hint]]
+            [fixtures.events :refer [assert-no-errors!]]))
 
 (comment
   "Deprecated. Split into panel-save-create-test and panel-save-rename-test."

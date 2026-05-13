@@ -7,13 +7,12 @@
    3. Built-in epupp.ui is consumable via epupp://"
   (:require ["@playwright/test" :refer [test expect]]
             [clojure.string :as str]
-            [fixtures :refer [launch-browser get-extension-id create-popup-page
-                              create-panel-page
-                              wait-for-event
-                              get-test-events-via-message wait-for-save-status
-                              wait-for-popup-ready get-script-item
-                              wait-for-checkbox-state
-                              assert-no-errors! clear-test-events!]]))
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-popup-page create-panel-page]]
+            [fixtures.wait :refer [wait-for-save-status wait-for-popup-ready get-script-item
+                                   wait-for-checkbox-state]]
+            [fixtures.events :refer [wait-for-event get-test-events-via-message
+                                     assert-no-errors! clear-test-events!]]))
 
 ;; =============================================================================
 ;; Helpers

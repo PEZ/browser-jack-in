@@ -5,10 +5,12 @@
    - Auto-run scripts (with :script/match) default to disabled
    - Manual-only scripts (no match patterns) default to enabled"
   (:require ["@playwright/test" :refer [test expect]]
-            [fixtures :refer [launch-browser get-extension-id create-panel-page
-                              create-popup-page clear-storage wait-for-panel-ready
-                              wait-for-popup-ready wait-for-save-status
-                              assert-no-errors!]]
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-panel-page create-popup-page]]
+            [fixtures.messaging :refer [clear-storage]]
+            [fixtures.wait :refer [wait-for-panel-ready wait-for-popup-ready
+                                   wait-for-save-status]]
+            [fixtures.events :refer [assert-no-errors!]]
             [panel-save-helpers :as panel-save-helpers]))
 
 ;; =============================================================================

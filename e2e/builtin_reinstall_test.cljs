@@ -1,8 +1,10 @@
 (ns e2e.builtin-reinstall-test
   "E2E tests for built-in reinstall strategy."
   (:require ["@playwright/test" :refer [test expect]]
-            [fixtures :refer [launch-browser get-extension-id create-popup-page
-                              send-runtime-message assert-no-errors!]]))
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-popup-page]]
+            [fixtures.messaging :refer [send-runtime-message]]
+            [fixtures.events :refer [assert-no-errors!]]))
 
 (def ^:private builtin-id "epupp-builtin-web-userscript-installer")
 

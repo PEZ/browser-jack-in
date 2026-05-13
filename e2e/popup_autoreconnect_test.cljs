@@ -1,9 +1,12 @@
 (ns e2e.popup-autoreconnect-test
   "E2E tests for popup auto-reconnect REPL functionality."
   (:require ["@playwright/test" :refer [test expect]]
-            [fixtures :as fixtures :refer [launch-browser get-extension-id create-popup-page
-                                           wait-for-popup-ready
-                                           wait-for-connection ws-port-1 assert-no-errors!]]))
+            [fixtures.constants :refer [ws-port-1]]
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-popup-page]]
+            [fixtures.messaging :refer [wait-for-connection find-tab-id connect-tab get-connections send-runtime-message]]
+            [fixtures.wait :refer [wait-for-popup-ready]]
+            [fixtures.events :refer [assert-no-errors! wait-for-event get-test-events assert-no-new-event-within clear-test-events!]]))
 
 
 
@@ -36,11 +39,11 @@
         ;; Wait for initial SCITTLE_LOADED event
         (let [popup (js-await (create-popup-page context ext-id))
               _ (js/console.log "Waiting for initial SCITTLE_LOADED...")
-              event (js-await (fixtures/wait-for-event popup "SCITTLE_LOADED" 10000))]
+              event (js-await (wait-for-event popup "SCITTLE_LOADED" 10000))]
           (js/console.log "Initial SCITTLE_LOADED:" (js/JSON.stringify event))
 
           ;; Get current event count
-          (let [events-before (js-await (fixtures/get-test-events popup))
+          (let [events-before (js-await (get-test-events popup))
                 scittle-count-before (.-length (.filter events-before (fn [e] (= (.-event e) "SCITTLE_LOADED"))))]
             (js/console.log "SCITTLE_LOADED count before SPA nav:" scittle-count-before)
 
@@ -59,7 +62,7 @@
 
             ;; Assert no NEW SCITTLE_LOADED event occurs (rapid-poll for 200ms)
             ;; Using scittle-count-before as the baseline
-            (js-await (fixtures/assert-no-new-event-within popup "SCITTLE_LOADED" scittle-count-before 200))
+            (js-await (assert-no-new-event-within popup "SCITTLE_LOADED" scittle-count-before 200))
             (js/console.log "Verified: No new SCITTLE_LOADED after SPA navigation"))
 
           (js-await (assert-no-errors! popup))
@@ -101,21 +104,21 @@
 
         ;; Manually connect REPL to this tab
         (let [popup (js-await (create-popup-page context ext-id))]
-          (let [tab-id (js-await (fixtures/find-tab-id popup "http://localhost:18080/*"))]
+          (let [tab-id (js-await (find-tab-id popup "http://localhost:18080/*"))]
             (js/console.log "Connecting to tab" tab-id "on port" ws-port-1)
-            (js-await (fixtures/connect-tab popup tab-id ws-port-1))
+            (js-await (connect-tab popup tab-id ws-port-1))
 
             ;; Wait for connection to establish and Scittle to load
-            (js-await (fixtures/wait-for-event popup "SCITTLE_LOADED" 10000))
+            (js-await (wait-for-event popup "SCITTLE_LOADED" 10000))
             (js/console.log "REPL connected and Scittle loaded")
 
             ;; Verify connection exists
-            (let [connections (js-await (fixtures/get-connections popup))]
+            (let [connections (js-await (get-connections popup))]
               (js-await (-> (expect (.-length connections)) (.toBe 1)))
               (js/console.log "Connection verified:" (.-length connections) "active")))
 
           ;; Clear test events RIGHT BEFORE reload to get clean slate
-          (js-await (fixtures/clear-test-events! popup))
+          (js-await (clear-test-events! popup))
           (js/console.log "Cleared test events before reload")
           (js-await (.close popup)))
 
@@ -130,7 +133,7 @@
         ;; This is the key assertion: after reload, auto-reconnect should load Scittle again
         (let [popup2 (js-await (create-popup-page context ext-id))
               _ (js/console.log "Waiting for SCITTLE_LOADED event from auto-reconnect...")
-              event (js-await (fixtures/wait-for-event popup2 "SCITTLE_LOADED" 10000))]
+              event (js-await (wait-for-event popup2 "SCITTLE_LOADED" 10000))]
           (js/console.log "Auto-reconnect triggered! SCITTLE_LOADED event:" (js/JSON.stringify event))
           ;; The presence of SCITTLE_LOADED event after clearing events proves auto-reconnect worked
           (js-await (-> (expect (.-event event)) (.toBe "SCITTLE_LOADED")))
@@ -169,7 +172,7 @@
 
         ;; Get initial SCITTLE_LOADED count
         (let [popup (js-await (create-popup-page context ext-id))
-              events-before (js-await (fixtures/get-test-events popup))
+              events-before (js-await (get-test-events popup))
               scittle-count-before (.-length (.filter events-before (fn [e] (= (.-event e) "SCITTLE_LOADED"))))]
           (js/console.log "SCITTLE_LOADED count before reload (should be 0):" scittle-count-before)
           (js-await (.close popup))
@@ -184,7 +187,7 @@
           ;; Assert no NEW SCITTLE_LOADED event occurs (rapid-poll for 200ms)
           ;; scittle-count-before is 0 for never-connected tab
           (let [popup2 (js-await (create-popup-page context ext-id))]
-            (js-await (fixtures/assert-no-new-event-within popup2 "SCITTLE_LOADED" scittle-count-before 200))
+            (js-await (assert-no-new-event-within popup2 "SCITTLE_LOADED" scittle-count-before 200))
             (js/console.log "SCITTLE_LOADED count after reload (should still be 0):" scittle-count-before)
             (js-await (assert-no-errors! popup2))
             (js-await (.close popup2))))
@@ -226,16 +229,16 @@
 
         ;; Manually connect REPL to this tab
         (let [popup (js-await (create-popup-page context ext-id))]
-          (let [tab-id (js-await (fixtures/find-tab-id popup "http://localhost:18080/*"))]
+          (let [tab-id (js-await (find-tab-id popup "http://localhost:18080/*"))]
             (js/console.log "Connecting to tab" tab-id "on port" ws-port-1)
-            (js-await (fixtures/connect-tab popup tab-id ws-port-1))
+            (js-await (connect-tab popup tab-id ws-port-1))
             (js-await (wait-for-connection popup 5000))
             (js/console.log "REPL connected"))
           (js-await (.close popup)))
 
         ;; Get SCITTLE_LOADED count before reload
         (let [popup (js-await (create-popup-page context ext-id))
-              events-before (js-await (fixtures/get-test-events popup))
+              events-before (js-await (get-test-events popup))
               scittle-count-before (.-length (.filter events-before (fn [e] (= (.-event e) "SCITTLE_LOADED"))))]
           (js/console.log "SCITTLE_LOADED count before reload:" scittle-count-before)
           (js-await (.close popup))
@@ -249,7 +252,7 @@
 
           ;; Assert no NEW SCITTLE_LOADED event occurs (rapid-poll for 200ms)
           (let [popup2 (js-await (create-popup-page context ext-id))]
-            (js-await (fixtures/assert-no-new-event-within popup2 "SCITTLE_LOADED" scittle-count-before 200))
+            (js-await (assert-no-new-event-within popup2 "SCITTLE_LOADED" scittle-count-before 200))
             (js/console.log "SCITTLE_LOADED count after reload:" scittle-count-before)
             (js-await (assert-no-errors! popup2))
             (js-await (.close popup2))))
@@ -268,7 +271,7 @@
 (defn- ^:async get-scittle-loaded-count
   "Returns the current count of SCITTLE_LOADED test events."
   [popup]
-  (let [events (js-await (fixtures/get-test-events popup))]
+  (let [events (js-await (get-test-events popup))]
     (.-length (.filter events (fn [e] (= (.-event e) "SCITTLE_LOADED"))))))
 
 (defn- throw-on-disconnect-timeout! [start]
@@ -278,10 +281,10 @@
 (defn- ^:async wait-for-disconnect!
   "Sends a disconnect-tab message and polls until connections reach zero."
   [popup tab-id]
-  (js-await (fixtures/send-runtime-message popup "disconnect-tab" #js {:tabId tab-id}))
+  (js-await (send-runtime-message popup "disconnect-tab" #js {:tabId tab-id}))
   (let [start (.now js/Date)]
     (loop []
-      (let [conns (js-await (fixtures/get-connections popup))]
+      (let [conns (js-await (get-connections popup))]
         (when-not (zero? (.-length conns))
           (throw-on-disconnect-timeout! start)
           (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 20))))
@@ -294,8 +297,8 @@
   (js-await (-> (expect (.locator page "#test-marker"))
                 (.toContainText "ready")))
   (let [popup (js-await (create-popup-page context ext-id))]
-    (js-await (fixtures/assert-no-new-event-within popup "SCITTLE_LOADED" scittle-count-before 300))
-    (let [connections (js-await (fixtures/get-connections popup))]
+    (js-await (assert-no-new-event-within popup "SCITTLE_LOADED" scittle-count-before 300))
+    (let [connections (js-await (get-connections popup))]
       (js-await (-> (expect (.-length connections)) (.toBe 0))))
     (js-await (assert-no-errors! popup))
     (js-await (.close popup))))
@@ -322,8 +325,8 @@
         (js-await (-> (expect (.locator page "#test-marker"))
                       (.toContainText "ready")))
         (let [popup (js-await (create-popup-page context ext-id))
-              tab-id (js-await (fixtures/find-tab-id popup "http://localhost:18080/*"))]
-          (js-await (fixtures/connect-tab popup tab-id ws-port-1))
+              tab-id (js-await (find-tab-id popup "http://localhost:18080/*"))]
+          (js-await (connect-tab popup tab-id ws-port-1))
           (js-await (wait-for-connection popup 5000))
           (js/console.log "Connected to tab" tab-id)
           (js-await (wait-for-disconnect! popup tab-id))
@@ -371,8 +374,8 @@
         (js-await (-> (expect (.locator page "#test-marker"))
                       (.toContainText "ready")))
         (let [popup (js-await (create-popup-page context ext-id))
-              tab-id (js-await (fixtures/find-tab-id popup "http://localhost:18080/*"))]
-          (js-await (fixtures/connect-tab popup tab-id ws-port-1))
+              tab-id (js-await (find-tab-id popup "http://localhost:18080/*"))]
+          (js-await (connect-tab popup tab-id ws-port-1))
           (js-await (wait-for-connection popup 5000))
           (js/console.log "Connected to tab" tab-id)
           (js-await (wait-for-disconnect! popup tab-id))

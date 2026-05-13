@@ -1,9 +1,11 @@
 (ns e2e.popup-icon-test
   "E2E tests for popup toolbar icon state."
   (:require ["@playwright/test" :refer [test expect]]
-            [fixtures :as fixtures :refer [launch-browser get-extension-id create-popup-page
-                                           wait-for-popup-ready activate-tab update-icon
-                                           assert-no-errors!]]))
+            [fixtures.browser :refer [launch-browser get-extension-id]]
+            [fixtures.pages :refer [create-popup-page]]
+            [fixtures.wait :refer [wait-for-popup-ready]]
+            [fixtures.messaging :refer [activate-tab update-icon get-icon-display-state find-tab-id connect-tab wait-for-connection]]
+            [fixtures.events :refer [assert-no-errors!]]))
 
 
 
@@ -13,7 +15,7 @@
 
 (defn- ^:async fetch-icon-state [popup tab-id]
   (try
-    (js-await (fixtures/get-icon-display-state popup tab-id))
+    (js-await (get-icon-display-state popup tab-id))
     (catch :default _e nil)))
 
 (defn- ^:async wait-for-icon-state
@@ -53,7 +55,7 @@
         ;; Check initial icon state - should be "disconnected"
         (let [popup (js-await (create-popup-page context ext-id))
               _ (js-await (wait-for-popup-ready popup))
-              tab-id (js-await (fixtures/find-tab-id popup "http://localhost:18080/basic.html"))
+              tab-id (js-await (find-tab-id popup "http://localhost:18080/basic.html"))
               _ (js-await (activate-tab popup tab-id))
               _ (js-await (update-icon popup tab-id))
               state (js-await (wait-for-icon-state popup tab-id #js ["disconnected"] 5000))]
@@ -64,14 +66,14 @@
 
         ;; Connect to the tab
         (let [popup (js-await (create-popup-page context ext-id))
-              tab-id (js-await (fixtures/find-tab-id popup "http://localhost:18080/basic.html"))]
-          (js-await (fixtures/connect-tab popup tab-id ws-port-1))
-          (js-await (fixtures/wait-for-connection popup 5000))
+              tab-id (js-await (find-tab-id popup "http://localhost:18080/basic.html"))]
+          (js-await (connect-tab popup tab-id ws-port-1))
+          (js-await (wait-for-connection popup 5000))
           (js-await (.close popup)))
 
         ;; Check icon state after connection - should be "connected"
         (let [popup (js-await (create-popup-page context ext-id))
-              tab-id (js-await (fixtures/find-tab-id popup "http://localhost:18080/basic.html"))
+              tab-id (js-await (find-tab-id popup "http://localhost:18080/basic.html"))
               _ (js-await (activate-tab popup tab-id))
               _ (js-await (update-icon popup tab-id))
               state (js-await (wait-for-icon-state popup tab-id #js ["connected"] 5000))]
@@ -99,14 +101,14 @@
                       (.toContainText "ready")))
 
         (let [popup (js-await (create-popup-page context ext-id))
-              tab-a-id (js-await (fixtures/find-tab-id popup "http://localhost:18080/basic.html"))]
-          (js-await (fixtures/connect-tab popup tab-a-id ws-port-1))
-          (js-await (fixtures/wait-for-connection popup 5000))
+              tab-a-id (js-await (find-tab-id popup "http://localhost:18080/basic.html"))]
+          (js-await (connect-tab popup tab-a-id ws-port-1))
+          (js-await (wait-for-connection popup 5000))
           (js-await (.close popup)))
 
         ;; Verify Tab A shows connected
         (let [popup (js-await (create-popup-page context ext-id))
-              tab-a-id (js-await (fixtures/find-tab-id popup "http://localhost:18080/basic.html"))
+              tab-a-id (js-await (find-tab-id popup "http://localhost:18080/basic.html"))
               _ (js-await (activate-tab popup tab-a-id))
               _ (js-await (update-icon popup tab-a-id))
               state (js-await (wait-for-icon-state popup tab-a-id #js ["connected"] 5000))]
@@ -122,7 +124,7 @@
 
           ;; Switch to Tab B - icon should show DISCONNECTED (Tab B has no connection)
           (let [popup (js-await (create-popup-page context ext-id))
-                tab-b-id (js-await (fixtures/find-tab-id popup "http://localhost:18080/spa-test.html"))
+                tab-b-id (js-await (find-tab-id popup "http://localhost:18080/spa-test.html"))
                 _ (js-await (activate-tab popup tab-b-id))
                 _ (js-await (update-icon popup tab-b-id))
                 state (js-await (wait-for-icon-state popup tab-b-id #js ["disconnected"] 2000))]
@@ -132,7 +134,7 @@
 
           ;; Switch back to Tab A - should show connected again
           (let [popup (js-await (create-popup-page context ext-id))
-                tab-a-id (js-await (fixtures/find-tab-id popup "http://localhost:18080/basic.html"))
+                tab-a-id (js-await (find-tab-id popup "http://localhost:18080/basic.html"))
                 _ (js-await (activate-tab popup tab-a-id))
                 _ (js-await (update-icon popup tab-a-id))
                 state (js-await (wait-for-icon-state popup tab-a-id #js ["connected"] 5000))]
