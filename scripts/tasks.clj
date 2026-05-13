@@ -169,6 +169,49 @@
     (println (str "  Bumped dev version: " current " -> " new-version))
     new-version))
 
+(def ^:private build-copy-files
+  ["popup.html" "popup.js" "design-tokens.css" "components.css" "base.css" "popup.css"
+   "content-bridge.js" "userscript-loader.js" "trigger-scittle.js"
+   "disable-scittle-auto-eval.js" "ws-bridge.js" "background.js"
+   "devtools.html" "devtools.js" "panel.html" "panel.js" "panel.css"])
+
+(defn- build-for-browser! [browser build-dir dist-dir]
+  (println (str "Building for " browser "..."))
+  (let [browser-dir (str dist-dir "/" browser)]
+    ;; Clean and copy extension directory
+    (when (fs/exists? browser-dir)
+      (fs/delete-tree browser-dir))
+    (fs/copy-tree "extension" browser-dir)
+
+    ;; Remove macOS metadata files
+    (doseq [pattern [".DS_Store" "**/.DS_Store"]
+            ds-store (fs/glob browser-dir pattern)]
+      (fs/delete ds-store))
+
+    ;; Copy bundled files over the intermediate ones
+    (doseq [f build-copy-files]
+      (fs/copy (str build-dir "/" f) (str browser-dir "/" f) {:replace-existing true}))
+
+    ;; Copy userscripts directory (raw source)
+    (fs/copy-tree (str build-dir "/userscripts") (str browser-dir "/userscripts")
+                  {:replace-existing true})
+
+    ;; Remove intermediate .mjs files (keep only bundled .js)
+    (doseq [mjs-file (fs/glob browser-dir "*.mjs")]
+      (fs/delete mjs-file))
+
+    ;; Adjust manifest
+    (let [manifest-path (str browser-dir "/manifest.json")
+          manifest (json/read-str (slurp manifest-path) :key-fn keyword)
+          adjusted (adjust-manifest manifest browser)]
+      (spit manifest-path (json/write-str adjusted :indent true :escape-slash false)))
+
+    ;; Create zip
+    (let [zip-path (str dist-dir "/epupp-" browser ".zip")]
+      (fs/delete-if-exists zip-path)
+      (fs/zip zip-path browser-dir {:root browser-dir})
+      (println (str "  Created: " zip-path)))))
+
 (defn build
   "Build extension for specified browser(s).
    Supports browser names (chrome/firefox/safari) and mode flags:
@@ -187,7 +230,6 @@
                       (remove #(str/starts-with? % "--"))
                       seq)
         browsers (or browsers ["chrome" "firefox" "safari"])
-        extension-dir "extension"
         build-dir "build"
         dist-dir "dist"]
     ;; Bump version only in --dev mode (not --test)
@@ -199,72 +241,7 @@
     (compile-squint config-mode)
     (fs/create-dirs dist-dir)
     (doseq [browser browsers]
-      (println (str "Building for " browser "..."))
-      (let [browser-dir (str dist-dir "/" browser)]
-        ;; Clean and copy extension directory
-        (when (fs/exists? browser-dir)
-          (fs/delete-tree browser-dir))
-        (fs/copy-tree extension-dir browser-dir)
-
-        ;; Remove macOS metadata files
-        (doseq [pattern [".DS_Store" "**/.DS_Store"]
-                ds-store (fs/glob browser-dir pattern)]
-          (fs/delete ds-store))
-
-        ;; Copy bundled files over the intermediate ones
-        (fs/copy (str build-dir "/popup.html") (str browser-dir "/popup.html")
-                 {:replace-existing true})
-        (fs/copy (str build-dir "/popup.js") (str browser-dir "/popup.js")
-                 {:replace-existing true})
-        (fs/copy (str build-dir "/design-tokens.css") (str browser-dir "/design-tokens.css")
-                 {:replace-existing true})
-        (fs/copy (str build-dir "/components.css") (str browser-dir "/components.css")
-                 {:replace-existing true})
-        (fs/copy (str build-dir "/base.css") (str browser-dir "/base.css")
-                 {:replace-existing true})
-        (fs/copy (str build-dir "/popup.css") (str browser-dir "/popup.css")
-                 {:replace-existing true})
-        (fs/copy (str build-dir "/content-bridge.js") (str browser-dir "/content-bridge.js")
-                 {:replace-existing true})
-        ;; Copy userscripts directory (raw source)
-        (fs/copy-tree (str build-dir "/userscripts") (str browser-dir "/userscripts")
-                      {:replace-existing true})
-        ;; Copy early injection loaders (content scripts for document-start/document-end)
-        (fs/copy (str build-dir "/userscript-loader.js") (str browser-dir "/userscript-loader.js")
-                 {:replace-existing true})
-        (fs/copy (str build-dir "/trigger-scittle.js") (str browser-dir "/trigger-scittle.js")
-                 {:replace-existing true})
-        (fs/copy (str build-dir "/disable-scittle-auto-eval.js") (str browser-dir "/disable-scittle-auto-eval.js")
-                 {:replace-existing true})
-        (fs/copy (str build-dir "/ws-bridge.js") (str browser-dir "/ws-bridge.js")
-                 {:replace-existing true})
-        (fs/copy (str build-dir "/background.js") (str browser-dir "/background.js")
-                 {:replace-existing true})
-        (fs/copy (str build-dir "/devtools.html") (str browser-dir "/devtools.html")
-                 {:replace-existing true})
-        (fs/copy (str build-dir "/devtools.js") (str browser-dir "/devtools.js")
-                 {:replace-existing true})
-        (fs/copy (str build-dir "/panel.html") (str browser-dir "/panel.html")
-                 {:replace-existing true})
-        (fs/copy (str build-dir "/panel.js") (str browser-dir "/panel.js")
-                 {:replace-existing true})
-        (fs/copy (str build-dir "/panel.css") (str browser-dir "/panel.css")
-                 {:replace-existing true})
-        ;; Remove intermediate .mjs files (keep only bundled .js)
-        (doseq [mjs-file (fs/glob browser-dir "*.mjs")]
-          (fs/delete mjs-file))
-
-        ;; Adjust manifest
-        (let [manifest-path (str browser-dir "/manifest.json")
-              manifest (json/read-str (slurp manifest-path) :key-fn keyword)
-              adjusted (adjust-manifest manifest browser)]
-          (spit manifest-path (json/write-str adjusted :indent true :escape-slash false)))
-
-        ;; Create zip
-        (let [zip-path (str dist-dir "/epupp-" browser ".zip")]
-          (fs/delete-if-exists zip-path)
-          (fs/zip zip-path browser-dir {:root browser-dir})
-          (println (str "  Created: " zip-path)))))
+      (build-for-browser! browser build-dir dist-dir))
     (println "Build complete!")))
 
 ;; ============================================================
@@ -340,6 +317,57 @@
   (flush)
   (= "y" (str/lower-case (str/trim (read-line)))))
 
+(defn- print-publish-checks [{:keys [clean? on-master? branch has-content? has-unreleased?
+                                     current-dev-version new-version dev-version
+                                     issue-numbers unreleased-content]}]
+  (println (str (if clean? "✅" "❌") " Git working directory is clean"))
+  (when-not clean?
+    (println "   Run 'git status' to see uncommitted changes"))
+  (println (str (if on-master? "✅" "❌") " On master branch (current: " branch ")"))
+  (println (str (if has-content? "✅" "❌") " Changelog has Unreleased content"))
+  (when (and has-unreleased? (not has-content?))
+    (println "   The [Unreleased] section is empty"))
+  (println)
+  (println "📋 Release details:")
+  (println (str "   Current dev version: " current-dev-version))
+  (println (str "   Release version: " new-version))
+  (println (str "   Next dev version: " dev-version))
+  (when (seq issue-numbers)
+    (println (str "   Fixes issues: " (str/join ", " (map #(str "#" %) issue-numbers)))))
+  (when has-content?
+    (println)
+    (println "📝 Unreleased changes:")
+    (doseq [line (str/split-lines unreleased-content)]
+      (println (str "   " line))))
+  (println))
+
+(defn- execute-release! [new-version dev-version unreleased-content issue-numbers]
+  (println)
+  (println "📦 Updating manifest.json to release version...")
+  (update-manifest-version! new-version)
+  (println "📝 Updating CHANGELOG.md...")
+  (update-changelog! new-version unreleased-content)
+  (println "💾 Committing release...")
+  (p/shell "git add extension/manifest.json CHANGELOG.md")
+  (let [commit-msg (str "Release v" new-version
+                        (when (seq issue-numbers)
+                          (str "\n\n"
+                               (str/join "\n" (map #(str "* Fixes #" %) issue-numbers)))))]
+    (p/shell {:continue true} "git" "commit" "-m" commit-msg))
+  (println (str "🏷️  Creating tag v" new-version "..."))
+  (p/shell "git" "tag" (str "v" new-version))
+  (println "📦 Bumping to next dev version...")
+  (update-manifest-version! dev-version)
+  (p/shell "git add extension/manifest.json")
+  (p/shell {:continue true} "git" "commit" "-m" (str "Bump to dev version " dev-version))
+  (println "🚀 Pushing to origin...")
+  (p/shell "git push origin master")
+  (p/shell "git" "push" "origin" (str "v" new-version))
+  (println)
+  (println (str "✅ Released v" new-version "!"))
+  (println (str "   Now on dev version " dev-version))
+  (println "   GitHub Actions will now build and create the release."))
+
 (defn publish
   "Publish a new version: update changelog, bump version, commit, tag, and push"
   []
@@ -357,32 +385,16 @@
         issue-numbers (extract-issue-numbers unreleased-content)
         all-ok? (and clean? on-master? has-content?)]
 
-    ;; Display check results
-    (println (str (if clean? "✅" "❌") " Git working directory is clean"))
-    (when-not clean?
-      (println "   Run 'git status' to see uncommitted changes"))
-
-    (println (str (if on-master? "✅" "❌") " On master branch (current: " branch ")"))
-
-    (println (str (if has-content? "✅" "❌") " Changelog has Unreleased content"))
-    (when (and has-unreleased? (not has-content?))
-      (println "   The [Unreleased] section is empty"))
-
-    (println)
-    (println "📋 Release details:")
-    (println (str "   Current dev version: " current-dev-version))
-    (println (str "   Release version: " new-version))
-    (println (str "   Next dev version: " dev-version))
-    (when (seq issue-numbers)
-      (println (str "   Fixes issues: " (str/join ", " (map #(str "#" %) issue-numbers)))))
-
-    (when has-content?
-      (println)
-      (println "📝 Unreleased changes:")
-      (doseq [line (str/split-lines unreleased-content)]
-        (println (str "   " line))))
-
-    (println)
+    (print-publish-checks {:clean? clean?
+                           :on-master? on-master?
+                           :branch branch
+                           :has-content? has-content?
+                           :has-unreleased? has-unreleased?
+                           :current-dev-version current-dev-version
+                           :new-version new-version
+                           :dev-version dev-version
+                           :issue-numbers issue-numbers
+                           :unreleased-content unreleased-content})
 
     (if-not all-ok?
       (do
@@ -390,34 +402,4 @@
         (System/exit 1))
 
       (when (confirm "Proceed with release?")
-        (println)
-        (println "📦 Updating manifest.json to release version...")
-        (update-manifest-version! new-version)
-
-        (println "📝 Updating CHANGELOG.md...")
-        (update-changelog! new-version unreleased-content)
-
-        (println "💾 Committing release...")
-        (p/shell "git add extension/manifest.json CHANGELOG.md")
-        (let [commit-msg (str "Release v" new-version
-                              (when (seq issue-numbers)
-                                (str "\n\n"
-                                     (str/join "\n" (map #(str "* Fixes #" %) issue-numbers)))))]
-          (p/shell {:continue true} "git" "commit" "-m" commit-msg))
-
-        (println (str "🏷️  Creating tag v" new-version "..."))
-        (p/shell "git" "tag" (str "v" new-version))
-
-        (println "📦 Bumping to next dev version...")
-        (update-manifest-version! dev-version)
-        (p/shell "git add extension/manifest.json")
-        (p/shell {:continue true} "git" "commit" "-m" (str "Bump to dev version " dev-version))
-
-        (println "🚀 Pushing to origin...")
-        (p/shell "git push origin master")
-        (p/shell "git" "push" "origin" (str "v" new-version))
-
-        (println)
-        (println (str "✅ Released v" new-version "!"))
-        (println (str "   Now on dev version " dev-version))
-        (println "   GitHub Actions will now build and create the release.")))))
+        (execute-release! new-version dev-version unreleased-content issue-numbers)))))

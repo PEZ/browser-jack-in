@@ -45,19 +45,17 @@
 (defn- wait-for-port
   "Wait for a port to become available, with timeout."
   [port timeout-ms]
-  (let [start (System/currentTimeMillis)
-        deadline (+ start timeout-ms)]
+  (let [deadline (+ (System/currentTimeMillis) timeout-ms)]
     (loop []
-      (if (> (System/currentTimeMillis) deadline)
-        false
-        (if (try
-              (with-open [_ (java.net.Socket. "localhost" port)]
-                true)
-              (catch Exception _ false))
-          true
-          (do
-            (Thread/sleep 100)
-            (recur)))))))
+      (let [timed-out? (> (System/currentTimeMillis) deadline)
+            socket-open? (try
+                           (with-open [_ (java.net.Socket. "localhost" port)]
+                             true)
+                           (catch Exception _ false))]
+        (cond
+          timed-out? false
+          socket-open? true
+          :else (do (Thread/sleep 100) (recur)))))))
 
 (defn with-test-server
   "Execute f with an HTTP test server running on port 18080.
@@ -341,6 +339,15 @@
           (println err)))
       (System/exit 1))))
 
+(defn- delete-if-exists! [path]
+  (when (fs/exists? path) (fs/delete path)))
+
+(defn- delete-tree-if-exists! [path]
+  (when (fs/exists? path) (fs/delete-tree path)))
+
+(defn- move-if-exists! [src dst]
+  (when (fs/exists? src) (fs/move src dst)))
+
 (defn- rotate-e2e-artifacts!
   "Rotate E2E output artifacts into .tmp/e2e-history/ before a new run.
    Shifts existing backups (1 -> 2, 2 -> 3, etc.) and moves current
@@ -354,18 +361,14 @@
     (when (or has-output? has-shards?)
       (fs/create-dirs e2e-history-dir)
       ;; Delete oldest slot if at capacity
-      (let [oldest-output (str e2e-history-dir "/e2e-output-" history-count ".txt")
-            oldest-shards (str e2e-history-dir "/e2e-shards-" history-count)]
-        (when (fs/exists? oldest-output) (fs/delete oldest-output))
-        (when (fs/exists? oldest-shards) (fs/delete-tree oldest-shards)))
+      (delete-if-exists! (str e2e-history-dir "/e2e-output-" history-count ".txt"))
+      (delete-tree-if-exists! (str e2e-history-dir "/e2e-shards-" history-count))
       ;; Shift existing backups: N-1 -> N, ..., 2 -> 3, 1 -> 2
       (doseq [i (range history-count 1 -1)]
-        (let [src-output (str e2e-history-dir "/e2e-output-" (dec i) ".txt")
-              dst-output (str e2e-history-dir "/e2e-output-" i ".txt")
-              src-shards (str e2e-history-dir "/e2e-shards-" (dec i))
-              dst-shards (str e2e-history-dir "/e2e-shards-" i)]
-          (when (fs/exists? src-output) (fs/move src-output dst-output))
-          (when (fs/exists? src-shards) (fs/move src-shards dst-shards))))
+        (move-if-exists! (str e2e-history-dir "/e2e-output-" (dec i) ".txt")
+                         (str e2e-history-dir "/e2e-output-" i ".txt"))
+        (move-if-exists! (str e2e-history-dir "/e2e-shards-" (dec i))
+                         (str e2e-history-dir "/e2e-shards-" i)))
       ;; Move current artifacts into slot 1
       (when has-output?
         (fs/move output-file (str e2e-history-dir "/e2e-output-1.txt")))
@@ -383,6 +386,26 @@
   (let [result (apply p/shell {:continue true} "docker" "run" "--rm" "epupp-e2e" extra-args)]
     (:exit result)))
 
+(defn- finalize-shard! [{:keys [idx process writer done? exit-code]} start-time n-shards]
+  (let [proc (:proc process)]
+    (when-not (.isAlive proc)
+      (let [exit (.exitValue proc)
+            elapsed-s (/ (- (System/currentTimeMillis) start-time) 1000.0)]
+        (.close writer)
+        (reset! exit-code exit)
+        (reset! done? true)
+        (println (format "  Shard %d/%d finished at %.1fs (exit %d)"
+                         (inc idx) n-shards elapsed-s exit))))))
+
+(defn- wait-for-shards-completion! [shards start-time n-shards]
+  (loop []
+    (let [still-running (filter #(not @(:done? %)) shards)]
+      (when (seq still-running)
+        (doseq [shard still-running]
+          (finalize-shard! shard start-time n-shards))
+        (Thread/sleep 100)
+        (recur)))))
+
 (defn- run-e2e-parallel!
   "Run E2E tests in parallel Docker containers using Playwright's native sharding."
   [n-shards extra-args {:keys [build?] :or {build? true}}]
@@ -398,7 +421,6 @@
   (let [shard-dir (str e2e-tmp-dir "/e2e-shards")
         _ (do (fs/delete-tree shard-dir) (fs/create-dirs shard-dir))
         start-time (System/currentTimeMillis)
-
         shards (doall
                 (for [idx (range n-shards)]
                   (let [log-file (str shard-dir "/shard-" idx ".log")
@@ -409,26 +431,7 @@
                      :log-file log-file
                      :done? (atom false)
                      :exit-code (atom nil)})))
-
-        ;; Poll for completion - report as they finish
-        _ (loop []
-            (let [still-running (filter #(not @(:done? %)) shards)]
-              (when (seq still-running)
-                (doseq [{:keys [idx process writer done? exit-code]} still-running]
-                  (let [proc (:proc process)
-                        alive? (.isAlive proc)]
-                    (when-not alive?
-                      (let [exit (.exitValue proc)
-                            elapsed-s (/ (- (System/currentTimeMillis) start-time) 1000.0)]
-                        ;; Close writer to flush output before we read the log
-                        (.close writer)
-                        (reset! exit-code exit)
-                        (reset! done? true)
-                        (println (format "  Shard %d/%d finished at %.1fs (exit %d)"
-                                         (inc idx) n-shards elapsed-s exit))))))
-                (Thread/sleep 100)
-                (recur))))
-
+        _ (wait-for-shards-completion! shards start-time n-shards)
         results (map (fn [{:keys [idx exit-code log-file]}]
                        {:idx idx :exit @exit-code :log-file log-file})
                      shards)
@@ -495,24 +498,7 @@
   "Run E2E tests in Docker with JSON reporter and print timing report.
    Sorted fastest-first so you can tail for slowest tests."
   [_args]
-  ;; Build phase with spinner (output suppressed unless failure)
-  (try
-    (with-spinner "Building tests and Docker image..."
-      (fn []
-        (run-build-step! "bb build:test")
-        (run-build-step! "bb test:e2e:compile")
-        (run-build-step! "docker build --platform linux/arm64 -f Dockerfile.e2e -t epupp-e2e .")))
-    (catch clojure.lang.ExceptionInfo e
-      (println "\n\n❌ Build failed!")
-      (let [{:keys [cmd out err]} (ex-data e)]
-        (println (str "Command: " cmd))
-        (when (seq out)
-          (println "stdout:")
-          (println out))
-        (when (seq err)
-          (println "stderr:")
-          (println err)))
-      (System/exit 1)))
+  (build-e2e!)
   ;; Run tests with spinner (output captured for JSON parsing)
   (let [result (atom nil)]
     (with-spinner "Running E2E tests (collecting timing data)..."
