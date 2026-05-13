@@ -319,7 +319,7 @@
            (> (- (.now js/Date) start) timeout-ms) (throw (js/Error. "Timeout in poll-until"))
            :else (do
                    (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve poll-interval))))
-                   (recur)))))))))
+                   (recur))))))))
 
 (defn ^:async get-test-events-via-message
   "Read test events from storage via background worker message.

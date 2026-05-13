@@ -95,7 +95,7 @@
           (> (- (.now js/Date) start) (or timeout-ms 3000)) (throw (js/Error. (str "Timeout waiting for built-in script: " script-id)))
           :else (do
                   (js-await (sleep poll-interval))
-                  (recur))))))
+                  (recur)))))))
 
 (defn ^:async ensure-builtin-script!
   "Ensure the built-in web userscript installer exists in storage via background message."
