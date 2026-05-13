@@ -65,6 +65,15 @@
 ;; Probe single message
 ;; ============================================================
 
+(defn- build-probe-msg
+  "Build and post a probe message to the window."
+  [source msg-type req-id]
+  (let [base (payload-for msg-type)]
+    (set! (.-source base) source)
+    (set! (.-type base) msg-type)
+    (set! (.-requestId base) req-id)
+    (.postMessage js/window base "*")))
+
 (defn- probe-message
   "Send a single probe message and return a promise resolving to
    {:status ...} where status is 'responded', 'dropped', or 'no-response'."
@@ -95,22 +104,10 @@
                       (.removeEventListener js/window "message" handler)
                       (resolve {:status "dropped"}))
                     timeout-ms))
-           (.postMessage js/window
-                         (let [base (payload-for msg-type)]
-                           (set! (.-source base) source)
-                           (set! (.-type base) msg-type)
-                           (set! (.-requestId base) req-id)
-                           base)
-                         "*"))
+           (build-probe-msg source msg-type req-id))
          ;; Fire-and-forget: no response type to listen for
          (do
-           (.postMessage js/window
-                         (let [base (payload-for msg-type)]
-                           (set! (.-source base) source)
-                           (set! (.-type base) msg-type)
-                           (set! (.-requestId base) req-id)
-                           base)
-                         "*")
+           (build-probe-msg source msg-type req-id)
            (reset! timeout-id
                    (js/setTimeout
                     (fn []

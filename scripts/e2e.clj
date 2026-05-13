@@ -5,7 +5,8 @@
             [babashka.process :as p]
             [clojure.data.json :as json]
             [clojure.java.io :as io]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [e2e-reporting :as reporting]))
 
 
 ;; ============================================================
@@ -117,70 +118,6 @@
            (System/exit (:exit result)))))))
 
 ;; ============================================================
-;; E2E Timing Report
-;; ============================================================
-
-(defn- extract-specs-from-suite
-  "Recursively extract specs from a suite and its nested suites.
-   Returns seq of {:name string :duration-ms int :file string}"
-  [suite file]
-  (let [file (or (:file suite) file)
-        ;; Extract specs at this level
-        direct-specs (for [spec (:specs suite)
-                           test (:tests spec)
-                           result (:results test)]
-                       {:name (:title spec)
-                        :file (or (:file spec) file)
-                        :duration-ms (:duration result)})
-        ;; Recursively extract from nested suites
-        nested-specs (mapcat #(extract-specs-from-suite % file)
-                             (:suites suite))]
-    (concat direct-specs nested-specs)))
-
-(defn- extract-test-timings
-  "Extract test name and duration from Playwright JSON report structure.
-   Handles nested suites created by .describe blocks.
-   Returns seq of {:name string :duration-ms int :file string}"
-  [json-data]
-  (mapcat #(extract-specs-from-suite % nil) (:suites json-data)))
-
-(defn- format-duration
-  "Format milliseconds as human-readable string"
-  [ms]
-  (cond
-    (>= ms 1000) (format "%.2fs" (/ ms 1000.0))
-    :else (format "%dms" ms)))
-
-(defn- print-timing-report
-  "Print formatted timing report to stdout"
-  [timings]
-  (let [sorted (sort-by :duration-ms timings)
-        total-ms (reduce + (map :duration-ms timings))
-        test-count (count timings)
-        avg-ms (if (pos? test-count) (/ total-ms test-count) 0)]
-    (println)
-    (println "E2E Test Timing Report")
-    (println "======================")
-    (println (format "Tests: %d | Total: %s | Average: %s"
-                     test-count
-                     (format-duration total-ms)
-                     (format-duration (long avg-ms))))
-    (println)
-    (println "Tests sorted by duration (fastest first):")
-    (println (str (apply str (repeat 60 "-"))))
-    (doseq [{:keys [name duration-ms]} sorted]
-      (println (format "%-7s  %s"
-                       (format-duration duration-ms)
-                       name)))
-    (println (str (apply str (repeat 60 "-"))))
-    (println)
-    (println "Slowest 10 tests:")
-    (doseq [{:keys [name file duration-ms]} (take-last 10 sorted)]
-      (println (format "  %-7s  %s (%s)"
-                       (format-duration duration-ms)
-                       name
-                       file)))))
-
 ;; ============================================================
 ;; E2E Testing
 ;; ============================================================
@@ -222,87 +159,6 @@
     (.flush writer)
     {:process (p/process cmd {:out writer :err writer})
      :writer writer}))
-
-(defn- strip-ansi-codes
-  "Remove ANSI escape sequences from text (colors, formatting, etc.)"
-  [text]
-  (str/replace text #"\x1b\[[0-9;]*m" ""))
-
-(defn- parse-playwright-summary
-  "Parse Playwright summary from log output.
-   Returns {:passed N :failed N :skipped N} or nil if not found.
-   Handles both formats:
-     Combined: '10 passed, 2 failed (5.2s)'
-     Separate: '1 failed' on one line, '2 passed (3.0s)' on another"
-  [log-content]
-  (let [;; Strip ANSI color codes that Playwright adds
-        clean-content (strip-ansi-codes log-content)
-        ;; Separate patterns for counts on their own lines
-        passed-pattern #"(?m)^\s*(\d+)\s+passed\s*(?:\([^)]+\))?\s*$"
-        failed-pattern #"(?m)^\s*(\d+)\s+failed\s*$"
-        skipped-pattern #"(?m)^\s*(\d+)\s+skipped\s*$"
-        flaky-pattern #"(?m)^\s*(\d+)\s+flaky\s*$"
-        ;; Always check separate patterns (handles both combined and separate formats)
-        passed-match (re-find passed-pattern clean-content)
-        failed-match (re-find failed-pattern clean-content)
-        skipped-match (re-find skipped-pattern clean-content)
-        flaky-match (re-find flaky-pattern clean-content)]
-    (when passed-match
-      {:passed (parse-long (nth passed-match 1))
-       :failed (if failed-match (parse-long (nth failed-match 1)) 0)
-       :skipped (if skipped-match (parse-long (nth skipped-match 1)) 0)
-       :flaky (if flaky-match (parse-long (nth flaky-match 1)) 0)})))
-
-(defn- count-test-files-in-log
-  "Count unique test files mentioned in Playwright output."
-  [log-content]
-  (let [;; Match file references like "build/e2e/popup_core_test.mjs:123:1" or "build/e2e/repl_ui_spec.mjs:123:1"
-        file-pattern #"build/e2e/([a-z_]+(?:_test|_spec)\.mjs):\d+:\d+"
-        matches (re-seq file-pattern log-content)]
-    (count (distinct (map second matches)))))
-
-(defn- aggregate-shard-results
-  "Aggregate results from all shard log files.
-   Returns {:files N :total N :passed N :failed N :flaky N :skipped N}."
-  [log-files]
-  (let [results (for [log-file log-files
-                      :let [content (slurp log-file)
-                            summary (parse-playwright-summary content)
-                            files (count-test-files-in-log content)]
-                      :when summary]
-                  (assoc summary :files files))
-        total-passed (reduce + (map :passed results))
-        total-failed (reduce + (map :failed results))
-        total-skipped (reduce + (map :skipped results))
-        total-flaky (reduce + (map :flaky results))
-        total-files (reduce + (map :files results))]
-    {:files total-files
-     :total (+ total-passed total-failed total-flaky total-skipped)
-     :passed total-passed
-     :failed total-failed
-     :skipped total-skipped
-     :flaky total-flaky}))
-
-(defn- print-test-summary
-  "Print a summary of test results.
-   crashed-shards: number of shards that exited non-zero without a parseable summary."
-  [{:keys [files total passed failed skipped flaky]} & {:keys [failed-shards crashed-shards]
-                                                        :or {failed-shards 0 crashed-shards 0}}]
-  (println)
-  (println (format "Files:     %3d" files))
-  (println (format "Total:     %3d tests" total))
-  (println (format "  Passed:  %3d" passed))
-  (println (format "  Failed:  %3d%s" failed
-                   (if (pos? failed-shards)
-                     (str " (in " failed-shards " shard(s))")
-                     "")))
-  (println (format "  Flaky:   %3d" flaky))
-  (println (format "  Skipped: %3d" skipped))
-  (when (pos? crashed-shards)
-    (println (format "Crashed: %3d shard(s) (test counts unavailable)" crashed-shards)))
-  (if (and (zero? failed) (zero? crashed-shards))
-    (println "Status:  ALL TESTS PASSED")
-    (println "Status:  SOME TESTS FAILED")))
 
 (defn- run-build-step!
   "Run a build command, capturing output. Returns result map.
@@ -438,17 +294,17 @@
         elapsed-ms (- (System/currentTimeMillis) start-time)
         failed-shards (filter #(not= 0 (:exit %)) results)
         log-files (map :log-file results)
-        summary (aggregate-shard-results log-files)
+        summary (reporting/aggregate-shard-results log-files)
         ;; Crashed = exited non-zero but no parseable test summary
         crashed-shards (count (filter (fn [{:keys [log-file]}]
-                                        (nil? (parse-playwright-summary (slurp log-file))))
+                                        (nil? (reporting/parse-playwright-summary (slurp log-file))))
                                       failed-shards))
         shards-with-test-failures (- (count failed-shards) crashed-shards)]
 
     (println)
     (println (str "Completed " n-shards " shards in " (format "%.1fs" (/ elapsed-ms 1000.0))))
 
-    (print-test-summary summary
+    (reporting/print-test-summary summary
                         :failed-shards shards-with-test-failures
                         :crashed-shards crashed-shards)
 
@@ -487,30 +343,22 @@
       (let [exit-code (run-e2e-parallel! n-shards args {:build? true})]
         (System/exit exit-code)))))
 
-(defn- extract-json-from-output
-  "Extract JSON object from mixed output that may have log prefixes.
-   Finds the first { and parses from there."
-  [output]
-  (when-let [json-start (str/index-of output "{")]
-    (subs output json-start)))
-
 (defn e2e-timing-report!
   "Run E2E tests in Docker with JSON reporter and print timing report.
    Sorted fastest-first so you can tail for slowest tests."
   [_args]
   (build-e2e!)
-  ;; Run tests with spinner (output captured for JSON parsing)
   (let [result (atom nil)]
     (with-spinner "Running E2E tests (collecting timing data)..."
       #(reset! result (p/shell {:out :string :err :string :continue true}
                                "docker" "run" "--rm" "epupp-e2e"
                                "--reporter=json")))
     (let [{:keys [exit out]} @result
-          json-str (extract-json-from-output out)]
+          json-str (reporting/extract-json-from-output out)]
       (if (and (zero? exit) json-str)
         (let [json-data (json/read-str json-str :key-fn keyword)
-              timings (extract-test-timings json-data)]
-          (print-timing-report timings))
+              timings (reporting/extract-test-timings json-data)]
+          (reporting/print-timing-report timings))
         (do
           (println "Tests failed or no JSON output - cannot generate timing report")
           (when-not (str/blank? out)

@@ -59,6 +59,21 @@
 ;; Test: Consumer loads user library via epupp://
 ;; =============================================================================
 
+(defn- ^:async poll-for-window-var
+  "Poll page via expr-fn until a non-nil value is returned.
+   Throws after timeout-ms milliseconds. Returns the result."
+  [page expr-fn timeout-ms]
+  (loop [start (.now js/Date)]
+    (let [result (js-await (.evaluate page expr-fn))]
+      (cond
+        (some? result) result
+        (> (- (.now js/Date) start) timeout-ms)
+        (throw (js/Error. (str "Timeout after " timeout-ms "ms polling page")))
+        :else
+        (do
+          (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 50))))
+          (recur start))))))
+
 (defn- ^:async test_consumer_loads_epupp_library []
   (let [context (js-await (launch-browser))
         ext-id (js-await (get-extension-id context))]
@@ -90,16 +105,8 @@
               event (js-await (wait-for-event popup "EXECUTE_PLAN_COMPLETE" 10000))]
           (js-await (-> (expect (.-event event)) (.toBe "EXECUTE_PLAN_COMPLETE")))
 
-          (let [start (.now js/Date)]
-            (loop []
-              (let [result (js-await (.evaluate page (fn [] js/window.__EPUPP_CONSUMER_RESULT)))]
-                (if (some? result)
-                  (js-await (-> (expect result) (.toBe "Hello, E2E!")))
-                  (do
-                    (when (> (- (.now js/Date) start) 5000)
-                      (throw (js/Error. "Timeout waiting for __EPUPP_CONSUMER_RESULT")))
-                    (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 50))))
-                    (recur))))))
+          (let [result (js-await (poll-for-window-var page (fn [] js/window.__EPUPP_CONSUMER_RESULT) 5000))]
+            (js-await (-> (expect result) (.toBe "Hello, E2E!"))))
 
           (js-await (assert-no-errors! popup))
           (js-await (.close popup)))

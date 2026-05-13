@@ -90,6 +90,19 @@
          (filter string?)
          vec)))
 
+(defn- inject-invalid?
+  "Check if the raw inject value is invalid: present but not a string/vector/seq
+   of strings."
+  [manifest raw-inject]
+  (and (contains? manifest :epupp/inject)
+       (let [collection? (or (vector? raw-inject) (sequential? raw-inject))]
+         (or (not (or (string? raw-inject) collection?))
+             (not-every? string? (if collection? raw-inject []))))))
+
+(defn- run-at-invalid? [raw-run-at]
+  (and (some? raw-run-at)
+       (not (contains? valid-run-at-values raw-run-at))))
+
 (defn extract-manifest
   "Extract manifest from the first form (must be a data map)."
   [code-text]
@@ -97,29 +110,15 @@
     (when-let [raw-name (get m :epupp/script-name)]
       (let [normalized-name (normalize-script-name raw-name)
             raw-run-at (get m :epupp/run-at)
-            run-at (if (contains? valid-run-at-values raw-run-at)
-                     raw-run-at
-                     default-run-at)
-            auto-run-match (get m :epupp/auto-run-match)
-            raw-inject (get m :epupp/inject)
-            inject (normalize-inject raw-inject)
-            library? (boolean (get m :epupp/library?))]
+            raw-inject (get m :epupp/inject)]
         {:script-name normalized-name
          :raw-script-name raw-name
          :name-normalized? (not= raw-name normalized-name)
-         :auto-run-match auto-run-match
+         :auto-run-match (get m :epupp/auto-run-match)
          :description (get m :epupp/description)
-         :inject inject
-         :inject-invalid? (and (contains? m :epupp/inject)
-                               (or (not (or (string? raw-inject)
-                                            (vector? raw-inject)
-                                            (sequential? raw-inject)))
-                                   (not-every? string? (if (or (vector? raw-inject)
-                                                                (sequential? raw-inject))
-                                                         raw-inject
-                                                         []))))
-         :run-at run-at
+         :inject (normalize-inject raw-inject)
+         :inject-invalid? (inject-invalid? m raw-inject)
+         :run-at (if (contains? valid-run-at-values raw-run-at) raw-run-at default-run-at)
          :raw-run-at raw-run-at
-         :library? library?
-         :run-at-invalid? (and raw-run-at
-                               (not (contains? valid-run-at-values raw-run-at)))}))))
+         :library? (boolean (get m :epupp/library?))
+         :run-at-invalid? (run-at-invalid? raw-run-at)}))))

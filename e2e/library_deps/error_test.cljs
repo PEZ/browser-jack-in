@@ -130,6 +130,19 @@
 ;; Test: Missing library marks the failing script row in popup
 ;; =============================================================================
 
+(defn- ^:async open-popup-with-tab-context
+  "Create a popup page wired to the active test tab via init scripts.
+   Reloads, waits for ready, then waits for event-name. Returns the popup."
+  [context ext-id event-name timeout-ms]
+  (let [popup (js-await (create-popup-page context ext-id))
+        tab-id (js-await (find-tab-id popup "http://localhost:18080/*"))]
+    (js-await (.addInitScript popup (str "window.__scittle_tamper_test_url = 'http://localhost:18080/basic.html';")))
+    (js-await (.addInitScript popup (str "window.__scittle_tamper_test_tab_id = " tab-id ";")))
+    (js-await (.reload popup))
+    (js-await (wait-for-popup-ready popup))
+    (js-await (wait-for-event popup event-name timeout-ms))
+    popup))
+
 (defn- ^:async test_missing_dep_shows_error_indicator_in_popup []
   (let [context (js-await (launch-browser))
         ext-id (js-await (get-extension-id context))]
@@ -152,18 +165,11 @@
         (js-await (-> (expect (.locator page "#test-marker"))
                       (.toContainText "ready")))
 
-        (let [popup (js-await (create-popup-page context ext-id))
-              tab-id (js-await (find-tab-id popup "http://localhost:18080/*"))]
-          (js-await (.addInitScript popup (str "window.__scittle_tamper_test_url = 'http://localhost:18080/basic.html';")))
-          (js-await (.addInitScript popup (str "window.__scittle_tamper_test_tab_id = " tab-id ";")))
-          (js-await (.reload popup))
-          (js-await (wait-for-popup-ready popup))
-          (js-await (wait-for-event popup "RESOLUTION_ERROR" 10000))
-
-          (let [script-row (get-script-item popup "test/error_consumer.cljs")
-                error-indicator (.locator script-row "[data-e2e='script-error']")]
-            (js-await (-> (expect error-indicator)
-                          (.toBeVisible #js {:timeout 2000}))))
+        (let [popup (js-await (open-popup-with-tab-context context ext-id "RESOLUTION_ERROR" 10000))
+              script-row (get-script-item popup "test/error_consumer.cljs")
+              error-indicator (.locator script-row "[data-e2e='script-error']")]
+          (js-await (-> (expect error-indicator)
+                        (.toBeVisible #js {:timeout 2000})))
 
           (js-await (assert-no-errors! popup))
           (js-await (.close popup)))
@@ -201,18 +207,11 @@
                       (.toContainText "ready")))
 
         ;; Verify error indicator appears
-        (let [popup (js-await (create-popup-page context ext-id))
-              tab-id (js-await (find-tab-id popup "http://localhost:18080/*"))]
-          (js-await (.addInitScript popup (str "window.__scittle_tamper_test_url = 'http://localhost:18080/basic.html';")))
-          (js-await (.addInitScript popup (str "window.__scittle_tamper_test_tab_id = " tab-id ";")))
-          (js-await (.reload popup))
-          (js-await (wait-for-popup-ready popup))
-          (js-await (wait-for-event popup "RESOLUTION_ERROR" 10000))
-
-          (let [script-row (get-script-item popup "test/fixable_consumer.cljs")
-                error-indicator (.locator script-row "[data-e2e='script-error']")]
-            (js-await (-> (expect error-indicator)
-                          (.toBeVisible #js {:timeout 2000}))))
+        (let [popup (js-await (open-popup-with-tab-context context ext-id "RESOLUTION_ERROR" 10000))
+              script-row (get-script-item popup "test/fixable_consumer.cljs")
+              error-indicator (.locator script-row "[data-e2e='script-error']")]
+          (js-await (-> (expect error-indicator)
+                        (.toBeVisible #js {:timeout 2000})))
           (js-await (.close popup)))
 
         ;; PHASE 3: Save the missing library
@@ -230,18 +229,11 @@
         (js-await (-> (expect (.locator page "#test-marker"))
                       (.toContainText "ready")))
 
-        (let [popup (js-await (create-popup-page context ext-id))
-              tab-id (js-await (find-tab-id popup "http://localhost:18080/*"))]
-          (js-await (.addInitScript popup (str "window.__scittle_tamper_test_url = 'http://localhost:18080/basic.html';")))
-          (js-await (.addInitScript popup (str "window.__scittle_tamper_test_tab_id = " tab-id ";")))
-          (js-await (.reload popup))
-          (js-await (wait-for-popup-ready popup))
-          (js-await (wait-for-event popup "EXECUTE_PLAN_COMPLETE" 10000))
-
-          (let [script-row (get-script-item popup "test/fixable_consumer.cljs")
-                error-indicator (.locator script-row "[data-e2e='script-error']")]
-            (js-await (-> (expect error-indicator)
-                          (.not.toBeVisible))))
+        (let [popup (js-await (open-popup-with-tab-context context ext-id "EXECUTE_PLAN_COMPLETE" 10000))
+              script-row (get-script-item popup "test/fixable_consumer.cljs")
+              error-indicator (.locator script-row "[data-e2e='script-error']")]
+          (js-await (-> (expect error-indicator)
+                        (.not.toBeVisible)))
 
           (js-await (assert-no-errors! popup))
           (js-await (.close popup)))
