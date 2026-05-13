@@ -9,7 +9,7 @@
             [fixtures :refer [launch-browser get-extension-id create-popup-page
                               wait-for-event clear-test-events!
                               assert-no-errors! send-runtime-message http-port]]
-            [e2e.ext-dep-helpers :refer [ext-dep-url ext-dep-lib-code
+            [ext-dep-helpers :refer [ext-dep-url ext-dep-lib-code
                                          gist-raw-url pez-test-lib-code
                                          code-with-manifest save-script-via-panel
                                          enable-script-via-popup set-ext-dep-cache!

@@ -1,4 +1,4 @@
-(ns e2e.fs-write-helpers
+(ns fs-write-helpers
   "Shared helpers for REPL FS write E2E tests."
   (:require ["@playwright/test" :refer [chromium]]
             ["net" :as net]

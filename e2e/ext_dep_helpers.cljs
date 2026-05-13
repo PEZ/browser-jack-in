@@ -1,4 +1,4 @@
-(ns e2e.ext-dep-helpers
+(ns ext-dep-helpers
   "Shared helpers and constants for ext-dep E2E tests."
   (:require [clojure.string :as str]
             [fixtures :refer [create-popup-page create-panel-page

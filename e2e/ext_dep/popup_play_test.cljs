@@ -9,7 +9,7 @@
                               wait-for-event clear-test-events!
                               assert-no-errors! find-tab-id get-script-item
                               http-port]]
-            [e2e.ext-dep-helpers :refer [git-raw-url gist-raw-url pez-test-lib-code
+            [ext-dep-helpers :refer [git-raw-url gist-raw-url pez-test-lib-code
                                          code-with-manifest save-script-via-panel
                                          set-ext-dep-cache! make-ext-dep-cache
                                          poll-for-window-property!]]))

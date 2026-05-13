@@ -8,7 +8,7 @@
             [fixtures :refer [launch-browser get-extension-id create-popup-page
                               create-panel-page-for-tab wait-for-popup-ready
                               assert-no-errors! find-tab-id http-port]]
-            [e2e.ext-dep-helpers :refer [git-raw-url gist-raw-url pez-test-lib-code
+            [ext-dep-helpers :refer [git-raw-url gist-raw-url pez-test-lib-code
                                          set-ext-dep-cache! make-ext-dep-cache
                                          poll-for-scittle-eval!]]))
 
