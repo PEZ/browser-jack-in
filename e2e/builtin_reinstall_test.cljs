@@ -25,13 +25,18 @@
         timeout-ms (or timeout-ms 5000)]
     (loop []
       (let [script (js-await (get-builtin-script popup))]
-        (if script
-          script
-          (if (> (- (.now js/Date) start) timeout-ms)
-            (throw (js/Error. (str "Timeout waiting for built-in script: " builtin-id)))
-            (do
-              (js-await (sleep 20))
-              (recur))))))))
+        (cond
+          script script
+          (> (- (.now js/Date) start) timeout-ms)
+          (throw (js/Error. (str "Timeout waiting for built-in script: " builtin-id)))
+          :else (do (js-await (sleep 20)) (recur)))))))
+
+(defn- builtin-code-timeout-message [expected-substring code]
+  (let [snippet (if (and (string? code) (> (.-length code) 0))
+                  (.slice code 0 120)
+                  "<no code>")]
+    (str "Timeout waiting for built-in code: " expected-substring
+         " | snippet: " snippet)))
 
 (defn- ^:async wait-for-builtin-code
   "Wait until the built-in script exists and its code contains the expected substring."
@@ -40,18 +45,15 @@
         timeout-ms (or timeout-ms 5000)]
     (loop []
       (let [script (js-await (get-builtin-script popup))
-            code (when script (.-code script))]
-        (if (and script (string? code) (.includes code expected-substring))
+            code (some-> script .-code)]
+        (cond
+          (and script (string? code) (.includes code expected-substring))
           script
-          (if (> (- (.now js/Date) start) timeout-ms)
-            (let [snippet (if (and (string? code) (> (.-length code) 0))
-                            (.slice code 0 120)
-                            "<no code>")]
-              (throw (js/Error. (str "Timeout waiting for built-in code: " expected-substring
-                                     " | snippet: " snippet))))
-            (do
-              (js-await (sleep 20))
-              (recur))))))))
+
+          (> (- (.now js/Date) start) timeout-ms)
+          (throw (js/Error. (builtin-code-timeout-message expected-substring code)))
+
+          :else (do (js-await (sleep 20)) (recur)))))))
 
 (defn- ^:async update-builtin-script!
   "Update the built-in script entry in storage with the provided mutator."
