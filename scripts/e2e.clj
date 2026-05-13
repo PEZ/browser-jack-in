@@ -461,7 +461,7 @@
     (if (seq failed-shards) 1 0)))
 
 ; Playwright's stupid sharding will make it vary a lot what n-shards is the best
-(def ^:private default-n-shards 12)
+(def ^:private default-n-shards 10)
 
 (defn ^:export run-e2e!
   "Run E2E tests in Docker. Parallel by default, --serial to disable this (but why would you?).
