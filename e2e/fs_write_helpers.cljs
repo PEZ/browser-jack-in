@@ -10,7 +10,7 @@
 (defn ^:async sleep [ms]
   (js/Promise. (fn [resolve] (js/setTimeout resolve ms))))
 
-(defn- parse-nrepl-response
+(defn parse-nrepl-response
   "Parse a raw bencode nREPL response into {:success :values :error}."
   [response]
   (let [values (atom [])
