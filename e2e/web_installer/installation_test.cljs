@@ -9,27 +9,41 @@
 (def git-raw-url
   "https://raw.githubusercontent.com/PEZ/pez-my-epupp-hq/3dbf6393916cd4e384826b093ab6e9a96b1793f9/userscripts/pez/test_lib.cljs")
 
+(defn- cache-timeout-message
+  [expected-url timeout-ms cache]
+  (str "Timeout (" timeout-ms "ms) waiting for extDepCache to contain: "
+       expected-url
+       "\nCache keys: "
+       (if cache
+         (js/JSON.stringify (.keys js/Object cache))
+         "null/undefined")))
+
+(defn- ^:async fetch-ext-dep-entry
+  "Fetch a single extDepCache entry by URL. Returns the entry or nil."
+  [ext-page expected-url]
+  (let [result (js-await (send-runtime-message ext-page "e2e/get-storage"
+                                               #js {:key "extDepCache"}))
+        cache (when (and result (.-success result)) (.-value result))]
+    {:cache cache
+     :entry (when cache (aget cache expected-url))}))
+
 (defn- ^:async poll-ext-dep-cache
   "Poll extDepCache storage until the expected URL key exists."
   [ext-page expected-url timeout-ms]
   (let [start (.now js/Date)]
     (loop []
-      (let [result (js-await (send-runtime-message ext-page "e2e/get-storage"
-                                                   #js {:key "extDepCache"}))
-            cache (when (and result (.-success result)) (.-value result))
-            entry (when cache (aget cache expected-url))]
-        (if entry
+      (let [{:keys [cache entry]} (js-await (fetch-ext-dep-entry ext-page expected-url))]
+        (cond
           entry
-          (if (> (- (.now js/Date) start) timeout-ms)
-            (throw (js/Error. (str "Timeout (" timeout-ms "ms) waiting for extDepCache to contain: "
-                                   expected-url
-                                   "\nCache keys: "
-                                   (if cache
-                                     (js/JSON.stringify (.keys js/Object cache))
-                                     "null/undefined"))))
-            (do
-              (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 200))))
-              (recur))))))))
+          entry
+
+          (> (- (.now js/Date) start) timeout-ms)
+          (throw (js/Error. (cache-timeout-message expected-url timeout-ms cache)))
+
+          :else
+          (do
+            (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 200))))
+            (recur)))))))
 
 (defn- ^:async test_shows_button_and_installs []
   (let [context (js-await (launch-browser))
@@ -101,29 +115,49 @@
       (finally
         (js-await (.close context))))))
 
+(defn- ^:async assert-dependency-preview!
+  "Assert the install modal shows dependency preview with expected content."
+  [page]
+  (js-await (-> (expect (.locator page ".epupp-modal__table"))
+                (.toContainText "Dependencies" #js {:timeout 1000})))
+  (js-await (-> (expect (.locator page ".epupp-modal__table"))
+                (.toContainText "epupp://phase6/wi_lib.cljs" #js {:timeout 1000})))
+  (js-await (-> (expect (.locator page ".epupp-modal__table"))
+                (.toContainText "(user library)" #js {:timeout 1000})))
+  (js-await (-> (expect (.locator page "[data-e2e-epupp-deps-note]"))
+                (.toContainText "installed separately" #js {:timeout 1000}))))
+
+(defn- ^:async poll-page-result
+  "Poll a page-level JS variable until it equals expected-value, or throw on timeout."
+  [page js-var-name expected-value timeout-ms]
+  (let [start (.now js/Date)]
+    (loop []
+      (let [result (js-await (.evaluate page (fn [] (aget js/window js-var-name))))]
+        (cond
+          (= result expected-value)
+          (js-await (-> (expect result) (.toBe expected-value)))
+
+          (> (- (.now js/Date) start) timeout-ms)
+          (throw (js/Error. (str "Timeout waiting for " js-var-name)))
+
+          :else
+          (do
+            (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 50))))
+            (recur)))))))
+
 (defn- ^:async test_epupp_dependency_preview_and_runtime_resolution []
   (let [context (js-await (launch-browser))
         ext-id (js-await (get-extension-id context))]
     (try
-      ;; Setup installer
       (let [popup (js-await (h/setup-installer!+ context ext-id))]
         (js-await (.close popup)))
 
-      ;; Install consumer first and verify dependency preview in modal
       (let [page (js-await (h/navigate-to-mock-gist context))
             consumer-container "#dep-consumer-gist"]
         (js-await (h/wait-for-install-button page consumer-container "install" 2000))
         (js-await (.click (h/get-install-button page consumer-container "install")))
 
-        (js-await (-> (expect (.locator page ".epupp-modal__table"))
-                      (.toContainText "Dependencies" #js {:timeout 1000})))
-        (js-await (-> (expect (.locator page ".epupp-modal__table"))
-                      (.toContainText "epupp://phase6/wi_lib.cljs" #js {:timeout 1000})))
-        ;; Verify epupp:// dep display enhancements
-        (js-await (-> (expect (.locator page ".epupp-modal__table"))
-                      (.toContainText "(user library)" #js {:timeout 1000})))
-        (js-await (-> (expect (.locator page "[data-e2e-epupp-deps-note]"))
-                      (.toContainText "installed separately" #js {:timeout 1000})))
+        (js-await (assert-dependency-preview! page))
 
         (js-await (.click (.locator page "#epupp-confirm")))
         (js-await (h/wait-for-install-button page consumer-container "installed" 2000))
@@ -154,19 +188,7 @@
 
         (let [popup (js-await (create-popup-page context ext-id))]
           (js-await (wait-for-event popup "EXECUTE_PLAN_COMPLETE" 10000))
-
-          ;; Poll for consumer side effect to verify runtime resolution now succeeds
-          (let [start (.now js/Date)]
-            (loop []
-              (let [result (js-await (.evaluate page (fn [] js/window.__PHASE6_WI_RESULT)))]
-                (if (= result "phase6-library-loaded")
-                  (js-await (-> (expect result) (.toBe "phase6-library-loaded")))
-                  (do
-                    (when (> (- (.now js/Date) start) 5000)
-                      (throw (js/Error. "Timeout waiting for __PHASE6_WI_RESULT")))
-                    (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 50))))
-                    (recur))))))
-
+          (js-await (poll-page-result page "__PHASE6_WI_RESULT" "phase6-library-loaded" 5000))
           (js-await (assert-no-errors! popup))
           (js-await (.close popup)))
 
