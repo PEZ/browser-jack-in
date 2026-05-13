@@ -1,7 +1,7 @@
 (ns e2e.fs-write.save-security-test
   "E2E tests for REPL FS save! reserved names and path traversal security"
   (:require ["@playwright/test" :refer [test expect]]
-            [fs-write-helpers :refer [sleep eval-in-browser unquote-result
+            [fs-write-helpers :refer [eval-in-browser eval-async-and-poll!
                                       setup-browser! ensure-builtin-script!
                                       wait-for-builtin-script-via-repl!]]))
 
@@ -14,35 +14,16 @@
   ;; Try to save a script with a built-in name - should reject
   ;; Note: epupp/ prefix is rejected by reserved namespace check (correct behavior)
   (let [test-code "{:epupp/script-name \"epupp/web_userscript_installer.cljs\"\n                   :epupp/auto-run-match \"https://example.com/*\"}\n                  (ns fake-builtin)\n                  (js/console.log \"Trying to impersonate built-in!\")"
-        setup-result (js-await (eval-in-browser
-                                (str "(def !save-builtin-result (atom :pending))\n                                     (defn ^:async do-save []\n                                       (try\n                                         (let [r (await (epupp.fs/save! " (pr-str test-code) "))]\n                                           (reset! !save-builtin-result {:resolved r}))\n                                         (catch :default e\n                                           (reset! !save-builtin-result {:rejected (.-message e)}))))\n                                     (do-save)\n                                     :setup-done")))]
-    (-> (expect (.-success setup-result)) (.toBe true)))
-
-  (let [start (.now js/Date)
-        timeout-ms 3000]
-    (loop []
-      (let [check-result (js-await (eval-in-browser
-                                    "(let [r @!save-builtin-result]
-                                       (cond
-                                         (= r :pending) :not-settled
-                                         (:rejected r) (:rejected r)
-                                         :else :resolved))"))]
-        (if (and (.-success check-result)
-                 (seq (.-values check-result)))
-          (let [result-str (unquote-result (first (.-values check-result)))]
-            (if (= result-str ":not-settled")
-              (if (> (- (.now js/Date) start) timeout-ms)
-                (throw (js/Error. "Timeout waiting for save built-in result"))
-                (do
-                  (js-await (sleep 20))
-                  (recur)))
-              (-> (expect result-str)
-                  (.toBe "Cannot create scripts in reserved namespace: epupp/"))))
-          (if (> (- (.now js/Date) start) timeout-ms)
-            (throw (js/Error. "Timeout waiting for save built-in result"))
-            (do
-              (js-await (sleep 20))
-              (recur))))))))
+        result-str (js-await (eval-async-and-poll!
+                               (str "(def !save-builtin-result (atom :pending))\n                                     (defn ^:async do-save []\n                                       (try\n                                         (let [r (await (epupp.fs/save! " (pr-str test-code) "))]\n                                           (reset! !save-builtin-result {:resolved r}))\n                                         (catch :default e\n                                           (reset! !save-builtin-result {:rejected (.-message e)}))))\n                                     (do-save)\n                                     :setup-done")
+                               "(let [r @!save-builtin-result]
+                                  (cond
+                                    (= r :pending) :not-settled
+                                    (:rejected r) (:rejected r)
+                                    :else :resolved))"
+                               3000))]
+    (-> (expect result-str)
+        (.toBe "Cannot create scripts in reserved namespace: epupp/"))))
 
 (defn- ^:async test_save_with_force_rejects_builtin_script_names []
   (js-await (ensure-builtin-script! @!context))
@@ -50,116 +31,59 @@
 
   ;; Try to save with force - still should reject (reserved namespace)
   (let [test-code "{:epupp/script-name \"epupp/web_userscript_installer.cljs\"\n                   :epupp/auto-run-match \"https://example.com/*\"}\n                  (ns fake-builtin-force)"
-        setup-result (js-await (eval-in-browser
-                                (str "(def !save-builtin-force-result (atom :pending))\n                                     (defn ^:async do-save []\n                                       (try\n                                         (let [r (await (epupp.fs/save! " (pr-str test-code) " {:fs/force? true}))]\n                                           (reset! !save-builtin-force-result {:resolved r}))\n                                         (catch :default e\n                                           (reset! !save-builtin-force-result {:rejected (.-message e)}))))\n                                     (do-save)\n                                     :setup-done")))]
-    (-> (expect (.-success setup-result)) (.toBe true)))
-
-  (let [start (.now js/Date)
-        timeout-ms 3000]
-    (loop []
-      (let [check-result (js-await (eval-in-browser
-                                    "(let [r @!save-builtin-force-result]
-                                       (cond
-                                         (= r :pending) :not-settled
-                                         (:rejected r) (:rejected r)
-                                         :else :resolved))"))]
-        (if (and (.-success check-result)
-                 (seq (.-values check-result)))
-          (let [result-str (unquote-result (first (.-values check-result)))]
-            (if (= result-str ":not-settled")
-              (if (> (- (.now js/Date) start) timeout-ms)
-                (throw (js/Error. "Timeout waiting for save built-in force result"))
-                (do
-                  (js-await (sleep 20))
-                  (recur)))
-              (-> (expect result-str)
-                  (.toBe "Cannot create scripts in reserved namespace: epupp/"))))
-          (if (> (- (.now js/Date) start) timeout-ms)
-            (throw (js/Error. "Timeout waiting for save built-in force result"))
-            (do
-              (js-await (sleep 20))
-              (recur))))))))
+        result-str (js-await (eval-async-and-poll!
+                               (str "(def !save-builtin-force-result (atom :pending))\n                                     (defn ^:async do-save []\n                                       (try\n                                         (let [r (await (epupp.fs/save! " (pr-str test-code) " {:fs/force? true}))]\n                                           (reset! !save-builtin-force-result {:resolved r}))\n                                         (catch :default e\n                                           (reset! !save-builtin-force-result {:rejected (.-message e)}))))\n                                     (do-save)\n                                     :setup-done")
+                               "(let [r @!save-builtin-force-result]
+                                  (cond
+                                    (= r :pending) :not-settled
+                                    (:rejected r) (:rejected r)
+                                    :else :resolved))"
+                               3000))]
+    (-> (expect result-str)
+        (.toBe "Cannot create scripts in reserved namespace: epupp/"))))
 
 (defn- ^:async test_save_rejects_reserved_namespace_with_clear_error []
   (let [test-code "{:epupp/script-name \"epupp/my-script.cljs\"\n                   :epupp/auto-run-match \"https://example.com/*\"}\n                  (ns bad-namespace)"
-        setup-result (js-await (eval-in-browser
-                                (str "(def !save-reserved-result (atom :pending))\n"
-                                     "(defn ^:async do-save []\n"
-                                     "  (try\n"
-                                     "    (let [r (await (epupp.fs/save! " (pr-str test-code) "))]\n"
-                                     "      (reset! !save-reserved-result {:resolved r}))\n"
-                                     "    (catch :default e\n"
-                                     "      (reset! !save-reserved-result {:rejected (.-message e)}))))\n"
-                                     "(do-save)\n"
-                                     ":setup-done")))]
-    (-> (expect (.-success setup-result)) (.toBe true)))
-
-  (let [start (.now js/Date)
-        timeout-ms 3000]
-    (loop []
-      (let [check-result (js-await (eval-in-browser
-                                    "(let [r @!save-reserved-result]
-                                       (cond
-                                         (= r :pending) :not-settled
-                                         (:rejected r) (:rejected r)
-                                         :else :resolved))"))]
-        (if (and (.-success check-result)
-                 (seq (.-values check-result)))
-          (let [result-str (unquote-result (first (.-values check-result)))]
-            (if (= result-str ":not-settled")
-              (if (> (- (.now js/Date) start) timeout-ms)
-                (throw (js/Error. "Timeout waiting for save reserved namespace result"))
-                (do
-                  (js-await (sleep 20))
-                  (recur)))
-              (-> (expect result-str)
-                  (.toBe "Cannot create scripts in reserved namespace: epupp/"))))
-          (if (> (- (.now js/Date) start) timeout-ms)
-            (throw (js/Error. "Timeout waiting for save reserved namespace result"))
-            (do
-              (js-await (sleep 20))
-              (recur))))))))
+        result-str (js-await (eval-async-and-poll!
+                               (str "(def !save-reserved-result (atom :pending))\n"
+                                    "(defn ^:async do-save []\n"
+                                    "  (try\n"
+                                    "    (let [r (await (epupp.fs/save! " (pr-str test-code) "))]\n"
+                                    "      (reset! !save-reserved-result {:resolved r}))\n"
+                                    "    (catch :default e\n"
+                                    "      (reset! !save-reserved-result {:rejected (.-message e)}))))\n"
+                                    "(do-save)\n"
+                                    ":setup-done")
+                               "(let [r @!save-reserved-result]
+                                  (cond
+                                    (= r :pending) :not-settled
+                                    (:rejected r) (:rejected r)
+                                    :else :resolved))"
+                               3000))]
+    (-> (expect result-str)
+        (.toBe "Cannot create scripts in reserved namespace: epupp/"))))
 
 (defn- ^:async test_save_rejects_epupp_dot_namespace_bypass []
   (let [test-code "{:epupp/script-name \"epupp.sneaky-script\"}\n                  (ns epupp.sneaky-script)"
-        setup-result (js-await (eval-in-browser
-                                (str "(def !epupp-dot-result (atom :pending))\n"
-                                     "(defn ^:async do-epupp-dot-save []\n"
-                                     "  (try\n"
-                                     "    (let [r (await (epupp.fs/save! " (pr-str test-code) "))]\n"
-                                     "      (reset! !epupp-dot-result {:resolved r}))\n"
-                                     "    (catch :default e\n"
-                                     "      (reset! !epupp-dot-result {:rejected (.-message e)}))))\n"
-                                     "(do-epupp-dot-save)\n"
-                                     ":setup-done")))]
-    (-> (expect (.-success setup-result)) (.toBe true)))
-
-  (let [start (.now js/Date)
-        timeout-ms 3000]
-    (loop []
-      (let [check-result (js-await (eval-in-browser
-                                    "(let [r @!epupp-dot-result]
-                                       (cond
-                                         (= r :pending) :not-settled
-                                         (:rejected r) (:rejected r)
-                                         :else :resolved))"))]
-        (if (and (.-success check-result)
-                 (seq (.-values check-result)))
-          (let [result-str (unquote-result (first (.-values check-result)))]
-            (if (= result-str ":not-settled")
-              (if (> (- (.now js/Date) start) timeout-ms)
-                (throw (js/Error. "Timeout waiting for epupp. dot bypass result"))
-                (do
-                  (js-await (sleep 20))
-                  (recur)))
-              ;; Must be rejected: epupp.sneaky normalizes to epupp/sneaky
-              (-> (expect result-str)
-                  (.toBe "Cannot create scripts in reserved namespace: epupp/"))))
-          (if (> (- (.now js/Date) start) timeout-ms)
-            (throw (js/Error. "Timeout waiting for epupp. dot bypass result"))
-            (do
-              (js-await (sleep 20))
-              (recur))))))))
+        result-str (js-await (eval-async-and-poll!
+                               (str "(def !epupp-dot-result (atom :pending))\n"
+                                    "(defn ^:async do-epupp-dot-save []\n"
+                                    "  (try\n"
+                                    "    (let [r (await (epupp.fs/save! " (pr-str test-code) "))]\n"
+                                    "      (reset! !epupp-dot-result {:resolved r}))\n"
+                                    "    (catch :default e\n"
+                                    "      (reset! !epupp-dot-result {:rejected (.-message e)}))))\n"
+                                    "(do-epupp-dot-save)\n"
+                                    ":setup-done")
+                               "(let [r @!epupp-dot-result]
+                                  (cond
+                                    (= r :pending) :not-settled
+                                    (:rejected r) (:rejected r)
+                                    :else :resolved))"
+                               3000))]
+    ;; Must be rejected: epupp.sneaky normalizes to epupp/sneaky
+    (-> (expect result-str)
+        (.toBe "Cannot create scripts in reserved namespace: epupp/"))))
 
 (defn- ^:async test_save_rejects_path_traversal_names []
   (let [init-result (js-await (eval-in-browser "(def !save-path-results (atom {}))"))]
@@ -174,47 +98,27 @@
                          " :epupp/auto-run-match \"https://example.com/*\"}\n"
                          "(ns path-traversal-test)")
           label-key (pr-str label)
-          setup-result (js-await (eval-in-browser
-                                  (str "(swap! !save-path-results assoc " label-key " :pending)\n"
-                                       "(defn ^:async do-save []\n"
-                                       "  (try\n"
-                                       "    (let [r (await (epupp.fs/save! " (pr-str test-code) "))]\n"
-                                       "      (swap! !save-path-results assoc " label-key " {:resolved r}))\n"
-                                       "    (catch :default e\n"
-                                       "      (swap! !save-path-results assoc " label-key " {:rejected (.-message e)}))))\n"
-                                       "(do-save)\n"
-                                       ":setup-done")))]
-      (-> (expect (.-success setup-result)) (.toBe true))
-
-      (let [start (.now js/Date)
-            timeout-ms 3000]
-        (loop []
-          (let [check-result (js-await (eval-in-browser
-                                        (str "(let [r (get @!save-path-results " label-key ")]
-                                               (cond
-                                                 (= r :pending) :not-settled
-                                                 (:rejected r) (:rejected r)
-                                                 :else :resolved))")))]
-            (if (and (.-success check-result)
-                     (seq (.-values check-result)))
-              (let [result-str (unquote-result (first (.-values check-result)))]
-                (if (= result-str ":not-settled")
-                  (if (> (- (.now js/Date) start) timeout-ms)
-                    (throw (js/Error. (str "Timeout waiting for save path traversal result: " label)))
-                    (do
-                      (js-await (sleep 20))
-                      (recur)))
-                  (let [expected (if (= label "leading slash")
-                                   "Script name cannot start with '/'"
-                                   "Script name cannot contain './' or '../'")]
-                    (-> (expect result-str)
-                        (.toBe expected)))))
-              (if (> (- (.now js/Date) start) timeout-ms)
-                (throw (js/Error. (str "Timeout waiting for save path traversal result: " label)))
-                (do
-                  (js-await (sleep 20))
-                  (recur))))))))))
-
+          result-str (js-await (eval-async-and-poll!
+                                 (str "(swap! !save-path-results assoc " label-key " :pending)\n"
+                                      "(defn ^:async do-save []\n"
+                                      "  (try\n"
+                                      "    (let [r (await (epupp.fs/save! " (pr-str test-code) "))]\n"
+                                      "      (swap! !save-path-results assoc " label-key " {:resolved r}))\n"
+                                      "    (catch :default e\n"
+                                      "      (swap! !save-path-results assoc " label-key " {:rejected (.-message e)}))))\n"
+                                      "(do-save)\n"
+                                      ":setup-done")
+                                 (str "(let [r (get @!save-path-results " label-key ")]
+                                         (cond
+                                           (= r :pending) :not-settled
+                                           (:rejected r) (:rejected r)
+                                           :else :resolved))")
+                                 3000))
+          expected (if (= label "leading slash")
+                     "Script name cannot start with '/'"
+                     "Script name cannot contain './' or '../'")]
+      (-> (expect result-str)
+          (.toBe expected)))))
 (.describe test "REPL FS: save - security"
            (fn []
              (.beforeAll test
