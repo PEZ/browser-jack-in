@@ -23,7 +23,7 @@
 
 (defn- assert-response!
   "Assert that a probe result entry has the expected response payload fields."
-  [results source msg-type expected-success expected-error-substring]
+  [results {:keys [source msg-type expected-success expected-error-substring]}]
   (let [source-results (aget results source)
         entry (when source-results (aget source-results msg-type))
         response (when entry (.-response entry))]
@@ -32,6 +32,39 @@
     (when expected-error-substring
       (-> (expect (.-error response))
           (.toContain expected-error-substring)))))
+
+(defn- assert-access-control! [results]
+  ;; epupp-page source: response-bearing messages
+  (assert-status! results "epupp-page" "list-scripts" "responded")
+  (assert-status! results "epupp-page" "get-script" "responded")
+  (assert-status! results "epupp-page" "save-script" "responded")
+  (assert-status! results "epupp-page" "rename-script" "responded")
+  (assert-status! results "epupp-page" "delete-script" "responded")
+  (assert-status! results "epupp-page" "load-manifest" "responded")
+  (assert-status! results "epupp-page" "get-sponsored-username" "responded")
+  (assert-status! results "epupp-page" "check-script-exists" "responded")
+  (assert-status! results "epupp-page" "web-installer-save-script" "responded")
+  ;; Response payload assertions for auth-gated messages
+  ;; save-script requires FS sync (not enabled in test) - should be rejected
+  (assert-response! results {:source "epupp-page" :msg-type "save-script"
+                             :expected-success false :expected-error-substring "FS"})
+  ;; Test page runs on localhost (whitelisted), so web-installer-save-script succeeds
+  (assert-response! results {:source "epupp-page" :msg-type "web-installer-save-script"
+                             :expected-success true :expected-error-substring nil})
+  ;; epupp-page source: fire-and-forget messages
+  (assert-status! results "epupp-page" "ws-connect" "no-response")
+  (assert-status! results "epupp-page" "ws-send" "no-response")
+  ;; epupp-page source: unregistered messages
+  (assert-status! results "epupp-page" "evil-message" "dropped")
+  (assert-status! results "epupp-page" "request-save-token" "dropped")
+  ;; epupp-userscript source: response-bearing messages
+  (assert-status! results "epupp-userscript" "save-script" "dropped")
+  (assert-status! results "epupp-userscript" "load-manifest" "dropped")
+  ;; epupp-userscript source: fire-and-forget messages
+  (assert-status! results "epupp-userscript" "sponsor-status" "no-response")
+  ;; epupp-userscript source: unregistered messages
+  (assert-status! results "epupp-userscript" "evil-message" "dropped")
+  (assert-status! results "epupp-userscript" "request-save-token" "dropped"))
 
 (defn- ^:async test_security_probe_bridge_access_control []
   (.setTimeout test 30000)
@@ -67,49 +100,10 @@
           (js-await (-> (expect (.locator page "body[data-security-probe]"))
                         (.toBeAttached #js {:timeout 30000})))
 
-          ;; Parse results
+          ;; Parse results and assert access control
           (let [result-json (js-await (.getAttribute (.locator page "body") "data-security-probe"))
                 results (js/JSON.parse result-json)]
-
-            ;; =========================================================
-            ;; epupp-page source: response-bearing messages
-            ;; =========================================================
-            (assert-status! results "epupp-page" "list-scripts" "responded")
-            (assert-status! results "epupp-page" "get-script" "responded")
-            (assert-status! results "epupp-page" "save-script" "responded")
-            (assert-status! results "epupp-page" "rename-script" "responded")
-            (assert-status! results "epupp-page" "delete-script" "responded")
-            (assert-status! results "epupp-page" "load-manifest" "responded")
-            (assert-status! results "epupp-page" "get-sponsored-username" "responded")
-            (assert-status! results "epupp-page" "check-script-exists" "responded")
-            (assert-status! results "epupp-page" "web-installer-save-script" "responded")
-
-            ;; Response payload assertions for auth-gated messages
-            ;; save-script requires FS sync (not enabled in test) - should be rejected
-            (assert-response! results "epupp-page" "save-script" false "FS")
-            ;; Test page runs on localhost (whitelisted), so web-installer-save-script succeeds
-            (assert-response! results "epupp-page" "web-installer-save-script" true nil)
-
-            ;; epupp-page source: fire-and-forget messages
-            (assert-status! results "epupp-page" "ws-connect" "no-response")
-            (assert-status! results "epupp-page" "ws-send" "no-response")
-
-            ;; epupp-page source: unregistered messages
-            (assert-status! results "epupp-page" "evil-message" "dropped")
-            (assert-status! results "epupp-page" "request-save-token" "dropped")
-
-            ;; =========================================================
-            ;; epupp-userscript source: response-bearing messages
-            ;; =========================================================
-            (assert-status! results "epupp-userscript" "save-script" "dropped")
-            (assert-status! results "epupp-userscript" "load-manifest" "dropped")
-
-            ;; epupp-userscript source: fire-and-forget messages
-            (assert-status! results "epupp-userscript" "sponsor-status" "no-response")
-
-            ;; epupp-userscript source: unregistered messages
-            (assert-status! results "epupp-userscript" "evil-message" "dropped")
-            (assert-status! results "epupp-userscript" "request-save-token" "dropped"))
+            (assert-access-control! results))
 
           (js-await (assert-no-errors! popup))
           (js-await (.close popup)))

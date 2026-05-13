@@ -317,16 +317,29 @@
   (flush)
   (= "y" (str/lower-case (str/trim (read-line)))))
 
+(defn- print-git-check! [clean?]
+  (println (str (if clean? "✅" "❌") " Git working directory is clean"))
+  (when-not clean?
+    (println "   Run 'git status' to see uncommitted changes")))
+
+(defn- print-changelog-check! [has-content? has-unreleased?]
+  (println (str (if has-content? "✅" "❌") " Changelog has Unreleased content"))
+  (when (and has-unreleased? (not has-content?))
+    (println "   The [Unreleased] section is empty")))
+
+(defn- print-unreleased-content! [has-content? unreleased-content]
+  (when has-content?
+    (println)
+    (println "📝 Unreleased changes:")
+    (doseq [line (str/split-lines unreleased-content)]
+      (println (str "   " line)))))
+
 (defn- print-publish-checks [{:keys [clean? on-master? branch has-content? has-unreleased?
                                      current-dev-version new-version dev-version
                                      issue-numbers unreleased-content]}]
-  (println (str (if clean? "✅" "❌") " Git working directory is clean"))
-  (when-not clean?
-    (println "   Run 'git status' to see uncommitted changes"))
+  (print-git-check! clean?)
   (println (str (if on-master? "✅" "❌") " On master branch (current: " branch ")"))
-  (println (str (if has-content? "✅" "❌") " Changelog has Unreleased content"))
-  (when (and has-unreleased? (not has-content?))
-    (println "   The [Unreleased] section is empty"))
+  (print-changelog-check! has-content? has-unreleased?)
   (println)
   (println "📋 Release details:")
   (println (str "   Current dev version: " current-dev-version))
@@ -334,11 +347,7 @@
   (println (str "   Next dev version: " dev-version))
   (when (seq issue-numbers)
     (println (str "   Fixes issues: " (str/join ", " (map #(str "#" %) issue-numbers)))))
-  (when has-content?
-    (println)
-    (println "📝 Unreleased changes:")
-    (doseq [line (str/split-lines unreleased-content)]
-      (println (str "   " line))))
+  (print-unreleased-content! has-content? unreleased-content)
   (println))
 
 (defn- execute-release! [new-version dev-version unreleased-content issue-numbers]

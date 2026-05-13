@@ -15,6 +15,13 @@
                                          enable-script-via-popup set-ext-dep-cache!
                                          make-ext-dep-cache poll-for-window-property!]]))
 
+(defn- ^:async get-event-summary [popup]
+  (let [response (js-await (send-runtime-message popup "e2e/get-test-events" nil))
+        events (when response (.-events response))]
+    (if (and events (pos? (.-length events)))
+      (.join (.map events (fn [e] (str (.-event e) " " (js/JSON.stringify (.-data e))))) " | ")
+      "NONE")))
+
 (defn- ^:async test_consumer_loads_ext_dep_from_cache []
   (let [context (js-await (launch-browser))
         ext-id (js-await (get-extension-id context))]
@@ -45,12 +52,9 @@
           (let [result (try
                          (js-await (poll-for-window-property! page "__EPUPP_EXT_DEP_RESULT" 5000))
                          (catch :default _e
-                           (let [response (js-await (send-runtime-message popup "e2e/get-test-events" nil))
-                                 events (when response (.-events response))
-                                 event-summary (when (and events (pos? (.-length events)))
-                                                 (.map events (fn [e] (str (.-event e) " " (js/JSON.stringify (.-data e))))))]
+                           (let [event-summary (js-await (get-event-summary popup))]
                              (throw (js/Error. (str "Timeout waiting for __EPUPP_EXT_DEP_RESULT. Events: "
-                                                    (if event-summary (.join event-summary " | ") "NONE")))))))]
+                                                    event-summary))))))]
             (js-await (-> (expect result) (.toBe "Hello from ext-dep, E2E!"))))
 
           (js-await (assert-no-errors! popup))

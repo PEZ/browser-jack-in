@@ -98,6 +98,15 @@
 ;; Installer Setup
 ;; =============================================================================
 
+(defn- installer-has-code? [storage-data]
+  (let [scripts (.-scripts storage-data)
+        installer (when scripts
+                    (.find scripts (fn [s]
+                                     (= (.-id s) "epupp-builtin-web-userscript-installer"))))]
+    (and installer
+         (.-code installer)
+         (pos? (.-length (.-code installer))))))
+
 (defn- ^:async wait-for-installer-in-storage
   "Poll until web userscript installer exists in storage with non-empty code."
   [popup timeout-ms]
@@ -107,21 +116,18 @@
                                               (fn []
                                                 (js/Promise. (fn [resolve]
                                                                (.get js/chrome.storage.local #js ["scripts"]
-                                                                     (fn [result] (resolve result))))))))
-            scripts (.-scripts storage-data)
-            installer (when scripts
-                        (.find scripts (fn [s]
-                                         (= (.-id s) "epupp-builtin-web-userscript-installer"))))
-            has-code (and installer
-                          (.-code installer)
-                          (pos? (.-length (.-code installer))))]
-        (if has-code
+                                                                     (fn [result] (resolve result))))))))]
+        (cond
+          (installer-has-code? storage-data)
           (js/console.log "Web Userscript Installer found in storage with code")
-          (if (> (- (.now js/Date) start) timeout-ms)
-            (throw (js/Error. "Timeout waiting for web userscript installer with code"))
-            (do
-              (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 20))))
-              (recur))))))))
+
+          (> (- (.now js/Date) start) timeout-ms)
+          (throw (js/Error. "Timeout waiting for web userscript installer with code"))
+
+          :else
+          (do
+            (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 20))))
+            (recur)))))))
 
 (defn ^:async setup-installer!+
   "Set up web installer for testing: clear storage, wait for built-in to be

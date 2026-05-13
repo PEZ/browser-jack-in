@@ -48,6 +48,14 @@
                    (fn [response] (resolve response))))))
              #js {:tabId tab-id :wsPort ws-port}))
 
+(defn- success? [result]
+  (and result (.-success result)))
+
+(defn- exit-on-failure! [result label]
+  (when-not (success? result)
+    (js/console.log (str "ERROR: " label ":") (or (.-error result) "unknown"))
+    (js/process.exit 1)))
+
 (defn ^:async main []
   (js/console.log "Extension path:" extension-path)
   (js/console.log "Test page URL:" test-page-url)
@@ -86,21 +94,13 @@
         ;; Find test page tab
         (let [find-result (js-await (find-tab-id bg-page "http://localhost:*/*"))]
           (js/console.log "Find tab result:" (js/JSON.stringify find-result))
-
-          (when-not (and find-result (.-success find-result))
-            (js/console.log "ERROR: Could not find test page tab:"
-                            (or (.-error find-result) "unknown"))
-            (js/process.exit 1))
+          (exit-on-failure! find-result "Could not find test page tab")
 
           (let [tab-id (.-tabId find-result)
                 connect-result (js-await (connect-tab bg-page tab-id ws-port))]
             (js/console.log "Found test page tab ID:" tab-id)
             (js/console.log "Connect result:" (js/JSON.stringify connect-result))
-
-            (when-not (and connect-result (.-success connect-result))
-              (js/console.log "ERROR: Connection failed:"
-                              (or (.-error connect-result) "unknown"))
-              (js/process.exit 1))
+            (exit-on-failure! connect-result "Connection failed")
 
             ;; Close helper page
             (js-await (.close bg-page))

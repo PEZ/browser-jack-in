@@ -5,6 +5,27 @@
 
 (def ^:private !context (atom nil))
 
+(defn- ^:async assert-save-rejected! [atom-name timeout-msg]
+  (let [start (.now js/Date)
+        timeout-ms 500]
+    (loop []
+      (let [check-result (js-await (eval-in-browser (str "(pr-str @" atom-name ")")))]
+        (cond
+          (and (.-success check-result)
+               (seq (.-values check-result))
+               (not= (first (.-values check-result)) ":pending"))
+          (let [result-str (first (.-values check-result))]
+            (-> (expect (.includes result-str "rejected")) (.toBe true))
+            (-> (expect (.includes result-str "reserved namespace")) (.toBe true)))
+
+          (> (- (.now js/Date) start) timeout-ms)
+          (throw (js/Error. timeout-msg))
+
+          :else
+          (do
+            (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 20))))
+            (recur)))))))
+
 (defn- ^:async test_rejects_epupp_prefix_script []
   ;; Try to save a script with epupp/ prefix - should reject
   (let [test-code "{:epupp/script-name \"epupp/test.cljs\"
@@ -22,25 +43,8 @@
                                      (do-it)
                                      :setup-done")))]
     (-> (expect (.-success setup-result)) (.toBe true)))
-
-  (let [start (.now js/Date)
-        timeout-ms 500]
-    (loop []
-      (let [check-result (js-await (eval-in-browser "(pr-str @!reserved-ns-result)"))]
-        (if (and (.-success check-result)
-                 (seq (.-values check-result))
-                 (not= (first (.-values check-result)) ":pending"))
-          (let [result-str (first (.-values check-result))]
-            ;; Should be rejected with reserved namespace error
-            (-> (expect (.includes result-str "rejected"))
-                (.toBe true))
-            (-> (expect (.includes result-str "reserved namespace"))
-                (.toBe true)))
-          (if (> (- (.now js/Date) start) timeout-ms)
-            (throw (js/Error. "Timeout waiting for save rejection"))
-            (do
-              (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 20))))
-              (recur))))))))
+  (js-await (assert-save-rejected! "!reserved-ns-result"
+                                   "Timeout waiting for save rejection")))
 
 (defn- ^:async test_rejects_epupp_deep_nested_prefix []
   ;; Try to save a script with epupp/built-in/ prefix (deep nesting) - should reject
@@ -59,25 +63,8 @@
                                      (do-it)
                                      :setup-done")))]
     (-> (expect (.-success setup-result)) (.toBe true)))
-
-  (let [start (.now js/Date)
-        timeout-ms 500]
-    (loop []
-      (let [check-result (js-await (eval-in-browser "(pr-str @!deep-nested-result)"))]
-        (if (and (.-success check-result)
-                 (seq (.-values check-result))
-                 (not= (first (.-values check-result)) ":pending"))
-          (let [result-str (first (.-values check-result))]
-            ;; Should be rejected with reserved namespace error
-            (-> (expect (.includes result-str "rejected"))
-                (.toBe true))
-            (-> (expect (.includes result-str "reserved namespace"))
-                (.toBe true)))
-          (if (> (- (.now js/Date) start) timeout-ms)
-            (throw (js/Error. "Timeout waiting for deep nested save rejection"))
-            (do
-              (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 20))))
-              (recur))))))))
+  (js-await (assert-save-rejected! "!deep-nested-result"
+                                   "Timeout waiting for deep nested save rejection")))
 
 (defn- ^:async test_rejects_epupp_prefix_even_with_force []
   ;; Try with force flag - should still reject
@@ -95,25 +82,8 @@
                                      (do-it)
                                      :setup-done")))]
     (-> (expect (.-success setup-result)) (.toBe true)))
-
-  (let [start (.now js/Date)
-        timeout-ms 500]
-    (loop []
-      (let [check-result (js-await (eval-in-browser "(pr-str @!force-reserved-result)"))]
-        (if (and (.-success check-result)
-                 (seq (.-values check-result))
-                 (not= (first (.-values check-result)) ":pending"))
-          (let [result-str (first (.-values check-result))]
-            ;; Should still be rejected even with force
-            (-> (expect (.includes result-str "rejected"))
-                (.toBe true))
-            (-> (expect (.includes result-str "reserved namespace"))
-                (.toBe true)))
-          (if (> (- (.now js/Date) start) timeout-ms)
-            (throw (js/Error. "Timeout waiting for force save rejection"))
-            (do
-              (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 20))))
-              (recur))))))))
+  (js-await (assert-save-rejected! "!force-reserved-result"
+                                   "Timeout waiting for force save rejection")))
 
 (.describe test "REPL FS: namespace reservation"
            (fn []
