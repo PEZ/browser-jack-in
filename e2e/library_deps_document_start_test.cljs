@@ -167,33 +167,36 @@
 ;; Test: Transitive chain at document-start (A -> B -> consumer)
 ;; =============================================================================
 
+(defn- ^:async save-chain-scripts!
+  "Save the A->B->consumer library chain scripts for the transitive chain test."
+  [context ext-id]
+  ;; Library A: no deps
+  (let [lib-a-code (code-with-manifest
+                    {:name "test/ds_chain_a.cljs"
+                     :code "(ns test.ds-chain-a)\n\n(set! (.-__DS_CHAIN_A js/window) true)"})]
+    (js-await (save-script-via-panel context ext-id lib-a-code)))
+  ;; Library B: depends on A
+  (let [lib-b-code (code-with-manifest
+                    {:name "test/ds_chain_b.cljs"
+                     :inject ["epupp://test/ds_chain_a.cljs"]
+                     :code "(ns test.ds-chain-b\n  (:require [test.ds-chain-a]))\n\n(set! (.-__DS_CHAIN_B js/window) true)"})]
+    (js-await (save-script-via-panel context ext-id lib-b-code)))
+  ;; Consumer: depends on B, document-start timing
+  (let [consumer-code (code-with-manifest
+                       {:name "test/ds_chain_consumer.cljs"
+                        :match "http://localhost:18080/*"
+                        :run-at "document-start"
+                        :inject ["epupp://test/ds_chain_b.cljs"]
+                        :code "(ns test.ds-chain-consumer\n  (:require [test.ds-chain-b]))\n\n(set! (.-__DS_CHAIN_CONSUMER js/window) true)"})]
+    (js-await (save-script-via-panel context ext-id consumer-code))))
+
 (defn- ^:async test_document_start_transitive_chain []
   (let [context (js-await (launch-browser))
         ext-id (js-await (get-extension-id context))
         bg-logs (setup-bg-console-capture context)]
     (try
       ;; === PHASE 1: Save chain A -> B -> consumer ===
-      ;; Library A: no deps
-      (let [lib-a-code (code-with-manifest
-                        {:name "test/ds_chain_a.cljs"
-                         :code "(ns test.ds-chain-a)\n\n(set! (.-__DS_CHAIN_A js/window) true)"})]
-        (js-await (save-script-via-panel context ext-id lib-a-code)))
-
-      ;; Library B: depends on A
-      (let [lib-b-code (code-with-manifest
-                        {:name "test/ds_chain_b.cljs"
-                         :inject ["epupp://test/ds_chain_a.cljs"]
-                         :code "(ns test.ds-chain-b\n  (:require [test.ds-chain-a]))\n\n(set! (.-__DS_CHAIN_B js/window) true)"})]
-        (js-await (save-script-via-panel context ext-id lib-b-code)))
-
-      ;; Consumer: depends on B, document-start timing
-      (let [consumer-code (code-with-manifest
-                           {:name "test/ds_chain_consumer.cljs"
-                            :match "http://localhost:18080/*"
-                            :run-at "document-start"
-                            :inject ["epupp://test/ds_chain_b.cljs"]
-                            :code "(ns test.ds-chain-consumer\n  (:require [test.ds-chain-b]))\n\n(set! (.-__DS_CHAIN_CONSUMER js/window) true)"})]
-        (js-await (save-script-via-panel context ext-id consumer-code)))
+      (js-await (save-chain-scripts! context ext-id))
 
       ;; === PHASE 2: Enable consumer and wait for registration ===
       (js-await (enable-script-via-popup context ext-id "test/ds_chain_consumer.cljs"))

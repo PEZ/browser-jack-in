@@ -170,6 +170,21 @@
 ;; Test: Reagent libraries actually injected into DOM
 ;; =============================================================================
 
+(defn- ^:async enable-script-for-inject-test!
+  "Enable a named script via popup (with test URL init script) and clear test events."
+  [context ext-id script-name]
+  (let [popup (js-await (create-popup-page context ext-id))]
+    (js-await (.addInitScript popup "window.__scittle_tamper_test_url = 'http://localhost:18080/basic.html';"))
+    (js-await (.reload popup))
+    (js-await (wait-for-popup-ready popup))
+    (let [script-item (.locator popup (str ".script-item:has-text(\"" script-name "\")"))
+          checkbox (.locator script-item "input[type='checkbox']")]
+      (js-await (-> (expect script-item) (.toBeVisible)))
+      (when-not (js-await (.isChecked checkbox))
+        (js-await (.click checkbox))))
+    (js-await (clear-test-events! popup))
+    (js-await (.close popup))))
+
 (defn- ^:async test_reagent_library_files_injected []
   (let [context (js-await (launch-browser))
         ext-id (js-await (get-extension-id context))]
@@ -185,21 +200,8 @@
         (js-await (wait-for-save-status panel "Created"))
         (js-await (.close panel)))
 
-      ;; Enable script via popup
-      (let [popup (js-await (create-popup-page context ext-id))]
-        (js-await (.addInitScript popup "window.__scittle_tamper_test_url = 'http://localhost:18080/basic.html';"))
-        (js-await (.reload popup))
-        (js-await (wait-for-popup-ready popup))
-
-        (let [script-item (.locator popup ".script-item:has-text(\"reagent_dom_test.cljs\")")
-              checkbox (.locator script-item "input[type='checkbox']")]
-          (js-await (-> (expect script-item) (.toBeVisible)))
-          (when-not (js-await (.isChecked checkbox))
-            (js-await (.click checkbox))))
-
-        ;; Clear test events before navigation
-        (js-await (clear-test-events! popup))
-        (js-await (.close popup)))
+      ;; Enable script via popup and clear events before navigation
+      (js-await (enable-script-for-inject-test! context ext-id "reagent_dom_test.cljs"))
 
       ;; Navigate to trigger injection
       (let [page (js-await (.newPage context))]

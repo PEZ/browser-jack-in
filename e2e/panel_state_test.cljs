@@ -53,32 +53,34 @@
         (js-await (.close context))))))
 
 
+(defn- ^:async save-persisted-test-script!
+  "Create, fill, save, and close a persisted test script via the panel."
+  [context ext-id]
+  (let [panel (js-await (create-panel-page context ext-id))
+        textarea (.locator panel "#code-area")
+        save-btn (.locator panel "button.btn-save")]
+    (js-await (clear-storage panel))
+    (js-await (.reload panel))
+    (js-await (wait-for-panel-ready panel))
+    (let [test-code (code-with-manifest {:name "Persisted Script"
+                                         :match "*://persist.example.com/*"
+                                         :description "Test persistence"
+                                         :code "(println \"persisted\")"})]
+      (js-await (.fill textarea test-code)))
+    (let [debug-info (.locator panel "#debug-info")]
+      (js-await (-> (expect debug-info) (.toBeVisible #js {:timeout 3000})))
+      (let [debug-text (js-await (.textContent debug-info))]
+        (println "=== PHASE 1: After fill ===" debug-text)))
+    (js-await (.click save-btn))
+    (js-await (wait-for-save-status panel "Created"))
+    (js-await (wait-for-panel-state-saved panel "(println \"persisted\")"))
+    (js-await (.close panel))))
+
 (defn- ^:async test_panel_restores_saved_state_and_parses_manifest []
   (let [context (js-await (launch-browser))
         ext-id (js-await (get-extension-id context))]
     (try
-      (let [panel (js-await (create-panel-page context ext-id))
-            textarea (.locator panel "#code-area")
-            save-btn (.locator panel "button.btn-save")]
-        (js-await (clear-storage panel))
-        (js-await (.reload panel))
-        (js-await (wait-for-panel-ready panel))
-
-        (let [test-code (code-with-manifest {:name "Persisted Script"
-                                             :match "*://persist.example.com/*"
-                                             :description "Test persistence"
-                                             :code "(println \"persisted\")"})]
-          (js-await (.fill textarea test-code)))
-
-        (let [debug-info (.locator panel "#debug-info")]
-          (js-await (-> (expect debug-info) (.toBeVisible #js {:timeout 3000})))
-          (let [debug-text (js-await (.textContent debug-info))]
-            (println "=== PHASE 1: After fill ===" debug-text)))
-
-        (js-await (.click save-btn))
-        (js-await (wait-for-save-status panel "Created"))
-        (js-await (wait-for-panel-state-saved panel "(println \"persisted\")"))
-        (js-await (.close panel)))
+      (js-await (save-persisted-test-script! context ext-id))
 
       (let [panel (js-await (create-panel-page context ext-id))
             textarea (.locator panel "#code-area")

@@ -68,6 +68,53 @@
              "(pr-str @!mv-force-cleanup)"
              3000)))
 
+(defn- ^:async save-force-script-in-browser!
+  "Save a script via REPL eval and verify it was saved successfully."
+  [atom-name code expected-name label]
+  (let [result (js-await (eval-async-and-poll!
+                          (str "(def " atom-name " (atom :pending))\n"
+                               "(defn ^:async do-it [] (try (reset! " atom-name " (pr-str (await (epupp.fs/save! " (pr-str code) " {:fs/force? true})))) (catch :default e (reset! " atom-name " (str \"ERROR: \" (.-message e))))))\n"
+                               "(do-it)\n"
+                               ":started")
+                          (str "(pr-str @" atom-name ")")
+                          3000))]
+    (when (.includes result "ERROR:")
+      (throw (js/Error. (str label " failed: " result))))
+    (-> (expect (.includes result expected-name)) (.toBe true))))
+
+(defn- ^:async verify-mv-overwrite-state!
+  [source-name target-name]
+  (let [ls-result (js-await (eval-async-and-poll!
+                             "(def !mv-force-overwrite-ls (atom :pending))\n                                (defn ^:async do-it [] (reset! !mv-force-overwrite-ls (await (epupp.fs/ls))))\n                                (do-it)\n                                :setup-done"
+                             "(pr-str @!mv-force-overwrite-ls)"
+                             3000))
+        escaped (.replace target-name "." "\\.")
+        matches (.match ls-result (js/RegExp. escaped "g"))
+        target-count (if matches (.-length matches) 0)
+        target-code (js-await (eval-async-and-poll!
+                               (str "(def !mv-force-overwrite-target-code (atom :pending))\n"
+                                    "(defn ^:async do-it [] (reset! !mv-force-overwrite-target-code (await (epupp.fs/show \"" target-name "\"))))\n"
+                                    "(do-it)\n"
+                                    ":setup-done")
+                               "@!mv-force-overwrite-target-code"
+                               3000))
+        source-code (js-await (eval-async-and-poll!
+                               (str "(def !mv-force-overwrite-source-code (atom :pending))\n"
+                                    "(defn ^:async do-it [] (reset! !mv-force-overwrite-source-code (await (epupp.fs/show \"" source-name "\"))))\n"
+                                    "(do-it)\n"
+                                    ":setup-done")
+                               "@!mv-force-overwrite-source-code"
+                               3000))]
+    (-> (expect target-count) (.toBe 1))
+    (-> (expect (.includes ls-result target-name)) (.toBe true))
+    (-> (expect (.includes ls-result source-name)) (.toBe false))
+    (-> (expect (.includes target-code "source-description")) (.toBe true))
+    (-> (expect (.includes target-code "mv-force-overwrite-source-marker")) (.toBe true))
+    (-> (expect (.includes target-code target-name)) (.toBe true))
+    (-> (expect (.includes target-code "target-description")) (.toBe false))
+    (-> (expect (.includes target-code "mv-force-overwrite-target-marker")) (.toBe false))
+    (-> (expect source-code) (.toBe "nil"))))
+
 (defn- ^:async test_mv_with_force_overwrites_existing_target []
   (let [source-script-name "mv-force-overwrite-source"
         source-name "mv_force_overwrite_source.cljs"
@@ -99,27 +146,8 @@
     (js-await (eval-async-and-poll! cleanup-code "(pr-str @!mv-force-overwrite-cleanup)" 3000))
 
     ;; Create two scripts with different names and different content - save sequentially to avoid races
-    (let [result (js-await (eval-async-and-poll!
-                            (str "(def !mv-force-overwrite-save-source (atom :pending))\n"
-                                 "(defn ^:async do-it [] (try (reset! !mv-force-overwrite-save-source (pr-str (await (epupp.fs/save! " (pr-str source-code) " {:fs/force? true})))) (catch :default e (reset! !mv-force-overwrite-save-source (str \"ERROR: \" (.-message e))))))\n"
-                                 "(do-it)\n"
-                                 ":started")
-                            "(pr-str @!mv-force-overwrite-save-source)"
-                            3000))]
-      (when (.includes result "ERROR:")
-        (throw (js/Error. (str "Source save failed: " result))))
-      (-> (expect (.includes result source-name)) (.toBe true)))
-
-    (let [result (js-await (eval-async-and-poll!
-                            (str "(def !mv-force-overwrite-save-target (atom :pending))\n"
-                                 "(defn ^:async do-it [] (try (reset! !mv-force-overwrite-save-target (pr-str (await (epupp.fs/save! " (pr-str target-code) " {:fs/force? true})))) (catch :default e (reset! !mv-force-overwrite-save-target (str \"ERROR: \" (.-message e))))))\n"
-                                 "(do-it)\n"
-                                 ":started")
-                            "(pr-str @!mv-force-overwrite-save-target)"
-                            3000))]
-      (when (.includes result "ERROR:")
-        (throw (js/Error. (str "Target save failed: " result))))
-      (-> (expect (.includes result target-name)) (.toBe true)))
+    (js-await (save-force-script-in-browser! "!mv-force-overwrite-save-source" source-code source-name "Source save"))
+    (js-await (save-force-script-in-browser! "!mv-force-overwrite-save-target" target-code target-name "Target save"))
 
     (let [result (js-await (eval-async-and-poll!
                             (str "(def !mv-force-overwrite-result (atom :pending))\n"
@@ -130,37 +158,7 @@
                             3000))]
       (-> (expect result) (.toBe expected-mv-result)))
 
-    (let [result (js-await (eval-async-and-poll!
-                            "(def !mv-force-overwrite-ls (atom :pending))\n                                (defn ^:async do-it [] (reset! !mv-force-overwrite-ls (await (epupp.fs/ls))))\n                                (do-it)\n                                :setup-done"
-                            "(pr-str @!mv-force-overwrite-ls)"
-                            3000))
-          matches (.match result (js/RegExp. "mv_force_overwrite_target\\.cljs" "g"))
-          target-count (if matches (.-length matches) 0)]
-      (-> (expect target-count) (.toBe 1))
-      (-> (expect (.includes result target-name)) (.toBe true))
-      (-> (expect (.includes result source-name)) (.toBe false)))
-
-    (let [result (js-await (eval-async-and-poll!
-                            (str "(def !mv-force-overwrite-target-code (atom :pending))\n"
-                                 "(defn ^:async do-it [] (reset! !mv-force-overwrite-target-code (await (epupp.fs/show \"" target-name "\"))))\n"
-                                 "(do-it)\n"
-                                 ":setup-done")
-                            "@!mv-force-overwrite-target-code"
-                            3000))]
-      (-> (expect (.includes result source-description)) (.toBe true))
-      (-> (expect (.includes result source-marker)) (.toBe true))
-      (-> (expect (.includes result target-name)) (.toBe true))
-      (-> (expect (.includes result target-description)) (.toBe false))
-      (-> (expect (.includes result target-marker)) (.toBe false)))
-
-    (let [result (js-await (eval-async-and-poll!
-                            (str "(def !mv-force-overwrite-source-code (atom :pending))\n"
-                                 "(defn ^:async do-it [] (reset! !mv-force-overwrite-source-code (await (epupp.fs/show \"" source-name "\"))))\n"
-                                 "(do-it)\n"
-                                 ":setup-done")
-                            "@!mv-force-overwrite-source-code"
-                            3000))]
-      (-> (expect result) (.toBe "nil")))
+    (js-await (verify-mv-overwrite-state! source-name target-name))
 
     ;; Best-effort cleanup to keep the suite isolated
     (js-await (eval-async-and-poll! cleanup-code "(pr-str @!mv-force-overwrite-cleanup)" 3000))))
