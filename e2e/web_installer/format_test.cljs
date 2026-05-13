@@ -30,221 +30,114 @@
           (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 25))))
           (recur (dec remaining)))))))
 
-(defn- ^:async test_github_style_block []
+(defn- ^:async run-button-placement-test!+
+  "Run shared button placement test: browser setup, install via install-fn!, verify in popup."
+  [install-fn! script-name]
   (let [context (js-await (launch-browser))
         ext-id (js-await (get-extension-id context))]
     (try
-      ;; Setup installer
       (let [popup (js-await (h/setup-installer!+ context ext-id))]
         (js-await (.close popup)))
-
-      ;; Navigate to mock gist page
       (let [page (js-await (h/navigate-to-mock-gist context))]
-        ;; Verify GitHub-style table button is in .file-actions
-        (let [install-btn (.locator page "#github-installable-gist .file-actions [data-e2e-install-state=\"install\"]")]
-          (js-await (-> (expect install-btn)
-                        (.toBeVisible #js {:timeout 2000})))
-          (js/console.log "Install button found in .file-actions container")
-
-          ;; Verify non-installable GitHub block has NO button
-          (js-await (h/assert-no-install-button page "#github-non-installable .file-actions" "install" 500))
-          (js/console.log "Confirmed: non-installable GitHub block has no Install button")
-
-          ;; Install and verify
-          (js-await (.click install-btn))
-
-          (let [confirm-btn (.locator page "#epupp-confirm")]
-            (js-await (-> (expect confirm-btn)
-                          (.toBeVisible #js {:timeout 1000})))
-            (js-await (.click confirm-btn)))
-
-          (js-await (h/wait-for-install-button page "#github-installable-gist .file-actions" "installed" 1000))
-          (js/console.log "GitHub-style script installed successfully"))
-
+        (js-await (install-fn! page))
         (js-await (.close page)))
-
-      ;; Verify in popup
       (let [popup (js-await (create-popup-page context ext-id))]
         (js-await (wait-for-popup-ready popup))
-
-        (let [script-item (.locator popup ".script-item:has-text(\"github_test_script.cljs\")")]
-          (js-await (-> (expect script-item)
-                        (.toBeVisible #js {:timeout 1000}))))
-
+        (let [script-item (.locator popup (str ".script-item:has-text(\"" script-name "\")"))]
+          (js-await (-> (expect script-item) (.toBeVisible #js {:timeout 1000}))))
         (js-await (assert-no-errors! popup))
         (js-await (.close popup)))
+      (finally
+        (js-await (.close context))))))
 
+(defn- ^:async install-github-style-script! [page]
+  (let [install-btn (.locator page "#github-installable-gist .file-actions [data-e2e-install-state=\"install\"]")]
+    (js-await (-> (expect install-btn) (.toBeVisible #js {:timeout 2000})))
+    (js/console.log "Install button found in .file-actions container")
+    (js-await (h/assert-no-install-button page "#github-non-installable .file-actions" "install" 500))
+    (js/console.log "Confirmed: non-installable GitHub block has no Install button")
+    (js-await (.click install-btn))
+    (let [confirm-btn (.locator page "#epupp-confirm")]
+      (js-await (-> (expect confirm-btn) (.toBeVisible #js {:timeout 1000})))
+      (js-await (.click confirm-btn)))
+    (js-await (h/wait-for-install-button page "#github-installable-gist .file-actions" "installed" 1000))
+    (js/console.log "GitHub-style script installed successfully")))
+
+(defn- ^:async install-gitlab-script! [page]
+  (js-await (h/wait-for-install-button page "#gitlab-installable-snippet .file-actions" "install" 2000))
+  (js/console.log "Install button found in GitLab .file-actions container")
+  (js-await (h/assert-no-install-button page "#gitlab-non-installable .file-actions" "install" 500))
+  (js/console.log "Confirmed: non-installable GitLab block has no Install button")
+  (js-await (h/click-install-and-confirm!+ page "#gitlab-installable-snippet .file-actions" "installed"))
+  (js/console.log "GitLab-style script installed successfully"))
+
+(defn- ^:async install-github-repo-script! [page]
+  (js-await (h/wait-for-install-button page "#github-repo-installable" "install" 2000))
+  (js/console.log "Install button found in GitHub repo container")
+  (js-await (h/click-install-and-confirm!+ page "#github-repo-installable" "installed"))
+  (js/console.log "GitHub repo script installed successfully"))
+
+(defn- ^:async test_github_style_block []
+  (js-await (run-button-placement-test!+ install-github-style-script! "github_test_script.cljs")))
+
+(defn- ^:async run-library-copy-action-test!+
+  "Run shared library copy action test: setup, navigate, copy URL, install, verify popup."
+  [library-container non-installable-container expected-url script-name]
+  (let [context (js-await (launch-browser))
+        ext-id (js-await (get-extension-id context))]
+    (try
+      (let [popup (js-await (h/setup-installer!+ context ext-id))]
+        (js-await (.close popup)))
+      (let [page (js-await (h/navigate-to-mock-gist context))]
+        (js-await (install-clipboard-spy! page))
+        (let [copy-btn (js-await (h/wait-for-installer-action page
+                                                              library-container
+                                                              {:action "copy-library-url"}
+                                                              2000))]
+          (js-await (-> (expect copy-btn)
+                        (.toHaveAttribute "title" "Copy library URL")))
+          (js-await (h/assert-no-installer-action page
+                                                  non-installable-container
+                                                  {:action "copy-library-url"}
+                                                  500))
+          (js-await (.click copy-btn))
+          (let [copied-text (js-await (wait-for-copied-text!+ page))]
+            (js-await (-> (expect copied-text)
+                          (.toBe expected-url))))
+          (js-await (h/click-install-and-confirm!+
+                     page
+                     library-container
+                     "installed"))
+          (js-await (.close page))))
+      (let [popup (js-await (create-popup-page context ext-id))]
+        (js-await (wait-for-popup-ready popup))
+        (let [script-item (.locator popup (str ".script-item:has-text(\"" script-name "\")"))]
+          (js-await (-> (expect script-item)
+                        (.toBeVisible #js {:timeout 1000}))))
+        (js-await (assert-no-errors! popup))
+        (js-await (.close popup)))
       (finally
         (js-await (.close context))))))
 
 (defn- ^:async test_gist_library_copy_action []
-  (let [context (js-await (launch-browser))
-        ext-id (js-await (get-extension-id context))]
-    (try
-      (let [popup (js-await (h/setup-installer!+ context ext-id))]
-        (js-await (.close popup)))
-
-      (let [page (js-await (h/navigate-to-mock-gist context))]
-        (js-await (install-clipboard-spy! page))
-
-        (let [copy-btn (js-await (h/wait-for-installer-action page
-                                                              "#gist-library-gist"
-                                                              {:action "copy-library-url"}
-                                                              2000))]
-          (js-await (-> (expect copy-btn)
-                        (.toHaveAttribute "title" "Copy library URL")))
-
-          (js-await (h/assert-no-installer-action page
-                                                  "#installable-gist"
-                                                  {:action "copy-library-url"}
-                                                  500))
-
-          (js-await (.click copy-btn))
-
-          (let [copied-text (js-await (wait-for-copied-text!+ page))]
-            (js-await (-> (expect copied-text)
-                          (.toBe expected-gist-library-copy-url))))
-
-          (js-await (h/click-install-and-confirm!+
-                     page
-                     "#gist-library-gist"
-                     "installed"))
-
-          (js-await (.close page))))
-
-      (let [popup (js-await (create-popup-page context ext-id))]
-        (js-await (wait-for-popup-ready popup))
-
-        (let [script-item (.locator popup ".script-item:has-text(\"gist_library.cljs\")")]
-          (js-await (-> (expect script-item)
-                        (.toBeVisible #js {:timeout 1000}))))
-
-        (js-await (assert-no-errors! popup))
-        (js-await (.close popup)))
-
-      (finally
-        (js-await (.close context))))))
+  (js-await (run-library-copy-action-test!+
+             "#gist-library-gist"
+             "#installable-gist"
+             expected-gist-library-copy-url
+             "gist_library.cljs")))
 
 (defn- ^:async test_github_repo_library_copy_action []
-  (let [context (js-await (launch-browser))
-        ext-id (js-await (get-extension-id context))]
-    (try
-      (let [popup (js-await (h/setup-installer!+ context ext-id))]
-        (js-await (.close popup)))
-
-      (let [page (js-await (h/navigate-to-mock-gist context))]
-        (js-await (install-clipboard-spy! page))
-
-        (let [copy-btn (js-await (h/wait-for-installer-action page
-                                                              "#github-repo-library"
-                                                              {:action "copy-library-url"}
-                                                              2000))]
-          (js-await (-> (expect copy-btn)
-                        (.toHaveAttribute "title" "Copy library URL")))
-
-          (js-await (h/assert-no-installer-action page
-                                                  "#github-repo-installable"
-                                                  {:action "copy-library-url"}
-                                                  500))
-
-          (js-await (.click copy-btn))
-
-          (let [copied-text (js-await (wait-for-copied-text!+ page))]
-            (js-await (-> (expect copied-text)
-                          (.toBe expected-repo-library-copy-url))))
-
-          (js-await (h/click-install-and-confirm!+
-                     page
-                     "#github-repo-library"
-                     "installed"))
-
-          (js-await (.close page))))
-
-      (let [popup (js-await (create-popup-page context ext-id))]
-        (js-await (wait-for-popup-ready popup))
-
-        (let [script-item (.locator popup ".script-item:has-text(\"repo_library.cljs\")")]
-          (js-await (-> (expect script-item)
-                        (.toBeVisible #js {:timeout 1000}))))
-
-        (js-await (assert-no-errors! popup))
-        (js-await (.close popup)))
-
-      (finally
-        (js-await (.close context))))))
+  (js-await (run-library-copy-action-test!+
+             "#github-repo-library"
+             "#github-repo-installable"
+             expected-repo-library-copy-url
+             "repo_library.cljs")))
 
 (defn- ^:async test_gitlab_button_placement []
-  (let [context (js-await (launch-browser))
-        ext-id (js-await (get-extension-id context))]
-    (try
-      ;; Setup installer
-      (let [popup (js-await (h/setup-installer!+ context ext-id))]
-        (js-await (.close popup)))
-
-      ;; Navigate to mock gist page
-      (let [page (js-await (h/navigate-to-mock-gist context))]
-        ;; Verify GitLab-style snippet button is in .file-actions
-        (js-await (h/wait-for-install-button page "#gitlab-installable-snippet .file-actions" "install" 2000))
-        (js/console.log "Install button found in GitLab .file-actions container")
-
-        ;; Verify non-installable GitLab block has NO button
-        (js-await (h/assert-no-install-button page "#gitlab-non-installable .file-actions" "install" 500))
-        (js/console.log "Confirmed: non-installable GitLab block has no Install button")
-
-        ;; Install and verify
-        (js-await (h/click-install-and-confirm!+ page "#gitlab-installable-snippet .file-actions" "installed"))
-        (js/console.log "GitLab-style script installed successfully")
-
-        (js-await (.close page)))
-
-      ;; Verify in popup
-      (let [popup (js-await (create-popup-page context ext-id))]
-        (js-await (wait-for-popup-ready popup))
-
-        (let [script-item (.locator popup ".script-item:has-text(\"gitlab_test_script.cljs\")")]
-          (js-await (-> (expect script-item)
-                        (.toBeVisible #js {:timeout 1000}))))
-
-        (js-await (assert-no-errors! popup))
-        (js-await (.close popup)))
-
-      (finally
-        (js-await (.close context))))))
+  (js-await (run-button-placement-test!+ install-gitlab-script! "gitlab_test_script.cljs")))
 
 (defn- ^:async test_github_repo_button_placement []
-  (let [context (js-await (launch-browser))
-        ext-id (js-await (get-extension-id context))]
-    (try
-      ;; Setup installer
-      (let [popup (js-await (h/setup-installer!+ context ext-id))]
-        (js-await (.close popup)))
-
-      ;; Navigate to mock gist page
-      (let [page (js-await (h/navigate-to-mock-gist context))]
-        ;; Verify GitHub repo button appears (the installer places it near
-        ;; the ButtonGroup, in the parent container)
-        (js-await (h/wait-for-install-button page "#github-repo-installable" "install" 2000))
-        (js/console.log "Install button found in GitHub repo container")
-
-        ;; Install and confirm using helper
-        (js-await (h/click-install-and-confirm!+ page "#github-repo-installable" "installed"))
-        (js/console.log "GitHub repo script installed successfully")
-
-        (js-await (.close page)))
-
-      ;; Verify in popup
-      (let [popup (js-await (create-popup-page context ext-id))]
-        (js-await (wait-for-popup-ready popup))
-
-        (let [script-item (.locator popup ".script-item:has-text(\"github_repo_script.cljs\")")]
-          (js-await (-> (expect script-item)
-                        (.toBeVisible #js {:timeout 1000}))))
-
-        (js-await (assert-no-errors! popup))
-        (js-await (.close popup)))
-
-      (finally
-        (js-await (.close context))))))
+  (js-await (run-button-placement-test!+ install-github-repo-script! "github_repo_script.cljs")))
 
 (defn- ^:async test_github_gist_edit_skipped []
   (let [context (js-await (launch-browser))

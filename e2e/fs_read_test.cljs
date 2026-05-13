@@ -37,10 +37,26 @@
           (js-await (.close bg-page))
           (js-await (wait-for-script-tag "scittle" 5000)))))))
 
+(defn- ^:async assert-fn-available!+
+  "Assert that a Clojure fn expression evaluates to truthy in the browser REPL."
+  [fn-check-expr]
+  (let [check (js-await (eval-in-browser fn-check-expr))]
+    (-> (expect (.-success check)) (.toBe true))
+    (-> (expect (.-values check)) (.toContain "true"))))
+
+(defn- ^:async eval-fs-async!+
+  "Build and execute the standard async eval/poll pattern for an epupp.fs call."
+  [atom-name call-expr]
+  (eval-async-and-poll!
+   (str "(def !" atom-name " (atom :pending))\n"
+        "(defn ^:async do-it [] (reset! !" atom-name " (await " call-expr ")))\n"
+        "(do-it)\n"
+        ":setup-done")
+   (str "(pr-str @!" atom-name ")")
+   3000))
+
 (defn- ^:async test_show_retrieves_script_code_by_name []
-  (let [ns-check (js-await (eval-in-browser "(fn? epupp.fs/show)"))]
-    (-> (expect (.-success ns-check)) (.toBe true))
-    (-> (expect (.-values ns-check)) (.toContain "true")))
+  (js-await (assert-fn-available!+ "(fn? epupp.fs/show)"))
   (let [result (js-await (eval-async-and-poll!
                           "(def !show-result (atom :pending))
                            (defn ^:async do-it [] (reset! !show-result (await (epupp.fs/show \"epupp/web_userscript_installer.cljs\"))))
@@ -61,39 +77,21 @@
     (-> (expect result) (.toBe "nil"))))
 
 (defn- ^:async test_show_with_vector_returns_map []
-  (let [result (js-await (eval-async-and-poll!
-                          "(def !bulk-show-result (atom :pending))
-                           (defn ^:async do-it [] (reset! !bulk-show-result (await (epupp.fs/show [\"epupp/web_userscript_installer.cljs\" \"does-not-exist.cljs\"]))))
-                           (do-it)
-                           :setup-done"
-                          "(pr-str @!bulk-show-result)"
-                          3000))]
+  (let [result (js-await (eval-fs-async!+
+                          "bulk-show-result"
+                          "(epupp.fs/show [\"epupp/web_userscript_installer.cljs\" \"does-not-exist.cljs\"])"))]
     (-> (expect (.includes result "epupp/web_userscript_installer.cljs")) (.toBe true))
     (-> (expect (.includes result "epupp/script-name")) (.toBe true))
     (-> (expect (.includes result "does-not-exist.cljs")) (.toBe true))
     (-> (expect (.includes result "nil")) (.toBe true))))
 
 (defn- ^:async test_ls_hides_builtins_by_default []
-  (let [fn-check (js-await (eval-in-browser "(fn? epupp.fs/ls)"))]
-    (-> (expect (.-success fn-check)) (.toBe true))
-    (-> (expect (.-values fn-check)) (.toContain "true")))
-  (let [result (js-await (eval-async-and-poll!
-                          "(def !ls-result (atom :pending))
-                           (defn ^:async do-it [] (reset! !ls-result (await (epupp.fs/ls))))
-                           (do-it)
-                           :setup-done"
-                          "(pr-str @!ls-result)"
-                          3000))]
+  (js-await (assert-fn-available!+ "(fn? epupp.fs/ls)"))
+  (let [result (js-await (eval-fs-async!+ "ls-result" "(epupp.fs/ls)"))]
     (-> (expect (.includes result "epupp/web_userscript_installer.cljs")) (.toBe false))))
 
 (defn- ^:async test_ls_includes_builtins_when_option_set []
-  (let [result (js-await (eval-async-and-poll!
-                          "(def !ls-hidden-result (atom :pending))
-                           (defn ^:async do-it [] (reset! !ls-hidden-result (await (epupp.fs/ls {:fs/ls-hidden? true}))))
-                           (do-it)
-                           :setup-done"
-                          "(pr-str @!ls-hidden-result)"
-                          3000))]
+  (let [result (js-await (eval-fs-async!+ "ls-hidden-result" "(epupp.fs/ls {:fs/ls-hidden? true})"))]
     (-> (expect (.includes result "epupp/web_userscript_installer.cljs")) (.toBe true))
     (-> (expect (.includes result ":requestId")) (.toBe false))
     (-> (expect (.includes result ":source")) (.toBe false))

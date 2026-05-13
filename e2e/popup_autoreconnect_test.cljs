@@ -271,6 +271,10 @@
   (let [events (js-await (fixtures/get-test-events popup))]
     (.-length (.filter events (fn [e] (= (.-event e) "SCITTLE_LOADED"))))))
 
+(defn- throw-on-disconnect-timeout! [start]
+  (when (> (- (.now js/Date) start) 2000)
+    (throw (js/Error. "Timeout waiting for disconnect"))))
+
 (defn- ^:async wait-for-disconnect!
   "Sends a disconnect-tab message and polls until connections reach zero."
   [popup tab-id]
@@ -279,8 +283,7 @@
     (loop []
       (let [conns (js-await (fixtures/get-connections popup))]
         (when-not (zero? (.-length conns))
-          (when (> (- (.now js/Date) start) 2000)
-            (throw (js/Error. "Timeout waiting for disconnect")))
+          (throw-on-disconnect-timeout! start)
           (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 20))))
           (recur))))))
 

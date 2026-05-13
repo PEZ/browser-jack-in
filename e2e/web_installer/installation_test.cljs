@@ -197,75 +197,49 @@
       (finally
         (js-await (.close context))))))
 
-(defn- ^:async test_scittle_dependency_runtime_resolution []
+(defn- ^:async run-dep-resolution-test!+
+  "Run shared dependency resolution test: launch browser, install consumer, navigate, verify."
+  [consumer-container pre-navigate-popup-fn! verify-page-marker!]
   (let [context (js-await (launch-browser))
         ext-id (js-await (get-extension-id context))]
     (try
-      ;; Setup installer
       (let [popup (js-await (h/setup-installer!+ context ext-id))]
         (js-await (.close popup)))
-
-      ;; Install the scittle:// consumer and verify it runs on the target page
-      (let [page (js-await (h/navigate-to-mock-gist context))
-            consumer-container "#scittle-dep-gist"]
+      (let [page (js-await (h/navigate-to-mock-gist context))]
         (js-await (h/wait-for-install-button page consumer-container "install" 2000))
         (js-await (h/click-install-and-confirm!+ page consumer-container "installed"))
-
         (let [popup (js-await (create-popup-page context ext-id))]
+          (js-await (pre-navigate-popup-fn! popup))
           (js-await (clear-test-events! popup))
           (js-await (.close popup)))
-
         (js-await (.goto page "http://localhost:18080/basic.html" #js {:timeout 5000}))
         (js-await (-> (expect (.locator page "#test-marker"))
                       (.toContainText "ready")))
-
         (let [popup (js-await (create-popup-page context ext-id))]
           (js-await (wait-for-event popup "EXECUTE_PLAN_COMPLETE" 10000))
-          (js-await (-> (expect (.locator page "#web-installer-scittle-marker"))
-                        (.toContainText "web-installer-scittle-ok" #js {:timeout 5000})))
+          (js-await (verify-page-marker! page))
           (js-await (assert-no-errors! popup))
           (js-await (.close popup)))
-
         (js-await (.close page)))
-
       (finally
         (js-await (.close context))))))
+
+(defn- ^:async test_scittle_dependency_runtime_resolution []
+  (js-await (run-dep-resolution-test!+
+             "#scittle-dep-gist"
+             (fn [_popup] nil)
+             (fn [page]
+               (-> (expect (.locator page "#web-installer-scittle-marker"))
+                   (.toContainText "web-installer-scittle-ok" #js {:timeout 5000}))))))
 
 (defn- ^:async test_https_ext_dep_runtime_resolution []
   (.setTimeout test 60000)
-  (let [context (js-await (launch-browser))
-        ext-id (js-await (get-extension-id context))]
-    (try
-      ;; Setup installer
-      (let [popup (js-await (h/setup-installer!+ context ext-id))]
-        (js-await (.close popup)))
-
-      ;; Install the HTTPS ext-dep consumer, wait for cache population, then verify runtime behavior
-      (let [page (js-await (h/navigate-to-mock-gist context))
-            consumer-container "#https-ext-dep-gist"]
-        (js-await (h/wait-for-install-button page consumer-container "install" 2000))
-        (js-await (h/click-install-and-confirm!+ page consumer-container "installed"))
-
-        (let [popup (js-await (create-popup-page context ext-id))]
-          (js-await (poll-ext-dep-cache popup git-raw-url 20000))
-          (js-await (clear-test-events! popup))
-          (js-await (.close popup)))
-
-        (js-await (.goto page "http://localhost:18080/basic.html" #js {:timeout 5000}))
-        (js-await (-> (expect (.locator page "#test-marker"))
-                      (.toContainText "ready")))
-
-        (let [popup (js-await (create-popup-page context ext-id))]
-          (js-await (wait-for-event popup "EXECUTE_PLAN_COMPLETE" 10000))
-          (js-await (-> (expect (.locator page "#web-installer-https-ext-dep-marker"))
-                        (.toHaveText "Hello from pez.test-lib, WebInstallerHttps!" #js {:timeout 5000})))
-          (js-await (assert-no-errors! popup))
-          (js-await (.close popup)))
-
-        (js-await (.close page)))
-
-      (finally
-        (js-await (.close context))))))
+  (js-await (run-dep-resolution-test!+
+             "#https-ext-dep-gist"
+             (fn [popup] (poll-ext-dep-cache popup git-raw-url 20000))
+             (fn [page]
+               (-> (expect (.locator page "#web-installer-https-ext-dep-marker"))
+                   (.toHaveText "Hello from pez.test-lib, WebInstallerHttps!" #js {:timeout 5000}))))))
 
 (.describe test "Web Installer: installation"
            (fn []

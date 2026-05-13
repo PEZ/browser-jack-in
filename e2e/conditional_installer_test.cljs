@@ -43,31 +43,26 @@
 ;; Test: No manifests on whitelisted origin - Scittle NOT loaded
 ;; ============================================================
 
-(defn- ^:async test_no_manifests_no_scittle []
+(defn- ^:async no-scittle-injection-test!+
+  "Shared test body: verifies Scittle is NOT injected when navigating with navigate-fn."
+  [navigate-fn]
   (let [context (js-await (launch-browser))
         ext-id (js-await (get-extension-id context))]
     (try
-      ;; Setup installer so the built-in is available
       (let [popup (js-await (h/setup-installer!+ context ext-id))]
         (js-await (.close popup)))
 
-      ;; Navigate to page with no userscript manifests
-      (let [page (js-await (navigate-to-no-manifests context))]
-        ;; Wait enough time for the scanner to have run and decided not to inject.
-        ;; This is an absence assertion - we need to wait to prove nothing happens.
+      (let [page (js-await (navigate-fn context))]
         (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 500))))
 
-        ;; Verify Scittle was NOT loaded
         (let [status (js-await (.evaluate page check-scittle-in-page))]
           (-> (expect (.-hasScittle status)) (.toBe false)))
 
-        ;; Verify no install buttons appeared
         (let [install-buttons (.locator page "[data-e2e-install-state]")]
           (js-await (-> (expect install-buttons) (.toHaveCount 0))))
 
         (js-await (.close page)))
 
-      ;; Check for errors via popup
       (let [popup (js-await (create-popup-page context ext-id))]
         (js-await (wait-for-popup-ready popup))
         (js-await (assert-no-errors! popup))
@@ -75,6 +70,9 @@
 
       (finally
         (js-await (.close context))))))
+
+(defn- ^:async test_no_manifests_no_scittle []
+  (js-await (no-scittle-injection-test!+ navigate-to-no-manifests)))
 
 ;; ============================================================
 ;; Test: Page with manifest - installer injected and shows buttons
@@ -115,37 +113,7 @@
 ;; ============================================================
 
 (defn- ^:async test_non_whitelisted_origin_no_injection []
-  (let [context (js-await (launch-browser))
-        ext-id (js-await (get-extension-id context))]
-    (try
-      ;; Setup installer
-      (let [popup (js-await (h/setup-installer!+ context ext-id))]
-        (js-await (.close popup)))
-
-      ;; Navigate to mock gist page via non-whitelisted hostname
-      ;; Uses not-whitelisted.test which maps to 127.0.0.1 in Docker
-      (let [page (js-await (h/navigate-to-mock-gist-non-whitelisted context))]
-        ;; Wait for scanner to have had time to run (absence assertion)
-        (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 500))))
-
-        ;; Verify Scittle was NOT loaded
-        (let [status (js-await (.evaluate page check-scittle-in-page))]
-          (-> (expect (.-hasScittle status)) (.toBe false)))
-
-        ;; Verify no install buttons appeared
-        (let [install-buttons (.locator page "[data-e2e-install-state]")]
-          (js-await (-> (expect install-buttons) (.toHaveCount 0))))
-
-        (js-await (.close page)))
-
-      ;; Check for errors
-      (let [popup (js-await (create-popup-page context ext-id))]
-        (js-await (wait-for-popup-ready popup))
-        (js-await (assert-no-errors! popup))
-        (js-await (.close popup)))
-
-      (finally
-        (js-await (.close context))))))
+  (js-await (no-scittle-injection-test!+ h/navigate-to-mock-gist-non-whitelisted)))
 
 ;; ============================================================
 ;; Test: SPA navigation triggers scanner retry and installer appears

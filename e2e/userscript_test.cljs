@@ -81,6 +81,20 @@
 ;; Document-start Timing
 ;; =============================================================================
 
+(defn- check-script-perf-timeout! [start]
+  (when (> (- (.now js/Date) start) 2000)
+    (throw (js/Error. "Timeout waiting for __EPUPP_SCRIPT_PERF to be defined"))))
+
+(defn- ^:async wait-for-script-perf!
+  "Polls until window.__EPUPP_SCRIPT_PERF is a number, with 2s timeout."
+  [page]
+  (let [start (.now js/Date)]
+    (loop []
+      (when-not (js-await (.evaluate page (fn [] (= (js/typeof js/window.__EPUPP_SCRIPT_PERF) "number"))))
+        (check-script-perf-timeout! start)
+        (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 50))))
+        (recur)))))
+
 (defn- ^:async test_document_start_runs_before_page_scripts []
   (let [context (js-await (launch-browser))
         ext-id (js-await (get-extension-id context))]
@@ -112,15 +126,7 @@
                       (.toBeVisible)))
 
         ;; Wait for userscript to execute (Scittle loading is async)
-        ;; Poll until the perf value is defined (a number, not undefined)
-        (let [start (.now js/Date)]
-          (loop []
-            (let [is-number (js-await (.evaluate page (fn [] (= (js/typeof js/window.__EPUPP_SCRIPT_PERF) "number"))))]
-              (when-not is-number
-                (when (> (- (.now js/Date) start) 2000)
-                  (throw (js/Error. "Timeout waiting for __EPUPP_SCRIPT_PERF to be defined")))
-                (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 50))))
-                (recur)))))
+        (js-await (wait-for-script-perf! page))
 
         ;; Verify userscript executed via Scittle
         (let [epupp-perf (js-await (.evaluate page (fn [] js/window.__EPUPP_SCRIPT_PERF)))]
