@@ -16,14 +16,18 @@
   (let [start (.now js/Date)]
     (loop []
       (let [result (js-await (eval-in-browser (str "(= :pending @" atom-name ")")))]
-        (if (and (.-success result)
-                 (= (first (.-values result)) "false"))
+        (cond
+          (and (.-success result)
+               (= (first (.-values result)) "false"))
           true
-          (if (> (- (.now js/Date) start) timeout-ms)
-            (throw (js/Error. (str "Timeout waiting for " atom-name)))
-            (do
-              (js-await (sleep 20))
-              (recur))))))))
+
+          (> (- (.now js/Date) start) timeout-ms)
+          (throw (js/Error. (str "Timeout waiting for " atom-name)))
+
+          :else
+          (do
+            (js-await (sleep 20))
+            (recur)))))))
 
 (defn- ^:async check-eval
   "Evaluate code via nREPL and assert the value equals expected."
@@ -32,39 +36,43 @@
     (-> (expect (.-success result)) (.toBe true))
     (-> (expect (first (.-values result))) (.toBe expected))))
 
+(defn- assert-success! [result error-prefix]
+  (when-not (and result (.-success result))
+    (throw (js/Error. (str error-prefix (.-error result))))))
+
+(defn- ^:async connect-test-tab! [ctx ext-id]
+  (let [popup (js-await (.newPage ctx))]
+    (js-await (.goto popup
+                     (str "chrome-extension://" ext-id "/popup.html")
+                     #js {:waitUntil "networkidle"}))
+    (let [find-result (js-await (send-runtime-message
+                                  popup "e2e/find-tab-id"
+                                  #js {:urlPattern "http://localhost:*/*"}))]
+      (assert-success! find-result "Could not find test tab: ")
+      (let [connect-result (js-await (send-runtime-message
+                                       popup "connect-tab"
+                                       #js {:tabId (.-tabId find-result)
+                                            :wsPort ws-port-1}))]
+        (assert-success! connect-result "Connection failed: ")
+        (js-await (.close popup))))))
+
 (defn- ^:async setup! []
   (let [ctx (js-await (.launchPersistentContext
-                        chromium ""
-                        #js {:headless false
-                             :args #js ["--no-sandbox"
-                                        (str "--disable-extensions-except=" extension-path)
-                                        (str "--load-extension=" extension-path)]}))]
+                       chromium ""
+                       #js {:headless false
+                            :args #js ["--no-sandbox"
+                                       (str "--disable-extensions-except=" extension-path)
+                                       (str "--load-extension=" extension-path)]}))]
     (reset! !context ctx)
     (let [ext-id (js-await (get-extension-id ctx))]
       (reset! !ext-id ext-id)
       (let [page (js-await (.newPage ctx))]
         (js-await (.goto page (str "http://localhost:" http-port "/basic.html")))
         (js-await (.waitForLoadState page "domcontentloaded"))
-        (let [popup (js-await (.newPage ctx))]
-          (js-await (.goto popup
-                           (str "chrome-extension://" ext-id "/popup.html")
-                           #js {:waitUntil "networkidle"}))
-          (let [find-result (js-await (send-runtime-message
-                                       popup "e2e/find-tab-id"
-                                       #js {:urlPattern "http://localhost:*/*"}))]
-            (when-not (and find-result (.-success find-result))
-              (throw (js/Error. (str "Could not find test tab: " (.-error find-result)))))
-            (let [connect-result (js-await (send-runtime-message
-                                            popup "connect-tab"
-                                            #js {:tabId (.-tabId find-result)
-                                                 :wsPort ws-port-1}))]
-              (when-not (and connect-result (.-success connect-result))
-                (throw (js/Error. (str "Connection failed: " (.-error connect-result)))))
-              (js-await (.close popup))
-              (js-await (wait-for-script-tag "scittle" 5000))
-              (let [req-result (js-await (eval-in-browser "(require '[epupp.tools :as tools])"))]
-                (when-not (.-success req-result)
-                  (throw (js/Error. (str "Failed to require epupp.tools: " (.-error req-result)))))))))))))
+        (js-await (connect-test-tab! ctx ext-id))
+        (js-await (wait-for-script-tag "scittle" 5000))
+        (let [req-result (js-await (eval-in-browser "(require '[epupp.tools :as tools])"))]
+          (assert-success! req-result "Failed to require epupp.tools: "))))))
 
 (defn- ^:async teardown! []
   (when @!context
@@ -81,47 +89,34 @@
 ;; Test functions
 ;; =============================================================================
 
-(defn- ^:async test_capture_visible_returns_image_data []
-  (let [code "(def !cv-result (atom :pending))
-              (defn ^:async run-cv []
-                (try
-                  (let [r (await (tools/capture-visible))]
-                    (reset! !cv-result
-                            {:success (:success r)
-                             :has-url (some? (:dataUrl r))
-                             :url-ok (boolean (and (:dataUrl r)
-                                                   (.startsWith (:dataUrl r) \"data:image/\")))}))
-                  (catch :default e
-                    (reset! !cv-result {:error (.-message e)}))))
-              (run-cv)
-              :started"
+(defn- ^:async run-capture-test!
+  "Run a capture API call in the page, wait for result, and assert success."
+  [atom-name fn-name capture-expr]
+  (let [code (str "(def " atom-name " (atom :pending))\n"
+                  "(defn ^:async " fn-name " []\n"
+                  "  (try\n"
+                  "    (let [r (await " capture-expr ")]\n"
+                  "      (reset! " atom-name "\n"
+                  "              {:success (:success r)\n"
+                  "               :has-url (some? (:dataUrl r))\n"
+                  "               :url-ok (boolean (and (:dataUrl r)\n"
+                  "                                     (.startsWith (:dataUrl r) \"data:image/\")))}))\n"
+                  "    (catch :default e\n"
+                  "      (reset! " atom-name " {:error (.-message e)}))))\n"
+                  "(" fn-name ")\n"
+                  ":started")
         setup (js-await (eval-in-browser code))]
     (-> (expect (.-success setup)) (.toBe true))
-    (js-await (wait-for-atom "!cv-result" 15000))
-    (js-await (check-eval "(boolean (:success @!cv-result))" "true"))
-    (js-await (check-eval "(boolean (:has-url @!cv-result))" "true"))
-    (js-await (check-eval "(boolean (:url-ok @!cv-result))" "true"))))
+    (js-await (wait-for-atom atom-name 15000))
+    (js-await (check-eval (str "(boolean (:success @" atom-name "))") "true"))
+    (js-await (check-eval (str "(boolean (:has-url @" atom-name "))") "true"))
+    (js-await (check-eval (str "(boolean (:url-ok @" atom-name "))") "true"))))
+
+(defn- ^:async test_capture_visible_returns_image_data []
+  (js-await (run-capture-test! "!cv-result" "run-cv" "(tools/capture-visible)")))
 
 (defn- ^:async test_capture_selector_body_returns_image_data []
-  (let [code "(def !cs-result (atom :pending))
-              (defn ^:async run-cs []
-                (try
-                  (let [r (await (tools/capture-selector \"body\"))]
-                    (reset! !cs-result
-                            {:success (:success r)
-                             :has-url (some? (:dataUrl r))
-                             :url-ok (boolean (and (:dataUrl r)
-                                                   (.startsWith (:dataUrl r) \"data:image/\")))}))
-                  (catch :default e
-                    (reset! !cs-result {:error (.-message e)}))))
-              (run-cs)
-              :started"
-        setup (js-await (eval-in-browser code))]
-    (-> (expect (.-success setup)) (.toBe true))
-    (js-await (wait-for-atom "!cs-result" 15000))
-    (js-await (check-eval "(boolean (:success @!cs-result))" "true"))
-    (js-await (check-eval "(boolean (:has-url @!cs-result))" "true"))
-    (js-await (check-eval "(boolean (:url-ok @!cs-result))" "true"))))
+  (js-await (run-capture-test! "!cs-result" "run-cs" "(tools/capture-selector \"body\")")))
 
 (defn- ^:async test_capture_selector_missing_element_throws []
   (let [code "(def !cs-err (atom :pending))
