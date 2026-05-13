@@ -132,7 +132,7 @@
   [page js-var-name expected-value timeout-ms]
   (let [start (.now js/Date)]
     (loop []
-      (let [result (js-await (.evaluate page (fn [] (aget js/window js-var-name))))]
+      (let [result (js-await (.evaluate page (js* "name => window[name]") js-var-name))]
         (cond
           (= result expected-value)
           (js-await (-> (expect result) (.toBe expected-value)))

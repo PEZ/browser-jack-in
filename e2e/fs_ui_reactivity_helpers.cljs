@@ -4,8 +4,10 @@
             [fixtures :refer [http-port ws-port-1
                               clear-fs-scripts send-runtime-message
                               get-extension-id find-tab-id connect-tab]]
-            [fs-write-helpers :refer [eval-in-browser sleep
-                                      wait-for-script-tag]]))
+            [fs-write-helpers :as fs-write-helpers
+             :refer [sleep wait-for-script-tag]]))
+
+(def eval-in-browser fs-write-helpers/eval-in-browser)
 
 (def ^:private !context (atom nil))
 (def ^:private !ext-id (atom nil))
