@@ -69,48 +69,67 @@
                                                    #js {:key "extDepCache"}))
             cache (when (and result (.-success result)) (.-value result))
             entry (when cache (aget cache expected-url))]
-        (if entry
+        (cond
           entry
-          (if (> (- (.now js/Date) start) timeout-ms)
-            (throw (js/Error. (str "Timeout (" timeout-ms "ms) waiting for extDepCache to contain: "
-                                   expected-url
-                                   "\nCache keys: "
-                                   (if cache
-                                     (js/JSON.stringify (.keys js/Object cache))
-                                     "null/undefined"))))
-            (do
-              (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 200))))
-              (recur))))))))
+          entry
+
+          (> (- (.now js/Date) start) timeout-ms)
+          (throw (js/Error. (str "Timeout (" timeout-ms "ms) waiting for extDepCache to contain: "
+                                 expected-url
+                                 "\nCache keys: "
+                                 (if cache
+                                   (js/JSON.stringify (.keys js/Object cache))
+                                   "null/undefined"))))
+
+          :else
+          (do
+            (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 200))))
+            (recur)))))))
 ;; =============================================================================
 ;; Test: Full cycle - git raw URL (auto-run)
 ;; =============================================================================
 
-(defn- ^:async test_full_cycle_git_auto_run []
+(defn- ^:async poll-window-property
+  "Poll a window property on page until it becomes non-nil.
+   Uses js* to avoid Squint control-flow in browser context."
+  [page prop-name timeout-ms]
+  (let [start (.now js/Date)
+        eval-fn (js* "function(p) { return window[p]; }")]
+    (loop []
+      (let [result (js-await (.evaluate page eval-fn prop-name))]
+        (cond
+          (some? result) result
+          (> (- (.now js/Date) start) timeout-ms)
+          (throw (js/Error. (str "Timeout waiting for " prop-name)))
+          :else
+          (do
+            (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 50))))
+            (recur)))))))
+
+(defn- ^:async test-auto-run-cycle
+  "Shared auto-run test cycle parameterized by ext-dep URL and script details."
+  [{:keys [dep-url script-name ns-name window-prop greeting-arg]}]
   (.setTimeout test 60000)
   (let [context (js-await (launch-browser))
         ext-id (js-await (get-extension-id context))]
     (try
-      ;; Save consumer - triggers ext-dep fetch via storage.onChanged
       (let [consumer-code (code-with-manifest
-                           {:name "test/fc_git_auto.cljs"
+                           {:name script-name
                             :match (str "http://localhost:" http-port "/*")
-                            :inject [git-raw-url]
-                            :code (str "(ns test.fc-git-auto\n"
+                            :inject [dep-url]
+                            :code (str "(ns " ns-name "\n"
                                        "  (:require [pez.test-lib :as lib]))\n\n"
-                                       "(set! (.-__EPUPP_FULL_CYCLE_GIT_RESULT js/window)\n"
-                                       "      (lib/greeting \"FullCycleGit\"))")})]
+                                       "(set! (.-" window-prop " js/window)\n"
+                                       "      (lib/greeting \"" greeting-arg "\"))")})]
         (js-await (save-script-via-panel context ext-id consumer-code)))
 
-      ;; Enable consumer (needed for auto-run)
-      (js-await (enable-script-via-popup context ext-id "test/fc_git_auto.cljs"))
+      (js-await (enable-script-via-popup context ext-id script-name))
 
-      ;; Poll ext-dep cache until git URL is fetched and cached
       (let [popup (js-await (create-popup-page context ext-id))]
-        (js-await (poll-ext-dep-cache popup git-raw-url cache-poll-timeout))
+        (js-await (poll-ext-dep-cache popup dep-url cache-poll-timeout))
         (js-await (clear-test-events! popup))
         (js-await (.close popup)))
 
-      ;; Navigate to matching page
       (let [page (js-await (.newPage context))]
         (js-await (.goto page (str "http://localhost:" http-port "/basic.html")
                          #js {:timeout 5000}))
@@ -120,19 +139,9 @@
         (let [popup (js-await (create-popup-page context ext-id))]
           (js-await (wait-for-event popup "EXECUTE_PLAN_COMPLETE" 10000))
 
-          ;; Poll for consumer result
-          (let [start (.now js/Date)]
-            (loop []
-              (let [result (js-await (.evaluate page
-                                               (fn [] js/window.__EPUPP_FULL_CYCLE_GIT_RESULT)))]
-                (if (some? result)
-                  (js-await (-> (expect result)
-                                (.toBe "Hello from pez.test-lib, FullCycleGit!")))
-                  (do
-                    (when (> (- (.now js/Date) start) 5000)
-                      (throw (js/Error. "Timeout waiting for __EPUPP_FULL_CYCLE_GIT_RESULT")))
-                    (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 50))))
-                    (recur))))))
+          (let [result (js-await (poll-window-property page window-prop 5000))]
+            (js-await (-> (expect result)
+                          (.toBe (str "Hello from pez.test-lib, " greeting-arg "!")))))
 
           (js-await (assert-no-errors! popup))
           (js-await (.close popup)))
@@ -140,61 +149,26 @@
 
       (finally
         (js-await (.close context))))))
+
+(defn- ^:async test_full_cycle_git_auto_run []
+  (js-await (test-auto-run-cycle
+             {:dep-url git-raw-url
+              :script-name "test/fc_git_auto.cljs"
+              :ns-name "test.fc-git-auto"
+              :window-prop "__EPUPP_FULL_CYCLE_GIT_RESULT"
+              :greeting-arg "FullCycleGit"})))
 
 ;; =============================================================================
 ;; Test: Full cycle - gist raw URL (auto-run)
 ;; =============================================================================
 
 (defn- ^:async test_full_cycle_gist_auto_run []
-  (.setTimeout test 60000)
-  (let [context (js-await (launch-browser))
-        ext-id (js-await (get-extension-id context))]
-    (try
-      (let [consumer-code (code-with-manifest
-                           {:name "test/fc_gist_auto.cljs"
-                            :match (str "http://localhost:" http-port "/*")
-                            :inject [gist-raw-url]
-                            :code (str "(ns test.fc-gist-auto\n"
-                                       "  (:require [pez.test-lib :as lib]))\n\n"
-                                       "(set! (.-__EPUPP_FULL_CYCLE_GIST_RESULT js/window)\n"
-                                       "      (lib/greeting \"FullCycleGist\"))")})]
-        (js-await (save-script-via-panel context ext-id consumer-code)))
-
-      (js-await (enable-script-via-popup context ext-id "test/fc_gist_auto.cljs"))
-
-      (let [popup (js-await (create-popup-page context ext-id))]
-        (js-await (poll-ext-dep-cache popup gist-raw-url cache-poll-timeout))
-        (js-await (clear-test-events! popup))
-        (js-await (.close popup)))
-
-      (let [page (js-await (.newPage context))]
-        (js-await (.goto page (str "http://localhost:" http-port "/basic.html")
-                         #js {:timeout 5000}))
-        (js-await (-> (expect (.locator page "#test-marker"))
-                      (.toContainText "ready")))
-
-        (let [popup (js-await (create-popup-page context ext-id))]
-          (js-await (wait-for-event popup "EXECUTE_PLAN_COMPLETE" 10000))
-
-          (let [start (.now js/Date)]
-            (loop []
-              (let [result (js-await (.evaluate page
-                                               (fn [] js/window.__EPUPP_FULL_CYCLE_GIST_RESULT)))]
-                (if (some? result)
-                  (js-await (-> (expect result)
-                                (.toBe "Hello from pez.test-lib, FullCycleGist!")))
-                  (do
-                    (when (> (- (.now js/Date) start) 5000)
-                      (throw (js/Error. "Timeout waiting for __EPUPP_FULL_CYCLE_GIST_RESULT")))
-                    (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 50))))
-                    (recur))))))
-
-          (js-await (assert-no-errors! popup))
-          (js-await (.close popup)))
-        (js-await (.close page)))
-
-      (finally
-        (js-await (.close context))))))
+  (js-await (test-auto-run-cycle
+             {:dep-url gist-raw-url
+              :script-name "test/fc_gist_auto.cljs"
+              :ns-name "test.fc-gist-auto"
+              :window-prop "__EPUPP_FULL_CYCLE_GIST_RESULT"
+              :greeting-arg "FullCycleGist"})))
 ;; =============================================================================
 ;; Test: Full cycle - git raw URL (popup play button)
 ;; =============================================================================
@@ -204,7 +178,6 @@
   (let [context (js-await (launch-browser))
         ext-id (js-await (get-extension-id context))]
     (try
-      ;; Save consumer (NOT enabled - use play button)
       (let [consumer-code (code-with-manifest
                            {:name "test/fc_git_play.cljs"
                             :match (str "http://localhost:" http-port "/*")
@@ -215,29 +188,26 @@
                                        "      (lib/greeting \"PlayGit\"))")})]
         (js-await (save-script-via-panel context ext-id consumer-code)))
 
-      ;; Poll cache (save triggers fetch)
       (let [popup (js-await (create-popup-page context ext-id))]
         (js-await (poll-ext-dep-cache popup git-raw-url cache-poll-timeout))
         (js-await (clear-test-events! popup))
         (js-await (.close popup)))
 
-      ;; Open test page
       (let [test-page (js-await (.newPage context))]
         (js-await (.goto test-page (str "http://localhost:" http-port "/basic.html")
                          #js {:timeout 5000}))
         (js-await (-> (expect (.locator test-page "#test-marker"))
                       (.toContainText "ready")))
 
-        ;; Open popup, activate tab, click play
-        (let [popup (js-await (create-popup-page context ext-id))]
-          (let [tab-id (js-await (find-tab-id popup (str "http://localhost:" http-port "/*")))]
-            (js-await (.evaluate popup
-                                 (fn [target-tab-id]
-                                   (js/Promise.
-                                    (fn [resolve]
-                                      (js/chrome.tabs.update target-tab-id #js {:active true}
-                                                             (fn [] (resolve true))))))
-                                 tab-id)))
+        (let [popup (js-await (create-popup-page context ext-id))
+              tab-id (js-await (find-tab-id popup (str "http://localhost:" http-port "/*")))]
+          (js-await (.evaluate popup
+                               (fn [target-tab-id]
+                                 (js/Promise.
+                                  (fn [resolve]
+                                    (js/chrome.tabs.update target-tab-id #js {:active true}
+                                                           (fn [] (resolve true))))))
+                               tab-id))
 
           (let [item (get-script-item popup "test/fc_git_play.cljs")
                 run-btn (.locator item "button.script-run")]
@@ -246,19 +216,9 @@
 
           (js-await (wait-for-event popup "SCRIPT_INJECTED" 5000))
 
-          ;; Poll for result
-          (let [start (.now js/Date)]
-            (loop []
-              (let [result (js-await (.evaluate test-page
-                                               (fn [] js/window.__EPUPP_FC_PLAY_GIT_RESULT)))]
-                (if (some? result)
-                  (js-await (-> (expect result)
-                                (.toBe "Hello from pez.test-lib, PlayGit!")))
-                  (do
-                    (when (> (- (.now js/Date) start) 5000)
-                      (throw (js/Error. "Timeout waiting for __EPUPP_FC_PLAY_GIT_RESULT")))
-                    (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 50))))
-                    (recur))))))
+          (let [result (js-await (poll-window-property test-page "__EPUPP_FC_PLAY_GIT_RESULT" 5000))]
+            (js-await (-> (expect result)
+                          (.toBe "Hello from pez.test-lib, PlayGit!"))))
 
           (js-await (assert-no-errors! popup))
           (js-await (.close popup)))
@@ -282,50 +242,57 @@
         (js-await (-> (expect (.locator test-page "#test-marker"))
                       (.toContainText "ready")))
 
-        (let [popup (js-await (create-popup-page context ext-id))]
-          (js-await (wait-for-popup-ready popup))
-          (let [clear-cache-result (js-await (send-runtime-message popup "e2e/set-storage"
-                                                                   #js {:key "extDepCache"
-                                                                        :value #js {}}))]
-            (js-await (-> (expect (.-success clear-cache-result))
-                          (.toBe true))))
-          (let [tab-id (js-await (find-tab-id popup (str "http://localhost:" http-port "/*")))]
-            (js-await (.close popup))
+        ;; Clear cache and get tab-id
+        (let [popup (js-await (create-popup-page context ext-id))
+              _ (js-await (wait-for-popup-ready popup))
+              clear-result (js-await (send-runtime-message popup "e2e/set-storage"
+                                                           #js {:key "extDepCache"
+                                                                :value #js {}}))
+              _ (js-await (-> (expect (.-success clear-result)) (.toBe true)))
+              tab-id (js-await (find-tab-id popup (str "http://localhost:" http-port "/*")))]
+          (js-await (.close popup))
 
-            (let [panel (js-await (create-panel-page-for-tab context ext-id tab-id))
-                  consumer-code (str "{:epupp/script-name \"test/panel_fetch_on_demand.cljs\"\n"
-                                     " :epupp/inject [\"" git-raw-url "\"]}\n\n"
-                                     "(ns test.panel-fetch-on-demand\n"
-                                     "  (:require [pez.test-lib :as lib]))\n\n"
-                                     "(set! (.-__EPUPP_PANEL_FETCH_ON_DEMAND_RESULT js/window)\n"
-                                     "      (lib/greeting \"PanelFetchOnDemand\"))")]
-              (js-await (.fill (.locator panel "#code-area") consumer-code))
-              (js-await (.click (.locator panel "button.btn-eval")))
+          ;; Eval via panel
+          (let [panel (js-await (create-panel-page-for-tab context ext-id tab-id))
+                consumer-code (str "{:epupp/script-name \"test/panel_fetch_on_demand.cljs\"\n"
+                                   " :epupp/inject [\"" git-raw-url "\"]}\n\n"
+                                   "(ns test.panel-fetch-on-demand\n"
+                                   "  (:require [pez.test-lib :as lib]))\n\n"
+                                   "(set! (.-__EPUPP_PANEL_FETCH_ON_DEMAND_RESULT js/window)\n"
+                                   "      (lib/greeting \"PanelFetchOnDemand\"))")]
+            (js-await (.fill (.locator panel "#code-area") consumer-code))
+            (js-await (.click (.locator panel "button.btn-eval")))
 
-              (let [start (.now js/Date)]
-                (loop []
-                  (let [result (js-await (.evaluate test-page
-                                                    (fn []
-                                                      (try
-                                                        (js/scittle.core.eval_string "(pez.test-lib/greeting \"test\")")
-                                                        (catch :default _e nil)))))]
-                    (if (some? result)
-                      (js-await (-> (expect result)
-                                    (.toBe "Hello from pez.test-lib, test!")))
-                      (do
-                        (when (> (- (.now js/Date) start) 5000)
-                          (throw (js/Error. "Timeout: pez.test-lib namespace not available on page")))
-                        (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 100))))
-                        (recur))))))
+            ;; Poll for namespace availability (flattened with cond)
+            (let [start (.now js/Date)]
+              (loop []
+                (let [result (js-await (.evaluate test-page
+                                                  (fn []
+                                                    (try
+                                                      (js/scittle.core.eval_string "(pez.test-lib/greeting \"test\")")
+                                                      (catch :default _e nil)))))]
+                  (cond
+                    (some? result)
+                    (js-await (-> (expect result)
+                                  (.toBe "Hello from pez.test-lib, test!")))
 
-              (let [cache-result (js-await (send-runtime-message panel "e2e/get-storage"
-                                                                 #js {:key "extDepCache"}))
-                    cache (when (and cache-result (.-success cache-result)) (.-value cache-result))]
-                (js-await (-> (expect (aget cache git-raw-url))
-                              (.toBeTruthy))))
+                    (> (- (.now js/Date) start) 5000)
+                    (throw (js/Error. "Timeout: pez.test-lib namespace not available on page"))
 
-              (js-await (assert-no-errors! panel))
-              (js-await (.close panel)))))
+                    :else
+                    (do
+                      (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 100))))
+                      (recur))))))
+
+            ;; Verify cache was populated
+            (let [cache-result (js-await (send-runtime-message panel "e2e/get-storage"
+                                                               #js {:key "extDepCache"}))
+                  cache (when (and cache-result (.-success cache-result)) (.-value cache-result))]
+              (js-await (-> (expect (aget cache git-raw-url))
+                            (.toBeTruthy))))
+
+            (js-await (assert-no-errors! panel))
+            (js-await (.close panel))))
         (js-await (.close test-page)))
 
       (finally
