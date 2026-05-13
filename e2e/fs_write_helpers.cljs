@@ -140,3 +140,66 @@
 
 (defn unquote-result [value]
   (unquote-eval-value value))
+
+(defn ^:async wait-for-builtin-script-via-repl!
+  "Wait until a built-in script name is visible via epupp.fs/ls (REPL polling)."
+  [script-name timeout-ms]
+  (let [start (.now js/Date)
+        timeout-ms (or timeout-ms 5000)
+        define-result (js-await (eval-in-browser "(def !wait-builtin-present (atom :pending))"))]
+    (when-not (.-success define-result)
+      (throw (js/Error. (str "Failed to define atom: " (.-error define-result)))))
+    (loop []
+      (let [setup-result (js-await (eval-in-browser
+                                    (str "(reset! !wait-builtin-present :pending)\n"
+                                         "(defn ^:async do-builtin-check []\n"
+                                         "  (let [scripts (await (epupp.fs/ls {:fs/ls-hidden? true}))]\n"
+                                         "    (reset! !wait-builtin-present\n"
+                                         "            (some (fn [s] (= (:fs/name s) \"" script-name "\")) scripts))))\n"
+                                         "(do-builtin-check)\n"
+                                         ":setup-done")))]
+        (when-not (.-success setup-result)
+          (throw (js/Error. (str "Failed to start builtin check: " (.-error setup-result)))))
+        (js-await (sleep 20))
+        (let [check-result (js-await (eval-in-browser "(pr-str @!wait-builtin-present)"))]
+          (if (and (.-success check-result)
+                   (seq (.-values check-result)))
+            (let [result-str (unquote-result (first (.-values check-result)))]
+              (if (= result-str "true")
+                true
+                (if (> (- (.now js/Date) start) timeout-ms)
+                  (throw (js/Error. (str "Timeout waiting for built-in script: " script-name)))
+                  (recur))))
+            (if (> (- (.now js/Date) start) timeout-ms)
+              (throw (js/Error. (str "Timeout waiting for built-in script: " script-name)))
+              (recur))))))))
+
+(defn ^:async wait-for-script-present!
+  "Wait until a script name is visible via epupp.fs/ls (REPL polling)."
+  [script-name timeout-ms]
+  (let [start (.now js/Date)
+        timeout-ms (or timeout-ms 3000)]
+    (loop []
+      (let [setup-result (js-await (eval-in-browser
+                                    (str "(def !script-present (atom :pending))\n"
+                                         " (defn ^:async do-script-check []\n"
+                                         "   (let [scripts (await (epupp.fs/ls))]\n"
+                                         "     (reset! !script-present\n"
+                                         "             (some (fn [s] (= (:fs/name s) \"" script-name "\")) scripts))))\n"
+                                         " (do-script-check)\n"
+                                         " :setup-done")))]
+        (when-not (.-success setup-result)
+          (throw (js/Error. (str "Failed to start script presence check: " (.-error setup-result)))))
+        (js-await (sleep 20))
+        (let [check-result (js-await (eval-in-browser "(pr-str @!script-present)"))]
+          (if (and (.-success check-result)
+                   (seq (.-values check-result)))
+            (let [result-str (unquote-result (first (.-values check-result)))]
+              (if (= result-str "true")
+                true
+                (if (> (- (.now js/Date) start) timeout-ms)
+                  (throw (js/Error. (str "Timeout waiting for script: " script-name)))
+                  (recur))))
+            (if (> (- (.now js/Date) start) timeout-ms)
+              (throw (js/Error. (str "Timeout waiting for script: " script-name)))
+              (recur))))))))
