@@ -17,85 +17,88 @@
 ;; {:decision :connect-all|:reconnect|:none
 ;;  :port string-or-nil}
 
+(defn- check-auto-connection
+  "Calls decide-auto-connection with ctx and asserts the decision and optional port."
+  [ctx expected-decision expected-port]
+  (let [result (bg/decide-auto-connection ctx)]
+    (-> (expect (:decision result)) (.toBe expected-decision))
+    (when expected-port
+      (-> (expect (:port result)) (.toBe expected-port)))))
+
+(defn- check-connection
+  "Calls decide-connection with ctx and asserts the decision and optional port."
+  [ctx expected-decision expected-port]
+  (let [result (bg/decide-connection ctx)]
+    (-> (expect (:decision result)) (.toBe expected-decision))
+    (when expected-port
+      (-> (expect (:port result)) (.toBe expected-port)))))
+
 (defn- test-decide-auto-connection-returns-connect-all-when-enabled []
-  (let [ctx {:nav/auto-connect-enabled? true
-             :nav/auto-reconnect-enabled? false
-             :nav/in-history? false
-             :nav/history-port nil
-             :nav/saved-port "1340"}
-        result (bg/decide-auto-connection ctx)]
-    (-> (expect (:decision result))
-        (.toBe "connect-all"))
-    (-> (expect (:port result))
-        (.toBe "1340"))))
+  (check-auto-connection
+   {:nav/auto-connect-enabled? true
+    :nav/auto-reconnect-enabled? false
+    :nav/in-history? false
+    :nav/history-port nil
+    :nav/saved-port "1340"}
+   "connect-all" "1340"))
 
 (defn- test-decide-auto-connection-connect-all-supersedes-reconnect []
   ;; Even when reconnect conditions are met, connect-all wins
-  (let [ctx {:nav/auto-connect-enabled? true
-             :nav/auto-reconnect-enabled? true
-             :nav/in-history? true
-             :nav/history-port "1341"
-             :nav/saved-port "1340"}
-        result (bg/decide-auto-connection ctx)]
-    (-> (expect (:decision result))
-        (.toBe "connect-all"))
-    ;; Uses saved-port, not history-port
-    (-> (expect (:port result))
-        (.toBe "1340"))))
+  ;; Uses saved-port, not history-port
+  (check-auto-connection
+   {:nav/auto-connect-enabled? true
+    :nav/auto-reconnect-enabled? true
+    :nav/in-history? true
+    :nav/history-port "1341"
+    :nav/saved-port "1340"}
+   "connect-all" "1340"))
 
 (defn- test-decide-auto-connection-returns-reconnect-when-conditions-met []
-  (let [ctx {:nav/auto-connect-enabled? false
-             :nav/auto-reconnect-enabled? true
-             :nav/in-history? true
-             :nav/history-port "1341"
-             :nav/saved-port "1340"}
-        result (bg/decide-auto-connection ctx)]
-    (-> (expect (:decision result))
-        (.toBe "reconnect"))
-    ;; Uses history-port
-    (-> (expect (:port result))
-        (.toBe "1341"))))
+  ;; Uses history-port
+  (check-auto-connection
+   {:nav/auto-connect-enabled? false
+    :nav/auto-reconnect-enabled? true
+    :nav/in-history? true
+    :nav/history-port "1341"
+    :nav/saved-port "1340"}
+   "reconnect" "1341"))
 
 (defn- test-decide-auto-connection-returns-none-when-reconnect-disabled []
-  (let [ctx {:nav/auto-connect-enabled? false
-             :nav/auto-reconnect-enabled? false
-             :nav/in-history? true
-             :nav/history-port "1341"
-             :nav/saved-port "1340"}
-        result (bg/decide-auto-connection ctx)]
-    (-> (expect (:decision result))
-        (.toBe "none"))))
+  (check-auto-connection
+   {:nav/auto-connect-enabled? false
+    :nav/auto-reconnect-enabled? false
+    :nav/in-history? true
+    :nav/history-port "1341"
+    :nav/saved-port "1340"}
+   "none" nil))
 
 (defn- test-decide-auto-connection-returns-none-when-not-in-history []
-  (let [ctx {:nav/auto-connect-enabled? false
-             :nav/auto-reconnect-enabled? true
-             :nav/in-history? false
-             :nav/history-port nil
-             :nav/saved-port "1340"}
-        result (bg/decide-auto-connection ctx)]
-    (-> (expect (:decision result))
-        (.toBe "none"))))
+  (check-auto-connection
+   {:nav/auto-connect-enabled? false
+    :nav/auto-reconnect-enabled? true
+    :nav/in-history? false
+    :nav/history-port nil
+    :nav/saved-port "1340"}
+   "none" nil))
 
 (defn- test-decide-auto-connection-returns-none-when-no-history-port []
   ;; Edge case: in history but port is nil
-  (let [ctx {:nav/auto-connect-enabled? false
-             :nav/auto-reconnect-enabled? true
-             :nav/in-history? true
-             :nav/history-port nil
-             :nav/saved-port "1340"}
-        result (bg/decide-auto-connection ctx)]
-    (-> (expect (:decision result))
-        (.toBe "none"))))
+  (check-auto-connection
+   {:nav/auto-connect-enabled? false
+    :nav/auto-reconnect-enabled? true
+    :nav/in-history? true
+    :nav/history-port nil
+    :nav/saved-port "1340"}
+   "none" nil))
 
 (defn- test-decide-auto-connection-returns-none-when-all-disabled []
-  (let [ctx {:nav/auto-connect-enabled? false
-             :nav/auto-reconnect-enabled? false
-             :nav/in-history? false
-             :nav/history-port nil
-             :nav/saved-port "1340"}
-        result (bg/decide-auto-connection ctx)]
-    (-> (expect (:decision result))
-        (.toBe "none"))))
+  (check-auto-connection
+   {:nav/auto-connect-enabled? false
+    :nav/auto-reconnect-enabled? false
+    :nav/in-history? false
+    :nav/history-port nil
+    :nav/saved-port "1340"}
+   "none" nil))
 
 (describe "decide-auto-connection"
           (fn []
@@ -114,114 +117,97 @@
 ;; Navigation trigger tests
 
 (defn- test-decide-connection-nav-off-reconnect-on-in-history []
-  (let [ctx {:trigger "navigation"
-             :auto-connect-level "off"
-             :reconnect-on-nav? true
-             :in-history? true
-             :history-port "1341"
-             :saved-port "1340"}
-        result (bg/decide-connection ctx)]
-    (-> (expect (:decision result))
-        (.toBe "reconnect"))
-    (-> (expect (:port result))
-        (.toBe "1341"))))
+  (check-connection
+   {:trigger "navigation"
+    :auto-connect-level "off"
+    :reconnect-on-nav? true
+    :in-history? true
+    :history-port "1341"
+    :saved-port "1340"}
+   "reconnect" "1341"))
 
 (defn- test-decide-connection-nav-off-reconnect-off []
-  (let [ctx {:trigger "navigation"
-             :auto-connect-level "off"
-             :reconnect-on-nav? false
-             :in-history? true
-             :history-port "1341"
-             :saved-port "1340"}
-        result (bg/decide-connection ctx)]
-    (-> (expect (:decision result))
-        (.toBe "none"))))
+  (check-connection
+   {:trigger "navigation"
+    :auto-connect-level "off"
+    :reconnect-on-nav? false
+    :in-history? true
+    :history-port "1341"
+    :saved-port "1340"}
+   "none" nil))
 
 (defn- test-decide-connection-nav-off-reconnect-on-not-in-history []
-  (let [ctx {:trigger "navigation"
-             :auto-connect-level "off"
-             :reconnect-on-nav? true
-             :in-history? false
-             :history-port nil
-             :saved-port "1340"}
-        result (bg/decide-connection ctx)]
-    (-> (expect (:decision result))
-        (.toBe "none"))))
+  (check-connection
+   {:trigger "navigation"
+    :auto-connect-level "off"
+    :reconnect-on-nav? true
+    :in-history? false
+    :history-port nil
+    :saved-port "1340"}
+   "none" nil))
 
 (defn- test-decide-connection-nav-all-pages []
-  (let [ctx {:trigger "navigation"
-             :auto-connect-level "all-pages"
-             :reconnect-on-nav? false
-             :in-history? false
-             :history-port nil
-             :saved-port "1340"}
-        result (bg/decide-connection ctx)]
-    (-> (expect (:decision result))
-        (.toBe "connect-all"))
-    (-> (expect (:port result))
-        (.toBe "1340"))))
+  (check-connection
+   {:trigger "navigation"
+    :auto-connect-level "all-pages"
+    :reconnect-on-nav? false
+    :in-history? false
+    :history-port nil
+    :saved-port "1340"}
+   "connect-all" "1340"))
 
 (defn- test-decide-connection-nav-all-tabs []
-  (let [ctx {:trigger "navigation"
-             :auto-connect-level "all-tabs"
-             :reconnect-on-nav? false
-             :in-history? false
-             :history-port nil
-             :saved-port "1340"}
-        result (bg/decide-connection ctx)]
-    (-> (expect (:decision result))
-        (.toBe "connect-all"))
-    (-> (expect (:port result))
-        (.toBe "1340"))))
+  (check-connection
+   {:trigger "navigation"
+    :auto-connect-level "all-tabs"
+    :reconnect-on-nav? false
+    :in-history? false
+    :history-port nil
+    :saved-port "1340"}
+   "connect-all" "1340"))
 
 ;; Visibility trigger tests
 
 (defn- test-decide-connection-vis-off []
-  (let [ctx {:trigger "visibility"
-             :auto-connect-level "off"
-             :reconnect-on-nav? true
-             :in-history? true
-             :history-port "1341"
-             :saved-port "1340"}
-        result (bg/decide-connection ctx)]
-    (-> (expect (:decision result))
-        (.toBe "none"))))
+  (check-connection
+   {:trigger "visibility"
+    :auto-connect-level "off"
+    :reconnect-on-nav? true
+    :in-history? true
+    :history-port "1341"
+    :saved-port "1340"}
+   "none" nil))
 
 (defn- test-decide-connection-vis-all-pages []
-  (let [ctx {:trigger "visibility"
-             :auto-connect-level "all-pages"
-             :reconnect-on-nav? false
-             :in-history? true
-             :history-port "1341"
-             :saved-port "1340"}
-        result (bg/decide-connection ctx)]
-    (-> (expect (:decision result))
-        (.toBe "none"))))
+  (check-connection
+   {:trigger "visibility"
+    :auto-connect-level "all-pages"
+    :reconnect-on-nav? false
+    :in-history? true
+    :history-port "1341"
+    :saved-port "1340"}
+   "none" nil))
 
 (defn- test-decide-connection-vis-all-tabs-has-port []
-  (let [ctx {:trigger "visibility"
-             :auto-connect-level "all-tabs"
-             :reconnect-on-nav? false
-             :in-history? true
-             :history-port "1341"
-             :saved-port "1340"}
-        result (bg/decide-connection ctx)]
-    (-> (expect (:decision result))
-        (.toBe "connect-all"))
-    ;; Prefers history-port
-    (-> (expect (:port result))
-        (.toBe "1341"))))
+  ;; Prefers history-port
+  (check-connection
+   {:trigger "visibility"
+    :auto-connect-level "all-tabs"
+    :reconnect-on-nav? false
+    :in-history? true
+    :history-port "1341"
+    :saved-port "1340"}
+   "connect-all" "1341"))
 
 (defn- test-decide-connection-vis-all-tabs-no-port []
-  (let [ctx {:trigger "visibility"
-             :auto-connect-level "all-tabs"
-             :reconnect-on-nav? false
-             :in-history? false
-             :history-port nil
-             :saved-port nil}
-        result (bg/decide-connection ctx)]
-    (-> (expect (:decision result))
-        (.toBe "none"))))
+  (check-connection
+   {:trigger "visibility"
+    :auto-connect-level "all-tabs"
+    :reconnect-on-nav? false
+    :in-history? false
+    :history-port nil
+    :saved-port nil}
+   "none" nil))
 
 (describe "decide-connection - navigation trigger"
           (fn []

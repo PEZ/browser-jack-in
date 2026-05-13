@@ -4,7 +4,7 @@
 (defn ^:async crop-image
   "Crop a full-viewport data URL to the given rect at device-pixel coordinates.
    Uses regular Canvas/Image (works in all browsers, unlike OffscreenCanvas)."
-  [data-url rect dpr format quality]
+  [{:keys [data-url rect dpr format quality]}]
   (let [img (js/Image.)
         _ (await (js/Promise. (fn [resolve reject]
                                 (set! (.-onload img) resolve)
@@ -26,43 +26,62 @@
       (.toDataURL canvas "image/jpeg" (/ quality 100))
       (.toDataURL canvas "image/png"))))
 
+(defn- outside-viewport? [el-left el-top w h]
+  (let [vw (.-innerWidth js/window)
+        vh (.-innerHeight js/window)]
+    (or (>= el-left vw) (>= el-top vh)
+        (<= (+ el-left w) 0) (<= (+ el-top h) 0))))
+
+(defn- zero-dimensions? [w h]
+  (or (<= w 0) (<= h 0)))
+
+(defn- validate-element!
+  "Validates element presence, dimensions, and viewport visibility.
+   Returns a map with :left :top :width :height, or throws."
+  [element]
+  (let [_ (or element
+              (throw (js/Error. "capture-element: element must not be nil")))
+        rect (.getBoundingClientRect element)
+        w (.-width rect)
+        h (.-height rect)
+        el-left (.-left rect)
+        el-top (.-top rect)
+        _ (or (not (zero-dimensions? w h))
+              (throw (js/Error. "capture-element: element has zero dimensions")))
+        _ (or (not (outside-viewport? el-left el-top w h))
+              (throw (js/Error. "capture-element: element is not in the viewport")))]
+    {:left el-left :top el-top :width w :height h}))
+
+(defn- ^:async process-capture-response
+  "Crops and packages a capture response. Returns {:success true/false ...}."
+  [response el-rect {:keys [fmt q dpr]}]
+  (if (and response (.-success response))
+    (let [cropped (await (crop-image {:data-url (.-dataUrl response)
+                                      :rect {:x (:left el-rect) :y (:top el-rect)
+                                             :width (:width el-rect) :height (:height el-rect)}
+                                      :dpr dpr :format fmt :quality q}))]
+      {:success true :dataUrl cropped})
+    {:success false
+     :error (if response
+              (.-error response)
+              "capture-element: timeout waiting for response")}))
+
 (defn ^:async capture-element
   "Capture a screenshot of a DOM element. Returns a promise resolving to
    {:success bool :dataUrl string :error string}.
    Options: :format (\"jpeg\" or \"png\", default \"jpeg\"), :quality (0-100, default 75)."
   [element & {:keys [format quality]}]
-  (when-not element
-    (throw (js/Error. "capture-element: element must not be nil")))
-  (let [rect (.getBoundingClientRect element)
-        w (.-width rect)
-        h (.-height rect)]
-    (when (or (<= w 0) (<= h 0))
-      (throw (js/Error. "capture-element: element has zero dimensions")))
-    (let [vw (.-innerWidth js/window)
-          vh (.-innerHeight js/window)
-          el-left (.-left rect)
-          el-top (.-top rect)]
-      (when (or (>= el-left vw) (>= el-top vh)
-                (<= (+ el-left w) 0) (<= (+ el-top h) 0))
-        (throw (js/Error. "capture-element: element is not in the viewport")))
-      (let [fmt (or format "jpeg")
-            q (or quality 75)
-            dpr (.-devicePixelRatio js/window)
-            payload {:format fmt :quality q}
-            response (await (helpers/send-and-receive
-                             "capture-element"
-                             "capture-element-response"
-                             payload
-                             10000))]
-        (if (and response (.-success response))
-          (let [cropped (await (crop-image (.-dataUrl response)
-                                          {:x el-left :y el-top :width w :height h}
-                                          dpr fmt q))]
-            {:success true :dataUrl cropped})
-          {:success false
-           :error (if response
-                    (.-error response)
-                    "capture-element: timeout waiting for response")})))))
+  (let [el-rect (validate-element! element)
+        fmt (or format "jpeg")
+        q (or quality 75)
+        dpr (.-devicePixelRatio js/window)
+        payload {:format fmt :quality q}
+        response (await (helpers/send-and-receive
+                         "capture-element"
+                         "capture-element-response"
+                         payload
+                         10000))]
+    (await (process-capture-response response el-rect {:fmt fmt :q q :dpr dpr}))))
 
 (defn ^:async capture-selector
   "Capture a screenshot of the first element matching a CSS selector.

@@ -13,62 +13,51 @@
     (-> (expect (count result))
         (.toBe 0))))
 
+(defn- items-watcher-result [old-items new-items]
+  (let [watcher {:uf/list-watchers {:items {:id-fn identity :on-change :ax.changed}}}]
+    (event-handler/get-list-watcher-actions
+     (assoc watcher :items old-items)
+     (assoc watcher :items new-items))))
+
 (defn- test-get-list-watcher-actions-returns-empty-when-watched-list-unchanged []
-  (let [old-state {:uf/list-watchers {:items {:id-fn identity :on-change :ax.changed}}
-                   :items [1 2 3]}
-        new-state {:uf/list-watchers {:items {:id-fn identity :on-change :ax.changed}}
-                   :items [1 2 3]}
-        result (event-handler/get-list-watcher-actions old-state new-state)]
+  (-> (expect (count (items-watcher-result [1 2 3] [1 2 3])))
+      (.toBe 0)))
+
+(defn- assert-items-watcher-single-change [old-items new-items assertions-fn]
+  (let [result (items-watcher-result old-items new-items)
+        [action-key payload] (first result)]
     (-> (expect (count result))
-        (.toBe 0))))
+        (.toBe 1))
+    (-> (expect action-key)
+        (.toBe :ax.changed))
+    (assertions-fn payload)))
 
 (defn- test-get-list-watcher-actions-detects-added-items []
-  (let [old-state {:uf/list-watchers {:items {:id-fn identity :on-change :ax.changed}}
-                   :items [1 2]}
-        new-state {:uf/list-watchers {:items {:id-fn identity :on-change :ax.changed}}
-                   :items [1 2 3]}
-        result (event-handler/get-list-watcher-actions old-state new-state)
-        [action-key payload] (first result)]
-    (-> (expect (count result))
-        (.toBe 1))
-    (-> (expect action-key)
-        (.toBe :ax.changed))
-    (-> (expect (contains? (:added payload) 3))
-        (.toBe true))
-    (-> (expect (count (:removed payload)))
-        (.toBe 0))))
+  (assert-items-watcher-single-change
+   [1 2] [1 2 3]
+   (fn [payload]
+     (-> (expect (contains? (:added payload) 3))
+         (.toBe true))
+     (-> (expect (count (:removed payload)))
+         (.toBe 0)))))
 
 (defn- test-get-list-watcher-actions-detects-removed-items []
-  (let [old-state {:uf/list-watchers {:items {:id-fn identity :on-change :ax.changed}}
-                   :items [1 2 3]}
-        new-state {:uf/list-watchers {:items {:id-fn identity :on-change :ax.changed}}
-                   :items [1 2]}
-        result (event-handler/get-list-watcher-actions old-state new-state)
-        [action-key payload] (first result)]
-    (-> (expect (count result))
-        (.toBe 1))
-    (-> (expect action-key)
-        (.toBe :ax.changed))
-    (-> (expect (count (:added payload)))
-        (.toBe 0))
-    (-> (expect (contains? (:removed payload) 3))
-        (.toBe true))))
+  (assert-items-watcher-single-change
+   [1 2 3] [1 2]
+   (fn [payload]
+     (-> (expect (count (:added payload)))
+         (.toBe 0))
+     (-> (expect (contains? (:removed payload) 3))
+         (.toBe true)))))
 
 (defn- test-get-list-watcher-actions-detects-both-added-and-removed []
-  (let [old-state {:uf/list-watchers {:items {:id-fn identity :on-change :ax.changed}}
-                   :items [1 2 3]}
-        new-state {:uf/list-watchers {:items {:id-fn identity :on-change :ax.changed}}
-                   :items [2 3 4]}
-        result (event-handler/get-list-watcher-actions old-state new-state)
-        [action-key payload] (first result)]
-    (-> (expect (count result))
-        (.toBe 1))
-    (-> (expect action-key)
-        (.toBe :ax.changed))
-    (-> (expect (contains? (:added payload) 4))
-        (.toBe true))
-    (-> (expect (contains? (:removed payload) 1))
-        (.toBe true))))
+  (assert-items-watcher-single-change
+   [1 2 3] [2 3 4]
+   (fn [payload]
+     (-> (expect (contains? (:added payload) 4))
+         (.toBe true))
+     (-> (expect (contains? (:removed payload) 1))
+         (.toBe true)))))
 
 (defn- test-get-list-watcher-actions-uses-id-fn-for-complex-items []
   (let [old-state {:uf/list-watchers {:scripts {:id-fn :script/id :on-change :ax.scripts-changed}}
@@ -102,20 +91,13 @@
         (.toBe 2))))
 
 (defn- test-get-list-watcher-actions-treats-nil-lists-as-empty []
-  (let [old-state {:uf/list-watchers {:items {:id-fn identity :on-change :ax.changed}}
-                   :items nil}
-        new-state {:uf/list-watchers {:items {:id-fn identity :on-change :ax.changed}}
-                   :items [1 2]}
-        result (event-handler/get-list-watcher-actions old-state new-state)
-        [action-key payload] (first result)]
-    (-> (expect (count result))
-        (.toBe 1))
-    (-> (expect action-key)
-        (.toBe :ax.changed))
-    (-> (expect (contains? (:added payload) 1))
-        (.toBe true))
-    (-> (expect (contains? (:added payload) 2))
-        (.toBe true))))
+  (assert-items-watcher-single-change
+   nil [1 2]
+   (fn [payload]
+     (-> (expect (contains? (:added payload) 1))
+         (.toBe true))
+     (-> (expect (contains? (:added payload) 2))
+         (.toBe true)))))
 
 ;; ============================================================
 ;; dispatch! list-watchers integration tests
@@ -191,79 +173,63 @@
 ;; Shadow list watcher tests
 ;; ============================================================
 
-(defn- test-shadow-list-watcher-detects-items-in-source-but-not-in-shadow []
+(defn- shadow-watcher-result [source shadow]
   (let [state {:uf/list-watchers {:scripts/list {:id-fn :script/id
                                                  :shadow-path :ui/scripts-shadow
                                                  :on-change :ax.sync}}
-               :scripts/list [{:script/id "a"} {:script/id "b"} {:script/id "c"}]
-               :ui/scripts-shadow [{:item {:script/id "a"} :ui/entering? false :ui/leaving? false}
-                                   {:item {:script/id "b"} :ui/entering? false :ui/leaving? false}]}
-        result (event-handler/get-list-watcher-actions state state)
+               :scripts/list source
+               :ui/scripts-shadow shadow}]
+    (event-handler/get-list-watcher-actions state state)))
+
+(defn- assert-shadow-single-change [source shadow assertions-fn]
+  (let [result (shadow-watcher-result source shadow)
         [action-key payload] (first result)]
     (-> (expect (count result))
         (.toBe 1))
     (-> (expect action-key)
         (.toBe :ax.sync))
-    ;; Should have the full item for additions
-    (-> (expect (count (:added-items payload)))
-        (.toBe 1))
-    (-> (expect (:script/id (first (:added-items payload))))
-        (.toBe "c"))
-    ;; No removals
-    (-> (expect (count (:removed-ids payload)))
-        (.toBe 0))))
+    (assertions-fn payload)))
+
+(defn- test-shadow-list-watcher-detects-items-in-source-but-not-in-shadow []
+  (assert-shadow-single-change
+   [{:script/id "a"} {:script/id "b"} {:script/id "c"}]
+   [{:item {:script/id "a"} :ui/entering? false :ui/leaving? false}
+    {:item {:script/id "b"} :ui/entering? false :ui/leaving? false}]
+   (fn [payload]
+     (-> (expect (count (:added-items payload)))
+         (.toBe 1))
+     (-> (expect (:script/id (first (:added-items payload))))
+         (.toBe "c"))
+     (-> (expect (count (:removed-ids payload)))
+         (.toBe 0)))))
 
 (defn- test-shadow-list-watcher-detects-items-in-shadow-but-not-in-source []
-  (let [state {:uf/list-watchers {:scripts/list {:id-fn :script/id
-                                                 :shadow-path :ui/scripts-shadow
-                                                 :on-change :ax.sync}}
-               :scripts/list [{:script/id "a"}]
-               :ui/scripts-shadow [{:item {:script/id "a"} :ui/entering? false :ui/leaving? false}
-                                   {:item {:script/id "b"} :ui/entering? false :ui/leaving? false}]}
-        result (event-handler/get-list-watcher-actions state state)
-        [action-key payload] (first result)]
-    (-> (expect (count result))
-        (.toBe 1))
-    (-> (expect action-key)
-        (.toBe :ax.sync))
-    ;; No additions
-    (-> (expect (count (:added-items payload)))
-        (.toBe 0))
-    ;; Should have ID for removal
-    (-> (expect (contains? (:removed-ids payload) "b"))
-        (.toBe true))))
+  (assert-shadow-single-change
+   [{:script/id "a"}]
+   [{:item {:script/id "a"} :ui/entering? false :ui/leaving? false}
+    {:item {:script/id "b"} :ui/entering? false :ui/leaving? false}]
+   (fn [payload]
+     (-> (expect (count (:added-items payload)))
+         (.toBe 0))
+     (-> (expect (contains? (:removed-ids payload) "b"))
+         (.toBe true)))))
 
 (defn- test-shadow-list-watcher-returns-empty-when-shadow-matches-source []
-  (let [state {:uf/list-watchers {:scripts/list {:id-fn :script/id
-                                                 :shadow-path :ui/scripts-shadow
-                                                 :on-change :ax.sync}}
-               :scripts/list [{:script/id "a"} {:script/id "b"}]
-               :ui/scripts-shadow [{:item {:script/id "a"} :ui/entering? false :ui/leaving? false}
-                                   {:item {:script/id "b"} :ui/entering? false :ui/leaving? false}]}
-        result (event-handler/get-list-watcher-actions state state)]
-    (-> (expect (count result))
-        (.toBe 0))))
+  (-> (expect (count (shadow-watcher-result
+                      [{:script/id "a"} {:script/id "b"}]
+                      [{:item {:script/id "a"} :ui/entering? false :ui/leaving? false}
+                       {:item {:script/id "b"} :ui/entering? false :ui/leaving? false}])))
+      (.toBe 0)))
 
 (defn- test-shadow-list-watcher-ignores-items-already-marked-as-leaving []
-  (let [state {:uf/list-watchers {:scripts/list {:id-fn :script/id
-                                                 :shadow-path :ui/scripts-shadow
-                                                 :on-change :ax.sync}}
-               :scripts/list [{:script/id "a"}]
-               ;; "b" is already leaving - should not trigger removal again
-               :ui/scripts-shadow [{:item {:script/id "a"} :ui/entering? false :ui/leaving? false}
-                                   {:item {:script/id "b"} :ui/entering? false :ui/leaving? true}]}
-        result (event-handler/get-list-watcher-actions state state)]
-    ;; No action because "b" is already leaving
-    (-> (expect (count result))
-        (.toBe 0))))
+  (-> (expect (count (shadow-watcher-result
+                      [{:script/id "a"}]
+                      [{:item {:script/id "a"} :ui/entering? false :ui/leaving? false}
+                       {:item {:script/id "b"} :ui/entering? false :ui/leaving? true}])))
+      (.toBe 0)))
 
 (defn- test-shadow-list-watcher-treats-nil-shadow-as-empty []
-  (let [state {:uf/list-watchers {:scripts/list {:id-fn :script/id
-                                                 :shadow-path :ui/scripts-shadow
-                                                 :on-change :ax.sync}}
-               :scripts/list [{:script/id "a"} {:script/id "b"}]
-               :ui/scripts-shadow nil}
-        result (event-handler/get-list-watcher-actions state state)
+  (let [result (shadow-watcher-result [{:script/id "a"} {:script/id "b"}] nil)
         [_action-key payload] (first result)]
     (-> (expect (count result))
         (.toBe 1))
@@ -275,20 +241,13 @@
 ;; ============================================================
 
 (defn- test-content-change-detection-detects-content-changes-for-items-with-same-id []
-  (let [state {:uf/list-watchers {:scripts/list {:id-fn :script/id
-                                                 :shadow-path :ui/scripts-shadow
-                                                 :on-change :ax.sync}}
-               ;; Source has updated content for "a"
-               :scripts/list [{:script/id "a" :script/code "updated"}
-                              {:script/id "b" :script/code "original"}]
-               ;; Shadow has old content for "a"
-               :ui/scripts-shadow [{:item {:script/id "a" :script/code "original"} :ui/entering? false :ui/leaving? false}
-                                   {:item {:script/id "b" :script/code "original"} :ui/entering? false :ui/leaving? false}]}
-        result (event-handler/get-list-watcher-actions state state)]
-    ;; Should fire because content changed
+  (let [result (shadow-watcher-result
+                [{:script/id "a" :script/code "updated"}
+                 {:script/id "b" :script/code "original"}]
+                [{:item {:script/id "a" :script/code "original"} :ui/entering? false :ui/leaving? false}
+                 {:item {:script/id "b" :script/code "original"} :ui/entering? false :ui/leaving? false}])]
     (-> (expect (count result))
         (.toBe 1))
-    ;; No membership changes
     (let [[_action-key payload] (first result)]
       (-> (expect (count (:added-items payload)))
           (.toBe 0))
@@ -296,15 +255,11 @@
           (.toBe 0)))))
 
 (defn- test-content-change-detection-does-not-fire-when-content-is-identical []
-  (let [state {:uf/list-watchers {:scripts/list {:id-fn :script/id
-                                                 :shadow-path :ui/scripts-shadow
-                                                 :on-change :ax.sync}}
-               :scripts/list [{:script/id "a" :script/code "same"} {:script/id "b"}]
-               :ui/scripts-shadow [{:item {:script/id "a" :script/code "same"} :ui/entering? false :ui/leaving? false}
-                                   {:item {:script/id "b"} :ui/entering? false :ui/leaving? false}]}
-        result (event-handler/get-list-watcher-actions state state)]
-    (-> (expect (count result))
-        (.toBe 0))))
+  (-> (expect (count (shadow-watcher-result
+                      [{:script/id "a" :script/code "same"} {:script/id "b"}]
+                      [{:item {:script/id "a" :script/code "same"} :ui/entering? false :ui/leaving? false}
+                       {:item {:script/id "b"} :ui/entering? false :ui/leaving? false}])))
+      (.toBe 0)))
 
 ;; ============================================================
 ;; Test Registration

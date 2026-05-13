@@ -37,97 +37,66 @@
 ;; Rename Script Tests
 ;; ============================================================
 
-(defn- test-rename-rejects-when-source-script-not-found []
-  (let [result (bg-actions/handle-action initial-state uf-data
-                 [:fs/ax.rename-script "nonexistent.cljs" "new-name.cljs"])
+(defn- assert-rejection [state action-vec expected-error]
+  (let [result (bg-actions/handle-action state uf-data action-vec)
         error-response (some #(when (= :bg/fx.send-response (first %)) (second %)) (:uf/fxs result))]
     (-> (expect error-response)
         (.toBeTruthy))
     (-> (expect (:success error-response))
         (.toBe false))
     (-> (expect (:error error-response))
-        (.toContain "Script not found"))))
+        (.toContain expected-error))))
+
+(defn- assert-success-response [result]
+  (-> (expect (:uf/db result))
+      (.toBeTruthy))
+  (-> (expect (some #(and (= :bg/fx.send-response (first %))
+                          (-> % second :success)) (:uf/fxs result)))
+      (.toBeTruthy)))
+
+(defn- test-rename-rejects-when-source-script-not-found []
+  (assert-rejection initial-state
+                    [:fs/ax.rename-script "nonexistent.cljs" "new-name.cljs"]
+                    "Script not found"))
 
 (defn- test-rename-rejects-when-source-is-builtin-script []
-  (let [state {:storage/scripts [builtin-script]}
-        result (bg-actions/handle-action state uf-data
-                 [:fs/ax.rename-script "gist-installer.cljs" "renamed.cljs"])
-        error-response (some #(when (= :bg/fx.send-response (first %)) (second %)) (:uf/fxs result))]
-    (-> (expect error-response)
-        (.toBeTruthy))
-    (-> (expect (:success error-response))
-        (.toBe false))
-    (-> (expect (:error error-response))
-        (.toContain "built-in"))))
+  (assert-rejection {:storage/scripts [builtin-script]}
+                    [:fs/ax.rename-script "gist-installer.cljs" "renamed.cljs"]
+                    "built-in"))
 
 (defn- test-rename-rejects-when-target-name-already-exists []
-  (let [other-script (assoc base-script :script/id "script-456" :script/name "existing.cljs")
-        state {:storage/scripts [base-script other-script]}
-        result (bg-actions/handle-action state uf-data
-                 [:fs/ax.rename-script "test.cljs" "existing.cljs"])
-        error-response (some #(when (= :bg/fx.send-response (first %)) (second %)) (:uf/fxs result))]
-    (-> (expect error-response)
-        (.toBeTruthy))
-    (-> (expect (:success error-response))
-        (.toBe false))
-    (-> (expect (:error error-response))
-        (.toContain "already exists"))))
+  (let [other-script (assoc base-script :script/id "script-456" :script/name "existing.cljs")]
+    (assert-rejection {:storage/scripts [base-script other-script]}
+                      [:fs/ax.rename-script "test.cljs" "existing.cljs"]
+                      "already exists")))
 
 (defn- test-rename-rejects-reserved-namespace-on-rename []
-  (let [result (bg-actions/handle-action initial-state uf-data
-                 [:fs/ax.rename-script "test.cljs" "epupp/test.cljs"])
-        error-response (some #(when (= :bg/fx.send-response (first %)) (second %)) (:uf/fxs result))]
-    (-> (expect error-response)
-        (.toBeTruthy))
-    (-> (expect (:success error-response))
-        (.toBe false))
-    (-> (expect (:error error-response))
-        (.toContain "reserved namespace"))))
+  (assert-rejection initial-state
+                    [:fs/ax.rename-script "test.cljs" "epupp/test.cljs"]
+                    "reserved namespace"))
 
 (defn- test-rename-rejects-reserved-namespace-uppercase-on-rename []
-  (let [result (bg-actions/handle-action initial-state uf-data
-                 [:fs/ax.rename-script "test.cljs" "EPUPP/test.cljs"])
-        error-response (some #(when (= :bg/fx.send-response (first %)) (second %)) (:uf/fxs result))]
-    (-> (expect error-response)
-        (.toBeTruthy))
-    (-> (expect (:success error-response))
-        (.toBe false))
-    (-> (expect (:error error-response))
-        (.toContain "reserved namespace"))))
+  (assert-rejection initial-state
+                    [:fs/ax.rename-script "test.cljs" "EPUPP/test.cljs"]
+                    "reserved namespace"))
 
 (defn- test-rename-rejects-leading-slash-on-rename []
-  (let [result (bg-actions/handle-action initial-state uf-data
-                 [:fs/ax.rename-script "test.cljs" "/test.cljs"])
-        error-response (some #(when (= :bg/fx.send-response (first %)) (second %)) (:uf/fxs result))]
-    (-> (expect error-response)
-        (.toBeTruthy))
-    (-> (expect (:success error-response))
-        (.toBe false))
-    (-> (expect (:error error-response))
-        (.toContain "start with '/"))))
+  (assert-rejection initial-state
+                    [:fs/ax.rename-script "test.cljs" "/test.cljs"]
+                    "start with '/"))
 
 (defn- test-rename-rejects-path-traversal-on-rename []
-  (let [result (bg-actions/handle-action initial-state uf-data
-                 [:fs/ax.rename-script "test.cljs" "foo/../bar.cljs"])
-        error-response (some #(when (= :bg/fx.send-response (first %)) (second %)) (:uf/fxs result))]
-    (-> (expect error-response)
-        (.toBeTruthy))
-    (-> (expect (:success error-response))
-        (.toBe false))
-    (-> (expect (:error error-response))
-        (.toContain "./' or '../'"))))
+  (assert-rejection initial-state
+                    [:fs/ax.rename-script "test.cljs" "foo/../bar.cljs"]
+                    "./' or '../'"))
 
 (defn- test-rename-allows-rename-when-target-name-is-free []
   (let [result (bg-actions/handle-action initial-state uf-data
-                 [:fs/ax.rename-script "test.cljs" "renamed.cljs"])]
-    (-> (expect (:uf/db result))
-        (.toBeTruthy))
+                                         [:fs/ax.rename-script "test.cljs" "renamed.cljs"])]
+    (assert-success-response result)
     (-> (expect (-> result :uf/db :storage/scripts first :script/name))
         (.toBe "renamed.cljs"))
     (-> (expect (some #(= :storage/fx.persist! (first %)) (:uf/fxs result)))
-        (.toBeTruthy))
-    (-> (expect (some #(and (= :bg/fx.send-response (first %))
-                            (-> % second :success)) (:uf/fxs result)))
         (.toBeTruthy))))
 
 (defn- test-rename-updates-modified-timestamp-on-rename []
@@ -144,12 +113,11 @@
                                :script/code "(println \"existing\")")
         state {:storage/scripts [base-script existing-script]}
         result (bg-actions/handle-action state uf-data
-                 [:fs/ax.rename-script "test.cljs" "existing.cljs" true])
+                                         [:fs/ax.rename-script "test.cljs" "existing.cljs" true])
         renamed-scripts (->> result :uf/db :storage/scripts
                              (filter #(= (:script/name %) "existing.cljs")))
         renamed-script (first renamed-scripts)]
-    (-> (expect (:uf/db result))
-        (.toBeTruthy))
+    (assert-success-response result)
     (-> (expect (count (-> result :uf/db :storage/scripts)))
         (.toBe 1))
     (-> (expect (count renamed-scripts))
@@ -157,23 +125,13 @@
     (-> (expect (:script/id renamed-script))
         (.toBe "script-123"))
     (-> (expect (:script/code renamed-script))
-        (.toBe "(println \"hello\")"))
-    (-> (expect (some #(and (= :bg/fx.send-response (first %))
-                            (-> % second :success)) (:uf/fxs result)))
-        (.toBeTruthy))))
+        (.toBe "(println \"hello\")"))))
 
 (defn- test-rename-force-overwrite-rejects-built-in-target []
-  (let [builtin-target (assoc builtin-script :script/name "existing.cljs")
-        state {:storage/scripts [base-script builtin-target]}
-        result (bg-actions/handle-action state uf-data
-                 [:fs/ax.rename-script "test.cljs" "existing.cljs" true])
-        error-response (some #(when (= :bg/fx.send-response (first %)) (second %)) (:uf/fxs result))]
-    (-> (expect error-response)
-        (.toBeTruthy))
-    (-> (expect (:success error-response))
-        (.toBe false))
-    (-> (expect (:error error-response))
-        (.toContain "Cannot overwrite built-in scripts"))))
+  (let [builtin-target (assoc builtin-script :script/name "existing.cljs")]
+    (assert-rejection {:storage/scripts [base-script builtin-target]}
+                      [:fs/ax.rename-script "test.cljs" "existing.cljs" true]
+                      "Cannot overwrite built-in scripts")))
 
 (describe ":fs/ax.rename-script"
           (fn []
@@ -216,39 +174,22 @@
 ;; ============================================================
 
 (defn- test-delete-rejects-when-script-not-found []
-  (let [result (bg-actions/handle-action initial-state uf-data
-                 [:fs/ax.delete-script "nonexistent.cljs"])
-        error-response (some #(when (= :bg/fx.send-response (first %)) (second %)) (:uf/fxs result))]
-    (-> (expect error-response)
-        (.toBeTruthy))
-    (-> (expect (:success error-response))
-        (.toBe false))
-    (-> (expect (:error error-response))
-        (.toContain "Not deleting non-existent file"))))
+  (assert-rejection initial-state
+                    [:fs/ax.delete-script "nonexistent.cljs"]
+                    "Not deleting non-existent file"))
 
 (defn- test-delete-rejects-when-script-is-builtin []
-  (let [state {:storage/scripts [builtin-script]}
-        result (bg-actions/handle-action state uf-data
-                 [:fs/ax.delete-script "gist-installer.cljs"])
-        error-response (some #(when (= :bg/fx.send-response (first %)) (second %)) (:uf/fxs result))]
-    (-> (expect error-response)
-        (.toBeTruthy))
-    (-> (expect (:success error-response))
-        (.toBe false))
-    (-> (expect (:error error-response))
-        (.toContain "built-in"))))
+  (assert-rejection {:storage/scripts [builtin-script]}
+                    [:fs/ax.delete-script "gist-installer.cljs"]
+                    "built-in"))
 
 (defn- test-delete-allows-delete-and-removes-from-state []
   (let [result (bg-actions/handle-action initial-state uf-data
-                 [:fs/ax.delete-script "test.cljs"])]
-    (-> (expect (:uf/db result))
-        (.toBeTruthy))
+                                         [:fs/ax.delete-script "test.cljs"])]
+    (assert-success-response result)
     (-> (expect (count (-> result :uf/db :storage/scripts)))
         (.toBe 0))
     (-> (expect (some #(= :storage/fx.persist! (first %)) (:uf/fxs result)))
-        (.toBeTruthy))
-    (-> (expect (some #(and (= :bg/fx.send-response (first %))
-                            (-> % second :success)) (:uf/fxs result)))
         (.toBeTruthy))))
 
 (describe ":fs/ax.delete-script"
@@ -262,31 +203,16 @@
 ;; ============================================================
 
 (defn- test-save-rejects-when-updating-a-builtin-script []
-  (let [state {:storage/scripts [builtin-script]}
-        updated-script (assoc builtin-script :script/code "(new code)")
-        result (bg-actions/handle-action state uf-data
-                 [:fs/ax.save-script updated-script])
-        error-response (some #(when (= :bg/fx.send-response (first %)) (second %)) (:uf/fxs result))]
-    (-> (expect error-response)
-        (.toBeTruthy))
-    (-> (expect (:success error-response))
-        (.toBe false))
-    (-> (expect (:error error-response))
-        (.toContain "built-in"))))
+  (assert-rejection {:storage/scripts [builtin-script]}
+                    [:fs/ax.save-script (assoc builtin-script :script/code "(new code)")]
+                    "built-in"))
 
 (defn- test-save-rejects-when-name-exists-and-not-force []
-  (let [new-script {:script/id "script-new"
-                    :script/name "test.cljs"
-                    :script/code "(new code)"}
-        result (bg-actions/handle-action initial-state uf-data
-                 [:fs/ax.save-script new-script])
-        error-response (some #(when (= :bg/fx.send-response (first %)) (second %)) (:uf/fxs result))]
-    (-> (expect error-response)
-        (.toBeTruthy))
-    (-> (expect (:success error-response))
-        (.toBe false))
-    (-> (expect (:error error-response))
-        (.toContain "already exists"))))
+  (assert-rejection initial-state
+                    [:fs/ax.save-script {:script/id "script-new"
+                                         :script/name "test.cljs"
+                                         :script/code "(new code)"}]
+                    "already exists"))
 
 (defn- test-save-force-overwrite-preserves-existing-script-id []
   (let [new-script {:script/id "script-new"
@@ -305,47 +231,33 @@
         (.toBe "(new code)"))))
 
 (defn- test-save-allows-create-when-name-is-new []
-  (let [new-script {:script/id "script-new"
-                    :script/name "brand-new.cljs"
-                    :script/code "(new code)"}
-        result (bg-actions/handle-action initial-state uf-data
-                 [:fs/ax.save-script new-script])]
-    (-> (expect (:uf/db result))
-        (.toBeTruthy))
+  (let [result (bg-actions/handle-action initial-state uf-data
+                                         [:fs/ax.save-script {:script/id "script-new"
+                                                              :script/name "brand-new.cljs"
+                                                              :script/code "(new code)"}])]
+    (assert-success-response result)
     (-> (expect (count (-> result :uf/db :storage/scripts)))
         (.toBe 2))
     (-> (expect (some #(= :storage/fx.persist! (first %)) (:uf/fxs result)))
-        (.toBeTruthy))
-    (-> (expect (some #(and (= :bg/fx.send-response (first %))
-                            (-> % second :success)) (:uf/fxs result)))
         (.toBeTruthy))))
 
 (defn- test-save-allows-update-when-script-exists-by-id []
   (let [updated-script (assoc base-script :script/code "(updated code)")
         result (bg-actions/handle-action initial-state uf-data
-                 [:fs/ax.save-script updated-script])]
-    (-> (expect (:uf/db result))
-        (.toBeTruthy))
+                                         [:fs/ax.save-script updated-script])]
+    (assert-success-response result)
     (-> (expect (count (-> result :uf/db :storage/scripts)))
         (.toBe 1))
     (-> (expect (-> result :uf/db :storage/scripts first :script/code))
-        (.toBe "(updated code)"))
-    (-> (expect (some #(and (= :bg/fx.send-response (first %))
-                            (-> % second :success)) (:uf/fxs result)))
-        (.toBeTruthy))))
+        (.toBe "(updated code)"))))
 
 (defn- test-save-allows-overwrite-when-force-flag-set []
-  (let [new-script {:script/id "script-new"
-                    :script/name "test.cljs"
-                    :script/code "(overwrite code)"
-                    :script/force? true}
-        result (bg-actions/handle-action initial-state uf-data
-                 [:fs/ax.save-script new-script])]
-    (-> (expect (:uf/db result))
-        (.toBeTruthy))
-    (-> (expect (some #(and (= :bg/fx.send-response (first %))
-                            (-> % second :success)) (:uf/fxs result)))
-        (.toBeTruthy))))
+  (let [result (bg-actions/handle-action initial-state uf-data
+                                         [:fs/ax.save-script {:script/id "script-new"
+                                                              :script/name "test.cljs"
+                                                              :script/code "(overwrite code)"
+                                                              :script/force? true}])]
+    (assert-success-response result)))
 
 (defn- test-save-preserves-enabled-state-when-updating-existing-script []
   (let [updated-script {:script/id "script-123"
@@ -371,24 +283,19 @@
         (.toBe false))))
 
 (defn- test-save-allows-manual-only-script []
-  (let [manual-script {:script/name "manual.cljs"
-                       :script/code "(println \"manual script\")"
-                       :script/match []}
-        result (bg-actions/handle-action initial-state uf-data
-                                         [:fs/ax.save-script manual-script])
+  (let [result (bg-actions/handle-action initial-state uf-data
+                                         [:fs/ax.save-script {:script/name "manual.cljs"
+                                                              :script/code "(println \"manual script\")"
+                                                              :script/match []}])
         saved-script (->> result :uf/db :storage/scripts
                           (filter #(= (:script/name %) "manual.cljs"))
                           first)]
-    (-> (expect (:uf/db result))
-        (.toBeTruthy))
+    (assert-success-response result)
     (-> (expect (:script/match saved-script))
         (.toEqual []))
     (-> (expect (:script/enabled saved-script))
         (.toBe false))
     (-> (expect (some #(= :storage/fx.persist! (first %)) (:uf/fxs result)))
-        (.toBeTruthy))
-    (-> (expect (some #(and (= :bg/fx.send-response (first %))
-                            (-> % second :success)) (:uf/fxs result)))
         (.toBeTruthy))))
 
 (describe ":fs/ax.save-script"
@@ -437,35 +344,19 @@
          :script/builtin? true))
 
 (defn- test-builtin-protection-rejects-creating-script-with-normalized-builtin-name []
-  (let [state {:storage/scripts [builtin-with-display-name]}
-        new-script {:script/id "script-attacker"
-                    :script/name "github_gist_installer_built_in.cljs"
-                    :script/code "(malicious code)"}
-        result (bg-actions/handle-action state uf-data
-                 [:fs/ax.save-script new-script])
-        error-response (some #(when (= :bg/fx.send-response (first %)) (second %)) (:uf/fxs result))]
-    (-> (expect error-response)
-        (.toBeTruthy))
-    (-> (expect (:success error-response))
-        (.toBe false))
-    (-> (expect (:error error-response))
-        (.toContain "built-in"))))
+  (assert-rejection {:storage/scripts [builtin-with-display-name]}
+                    [:fs/ax.save-script {:script/id "script-attacker"
+                                         :script/name "github_gist_installer_built_in.cljs"
+                                         :script/code "(malicious code)"}]
+                    "built-in"))
 
 (defn- test-builtin-protection-rejects-creating-script-even-with-force-flag []
-  (let [state {:storage/scripts [builtin-with-display-name]}
-        new-script {:script/id "script-attacker"
-                    :script/name "github_gist_installer_built_in.cljs"
-                    :script/code "(malicious code)"
-                    :script/force? true}
-        result (bg-actions/handle-action state uf-data
-                 [:fs/ax.save-script new-script])
-        error-response (some #(when (= :bg/fx.send-response (first %)) (second %)) (:uf/fxs result))]
-    (-> (expect error-response)
-        (.toBeTruthy))
-    (-> (expect (:success error-response))
-        (.toBe false))
-    (-> (expect (:error error-response))
-        (.toContain "built-in"))))
+  (assert-rejection {:storage/scripts [builtin-with-display-name]}
+                    [:fs/ax.save-script {:script/id "script-attacker"
+                                         :script/name "github_gist_installer_built_in.cljs"
+                                         :script/code "(malicious code)"
+                                         :script/force? true}]
+                    "built-in"))
 
 (describe ":fs/ax.save-script - built-in name protection"
           (fn []
@@ -477,78 +368,41 @@
 ;; ============================================================
 
 (defn- test-epupp-namespace-rejects-uppercase-epupp-prefix []
-  (let [state {:storage/scripts []}
-        new-script {:script/id "script-attacker"
-                    :script/name "EPUPP/my-script.cljs"
-                    :script/code "(println \"test\")"}
-        result (bg-actions/handle-action state uf-data
-                                         [:fs/ax.save-script new-script])
-        error-response (some #(when (= :bg/fx.send-response (first %)) (second %)) (:uf/fxs result))]
-    (-> (expect error-response)
-        (.toBeTruthy))
-    (-> (expect (:success error-response))
-        (.toBe false))
-    (-> (expect (:error error-response))
-        (.toContain "reserved namespace"))))
+  (assert-rejection {:storage/scripts []}
+                    [:fs/ax.save-script {:script/id "script-attacker"
+                                         :script/name "EPUPP/my-script.cljs"
+                                         :script/code "(println \"test\")"}]
+                    "reserved namespace"))
 
 (defn- test-epupp-namespace-rejects-when-creating-script-with-epupp-prefix []
-  (let [state {:storage/scripts []}
-        new-script {:script/id "script-attacker"
-                    :script/name "epupp/my-script.cljs"
-                    :script/code "(println \"test\")"}
-        result (bg-actions/handle-action state uf-data
-                 [:fs/ax.save-script new-script])
-        error-response (some #(when (= :bg/fx.send-response (first %)) (second %)) (:uf/fxs result))]
-    (-> (expect error-response)
-        (.toBeTruthy))
-    (-> (expect (:success error-response))
-        (.toBe false))
-    (-> (expect (:error error-response))
-        (.toContain "reserved namespace"))))
+  (assert-rejection {:storage/scripts []}
+                    [:fs/ax.save-script {:script/id "script-attacker"
+                                         :script/name "epupp/my-script.cljs"
+                                         :script/code "(println \"test\")"}]
+                    "reserved namespace"))
 
 (defn- test-epupp-namespace-rejects-epupp-prefix-even-with-force-flag []
-  (let [state {:storage/scripts []}
-        new-script {:script/id "script-attacker"
-                    :script/name "epupp/test.cljs"
-                    :script/code "(println \"test\")"
-                    :script/force? true}
-        result (bg-actions/handle-action state uf-data
-                 [:fs/ax.save-script new-script])
-        error-response (some #(when (= :bg/fx.send-response (first %)) (second %)) (:uf/fxs result))]
-    (-> (expect error-response)
-        (.toBeTruthy))
-    (-> (expect (:success error-response))
-        (.toBe false))
-    (-> (expect (:error error-response))
-        (.toContain "reserved namespace"))))
+  (assert-rejection {:storage/scripts []}
+                    [:fs/ax.save-script {:script/id "script-attacker"
+                                         :script/name "epupp/test.cljs"
+                                         :script/code "(println \"test\")"
+                                         :script/force? true}]
+                    "reserved namespace"))
 
 (defn- test-epupp-namespace-rejects-epupp-built-in-prefix []
-  (let [state {:storage/scripts []}
-        new-script {:script/id "script-attacker"
-                    :script/name "epupp/built-in/fake.cljs"
-                    :script/code "(println \"test\")"}
-        result (bg-actions/handle-action state uf-data
-                 [:fs/ax.save-script new-script])
-        error-response (some #(when (= :bg/fx.send-response (first %)) (second %)) (:uf/fxs result))]
-    (-> (expect error-response)
-        (.toBeTruthy))
-    (-> (expect (:success error-response))
-        (.toBe false))
-    (-> (expect (:error error-response))
-        (.toContain "reserved namespace"))))
+  (assert-rejection {:storage/scripts []}
+                    [:fs/ax.save-script {:script/id "script-attacker"
+                                         :script/name "epupp/built-in/fake.cljs"
+                                         :script/code "(println \"test\")"}]
+                    "reserved namespace"))
 
 (defn- test-epupp-namespace-allows-scripts-with-epupp-elsewhere-in-name []
-  (let [state {:storage/scripts []}
-        new-script {:script/id "script-ok"
-                    :script/name "my-epupp-helper.cljs"
-                    :script/code "(println \"test\")"}
-        result (bg-actions/handle-action state uf-data
-                 [:fs/ax.save-script new-script])]
-    (-> (expect (:uf/db result))
-        (.toBeTruthy))
-    (-> (expect (some #(and (= :bg/fx.send-response (first %))
-                            (-> % second :success)) (:uf/fxs result)))
-        (.toBeTruthy))))
+  (assert-success-response
+   (bg-actions/handle-action {:storage/scripts []}
+                             uf-data
+                             [:fs/ax.save-script {:script/id "script-ok"
+                                                  :script/name "my-epupp-helper.cljs"
+                                                  :script/code "(println \"test\")"}])))
 
 (describe ":fs/ax.save-script - epupp/ namespace reservation"
           (fn []
@@ -588,13 +442,17 @@
 ;; Base Info Return Shape Expanded Tests
 ;; ============================================================
 
+(defn- base-info-of [extra-fields]
+  (repl-fs-actions/script->base-info
+   (merge {:script/id "script-1"
+           :script/name "test.cljs"
+           :script/created "2026-01-15T10:00:00.000Z"
+           :script/modified "2026-01-15T12:00:00.000Z"
+           :script/code "(println \"test\")"}
+          extra-fields)))
+
 (defn- test-base-info-required-fields-present []
-  (let [script {:script/id "script-1"
-                :script/name "test.cljs"
-                :script/created "2026-01-15T10:00:00.000Z"
-                :script/modified "2026-01-15T12:00:00.000Z"
-                :script/code "(println \"test\")"}
-        result (repl-fs-actions/script->base-info script)]
+  (let [result (base-info-of {})]
     (-> (expect (:fs/name result))
         (.toBe "test.cljs"))
     (-> (expect (:fs/created result))
@@ -603,16 +461,11 @@
         (.toBe "2026-01-15T12:00:00.000Z"))))
 
 (defn- test-base-info-optional-fields-omitted-when-nil []
-  (let [script {:script/id "script-1"
-                :script/name "minimal.cljs"
-                :script/created "2026-01-15T10:00:00.000Z"
-                :script/modified "2026-01-15T12:00:00.000Z"
-                :script/code "(println \"test\")"
-                :script/description nil
-                :script/run-at nil
-                :script/inject nil
-                :script/match nil}
-        result (repl-fs-actions/script->base-info script)]
+  (let [result (base-info-of {:script/name "minimal.cljs"
+                              :script/description nil
+                              :script/run-at nil
+                              :script/inject nil
+                              :script/match nil})]
     (-> (expect (contains? result :fs/description))
         (.toBe false))
     (-> (expect (contains? result :fs/run-at))
@@ -625,26 +478,13 @@
         (.toBe false))))
 
 (defn- test-base-info-match-patterns-as-vector []
-  (let [script {:script/id "script-1"
-                :script/name "test.cljs"
-                :script/created "2026-01-15T10:00:00.000Z"
-                :script/modified "2026-01-15T12:00:00.000Z"
-                :script/code "(println \"test\")"
-                :script/match ["https://github.com/*" "https://gitlab.com/*"]
-                :script/enabled true}
-        result (repl-fs-actions/script->base-info script)]
-    (-> (expect (:fs/auto-run-match result))
-        (.toEqual ["https://github.com/*" "https://gitlab.com/*"]))))
+  (-> (expect (:fs/auto-run-match (base-info-of {:script/match ["https://github.com/*" "https://gitlab.com/*"]
+                                                 :script/enabled true})))
+      (.toEqual ["https://github.com/*" "https://gitlab.com/*"])))
 
 (defn- test-base-info-auto-run-and-enabled-when-script-has-patterns []
-  (let [script {:script/id "script-1"
-                :script/name "test.cljs"
-                :script/created "2026-01-15T10:00:00.000Z"
-                :script/modified "2026-01-15T12:00:00.000Z"
-                :script/code "(println \"test\")"
-                :script/match ["https://example.com/*"]
-                :script/enabled true}
-        result (repl-fs-actions/script->base-info script)]
+  (let [result (base-info-of {:script/match ["https://example.com/*"]
+                              :script/enabled true})]
     (-> (expect (contains? result :fs/auto-run-match))
         (.toBe true))
     (-> (expect (contains? result :fs/enabled?))
@@ -653,73 +493,33 @@
         (.toBe true))))
 
 (defn- test-base-info-auto-run-and-enabled-omitted-when-no-patterns []
-  (let [script {:script/id "script-1"
-                :script/name "manual.cljs"
-                :script/created "2026-01-15T10:00:00.000Z"
-                :script/modified "2026-01-15T12:00:00.000Z"
-                :script/code "(println \"test\")"
-                :script/match []
-                :script/enabled false}
-        result (repl-fs-actions/script->base-info script)]
+  (let [result (base-info-of {:script/name "manual.cljs"
+                              :script/match []
+                              :script/enabled false})]
     (-> (expect (contains? result :fs/auto-run-match))
         (.toBe false))
     (-> (expect (contains? result :fs/enabled?))
         (.toBe false))))
 
 (defn- test-base-info-description-when-present []
-  (let [script {:script/id "script-1"
-                :script/name "test.cljs"
-                :script/created "2026-01-15T10:00:00.000Z"
-                :script/modified "2026-01-15T12:00:00.000Z"
-                :script/code "(println \"test\")"
-                :script/description "A helpful script"}
-        result (repl-fs-actions/script->base-info script)]
-    (-> (expect (:fs/description result))
-        (.toBe "A helpful script"))))
+  (-> (expect (:fs/description (base-info-of {:script/description "A helpful script"})))
+      (.toBe "A helpful script")))
 
 (defn- test-base-info-run-at-when-present []
-  (let [script {:script/id "script-1"
-                :script/name "test.cljs"
-                :script/created "2026-01-15T10:00:00.000Z"
-                :script/modified "2026-01-15T12:00:00.000Z"
-                :script/code "(println \"test\")"
-                :script/run-at "document-start"}
-        result (repl-fs-actions/script->base-info script)]
-    (-> (expect (:fs/run-at result))
-        (.toBe "document-start"))))
+  (-> (expect (:fs/run-at (base-info-of {:script/run-at "document-start"})))
+      (.toBe "document-start")))
 
 (defn- test-base-info-inject-when-present []
-  (let [script {:script/id "script-1"
-                :script/name "test.cljs"
-                :script/created "2026-01-15T10:00:00.000Z"
-                :script/modified "2026-01-15T12:00:00.000Z"
-                :script/code "(println \"test\")"
-                :script/inject ["scittle://reagent.js" "scittle://re-frame.js"]}
-        result (repl-fs-actions/script->base-info script)]
-    (-> (expect (:fs/inject result))
-        (.toEqual ["scittle://reagent.js" "scittle://re-frame.js"]))))
+  (-> (expect (:fs/inject (base-info-of {:script/inject ["scittle://reagent.js" "scittle://re-frame.js"]})))
+      (.toEqual ["scittle://reagent.js" "scittle://re-frame.js"])))
 
 (defn- test-base-info-empty-description-omitted []
-  (let [script {:script/id "script-1"
-                :script/name "test.cljs"
-                :script/created "2026-01-15T10:00:00.000Z"
-                :script/modified "2026-01-15T12:00:00.000Z"
-                :script/code "(println \"test\")"
-                :script/description ""}
-        result (repl-fs-actions/script->base-info script)]
-    (-> (expect (contains? result :fs/description))
-        (.toBe false))))
+  (-> (expect (contains? (base-info-of {:script/description ""}) :fs/description))
+      (.toBe false)))
 
 (defn- test-base-info-empty-inject-omitted []
-  (let [script {:script/id "script-1"
-                :script/name "test.cljs"
-                :script/created "2026-01-15T10:00:00.000Z"
-                :script/modified "2026-01-15T12:00:00.000Z"
-                :script/code "(println \"test\")"
-                :script/inject []}
-        result (repl-fs-actions/script->base-info script)]
-    (-> (expect (contains? result :fs/inject))
-        (.toBe false))))
+  (-> (expect (contains? (base-info-of {:script/inject []}) :fs/inject))
+      (.toBe false)))
 
 (describe "script->base-info - response shape validation"
           (fn []

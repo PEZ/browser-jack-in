@@ -23,6 +23,16 @@
 ;; Panel save action tests
 ;; ============================================================
 
+(defn- run-save-script
+  ([] (run-save-script {}))
+  ([state-overrides]
+   (let [base-state (merge initial-state
+                           {:panel/code "(println \"hi\")"
+                            :panel/script-name "My Script"
+                            :panel/script-match "*://example.com/*"})
+         state (merge base-state state-overrides)]
+     (panel-actions/handle-action state uf-data [:editor/ax.save-script]))))
+
 (defn- test_save_script_with_missing_fields_shows_error []
   (let [result (panel-actions/handle-action initial-state uf-data [:editor/ax.save-script])
         dxs (:uf/dxs result)
@@ -34,11 +44,7 @@
         (.toBe "error"))))
 
 (defn- test_save_script_with_complete_fields_triggers_save_effect []
-  (let [state (-> initial-state
-                  (assoc :panel/code "(println \"hi\")")
-                  (assoc :panel/script-name "My Script")
-                  (assoc :panel/script-match "*://example.com/*"))
-        result (panel-actions/handle-action state uf-data [:editor/ax.save-script])]
+  (let [result (run-save-script)]
     ;; Should NOT update state directly (async response will do that)
     (-> (expect (:uf/db result))
         (.toBeUndefined))
@@ -53,12 +59,8 @@
           (.toBe "my_script.cljs")))))
 
 (defn- test_save_script_preserves_name_when_editing_with_unchanged_name []
-  (let [state (-> initial-state
-                  (assoc :panel/code "(println \"hi\")")
-                  (assoc :panel/script-name "my_script.cljs")
-                  (assoc :panel/script-match "*://example.com/*")
-                  (assoc :panel/original-name "my_script.cljs"))
-        result (panel-actions/handle-action state uf-data [:editor/ax.save-script])
+  (let [result (run-save-script {:panel/script-name "my_script.cljs"
+                                 :panel/original-name "my_script.cljs"})
         [_fx-name script normalized-name] (first (:uf/fxs result))]
     ;; Should preserve name when unchanged
     (-> (expect (:script/name script))
@@ -67,12 +69,8 @@
         (.toBe "my_script.cljs"))))
 
 (defn- test_save_script_uses_new_name_when_name_changed []
-  (let [state (-> initial-state
-                  (assoc :panel/code "(println \"hi\")")
-                  (assoc :panel/script-name "New Name")
-                  (assoc :panel/script-match "*://example.com/*")
-                  (assoc :panel/original-name "old_name.cljs"))
-        result (panel-actions/handle-action state uf-data [:editor/ax.save-script])
+  (let [result (run-save-script {:panel/script-name "New Name"
+                                 :panel/original-name "old_name.cljs"})
         [_fx-name script normalized-name] (first (:uf/fxs result))]
     ;; Name should be normalized to new name
     (-> (expect (:script/name script))
@@ -81,11 +79,7 @@
         (.toBe "new_name.cljs"))))
 
 (defn- test_save_script_normalizes_name_for_new_scripts []
-  (let [state (-> initial-state
-                  (assoc :panel/code "(println \"hi\")")
-                  (assoc :panel/script-name "My Cool Script")
-                  (assoc :panel/script-match "*://example.com/*"))
-        result (panel-actions/handle-action state uf-data [:editor/ax.save-script])
+  (let [result (run-save-script {:panel/script-name "My Cool Script"})
         [_fx-name script normalized-name] (first (:uf/fxs result))]
     ;; Name is normalized for display consistency
     (-> (expect (:script/name script))
@@ -94,46 +88,27 @@
         (.toBe "my_cool_script.cljs"))))
 
 (defn- test_save_script_includes_description_when_provided []
-  (let [state (-> initial-state
-                  (assoc :panel/code "(println \"hi\")")
-                  (assoc :panel/script-name "My Script")
-                  (assoc :panel/script-match "*://example.com/*")
-                  (assoc :panel/script-description "A helpful description"))
-        result (panel-actions/handle-action state uf-data [:editor/ax.save-script])
+  (let [result (run-save-script {:panel/script-description "A helpful description"})
         [_fx-name script] (first (:uf/fxs result))]
     (-> (expect (:script/description script))
         (.toBe "A helpful description"))))
 
 (defn- test_save_script_omits_description_when_empty []
-  (let [state (-> initial-state
-                  (assoc :panel/code "(println \"hi\")")
-                  (assoc :panel/script-name "My Script")
-                  (assoc :panel/script-match "*://example.com/*")
-                  (assoc :panel/script-description ""))
-        result (panel-actions/handle-action state uf-data [:editor/ax.save-script])
+  (let [result (run-save-script {:panel/script-description ""})
         [_fx-name script] (first (:uf/fxs result))]
     ;; Empty description should not be included in script
     (-> (expect (:script/description script))
         (.toBeUndefined))))
 
 (defn- test_save_script_includes_description_in_effect_when_set []
-  (let [state (-> initial-state
-                  (assoc :panel/code "(println \"hi\")")
-                  (assoc :panel/script-name "My Script")
-                  (assoc :panel/script-match "*://example.com/*")
-                  (assoc :panel/script-description "A description"))
-        result (panel-actions/handle-action state uf-data [:editor/ax.save-script])
+  (let [result (run-save-script {:panel/script-description "A description"})
         [_fx-name script _name _id _action-text] (first (:uf/fxs result))]
     ;; Description should be in the script sent to background
     (-> (expect (:script/description script))
         (.toBe "A description"))))
 
 (defn- test_save_script_preserves_vector_match_without_double_wrapping []
-  (let [state (-> initial-state
-                  (assoc :panel/code "(println \"hi\")")
-                  (assoc :panel/script-name "My Script")
-                  (assoc :panel/script-match ["*://example.com/*" "*://foo.com/*"]))
-        result (panel-actions/handle-action state uf-data [:editor/ax.save-script])
+  (let [result (run-save-script {:panel/script-match ["*://example.com/*" "*://foo.com/*"]})
         [_fx-name script] (first (:uf/fxs result))]
     ;; Vector match should stay flat (not double-wrapped)
     (-> (expect (js/Array.isArray (:script/match script)))
@@ -146,22 +121,14 @@
         (.toBe "*://foo.com/*"))))
 
 (defn- test_save_script_includes_inject_from_manifest_hints []
-  (let [state (-> initial-state
-                  (assoc :panel/code "(ns test)")
-                  (assoc :panel/script-name "My Script")
-                  (assoc :panel/script-match "*://example.com/*")
-                  (assoc :panel/manifest-hints {:inject ["scittle://reagent.js"]}))
-        result (panel-actions/handle-action state uf-data [:editor/ax.save-script])
+  (let [result (run-save-script {:panel/code "(ns test)"
+                                 :panel/manifest-hints {:inject ["scittle://reagent.js"]}})
         [_fx-name script] (first (:uf/fxs result))]
     (-> (expect (:script/inject script))
         (.toEqual ["scittle://reagent.js"]))))
 
 (defn- test_save_script_succeeds_without_site_match []
-  (let [state (-> initial-state
-                  (assoc :panel/code "(println \"hi\")")
-                  (assoc :panel/script-name "My Script")
-                  (assoc :panel/script-match ""))  ;; No site-match
-        result (panel-actions/handle-action state uf-data [:editor/ax.save-script])]
+  (let [result (run-save-script {:panel/script-match ""})]
     ;; Should NOT show error - save should proceed
     (-> (expect (:uf/db result))
         (.toBeUndefined))
@@ -174,11 +141,7 @@
           (.toEqual [])))))
 
 (defn- test_save_script_without_site_match_uses_empty_vector []
-  (let [state (-> initial-state
-                  (assoc :panel/code "(println \"hi\")")
-                  (assoc :panel/script-name "My Script")
-                  (assoc :panel/script-match nil))  ;; nil site-match
-        result (panel-actions/handle-action state uf-data [:editor/ax.save-script])
+  (let [result (run-save-script {:panel/script-match nil})
         [_fx script] (first (:uf/fxs result))]
     ;; nil should normalize to empty vector
     (-> (expect (:script/match script))
@@ -203,83 +166,65 @@
 ;; Panel save response handling tests
 ;; ============================================================
 
+(defn- assert-error-banner-and-no-db [result expected-message]
+  (let [dxs (:uf/dxs result)
+        [action-type event-type message] (first dxs)]
+    (-> (expect action-type)
+        (.toBe :editor/ax.show-system-banner))
+    (-> (expect event-type)
+        (.toBe "error"))
+    (-> (expect message)
+        (.toBe expected-message))
+    (-> (expect (:uf/db result))
+        (.toBeUndefined))))
+
+(defn- assert-success-response-and-name-update
+  "Assert that a response handler dispatches a success banner and updates script name."
+  [result expected-banner-substring expected-name]
+  (let [new-state (:uf/db result)
+        dxs (:uf/dxs result)
+        [action-type event-type message] (first dxs)]
+    (-> (expect action-type)
+        (.toBe :editor/ax.show-system-banner))
+    (-> (expect event-type)
+        (.toBe "success"))
+    (-> (expect message)
+        (.toContain expected-banner-substring))
+    (-> (expect (:panel/script-name new-state))
+        (.toBe expected-name))
+    (-> (expect (:panel/original-name new-state))
+        (.toBe expected-name))))
+
 (defn- test_handle_save_response_updates_state_on_success []
   (let [result (panel-actions/handle-action initial-state uf-data
                                             [:editor/ax.handle-save-response
                                              {:success true
                                               :name "my_script.cljs"
                                               :id "script-123"
-                                              :action-text "Created"}])
-        new-state (:uf/db result)
-        dxs (:uf/dxs result)
-        [action-type event-type message] (first dxs)]
-    ;; Should dispatch show-system-banner with success
-    (-> (expect action-type)
-        (.toBe :editor/ax.show-system-banner))
-    (-> (expect event-type)
-        (.toBe "success"))
-    (-> (expect message)
-        (.toContain "Created"))
-    ;; State updates
-    (-> (expect (:panel/script-name new-state))
-        (.toBe "my_script.cljs"))
-    (-> (expect (:panel/original-name new-state))
-        (.toBe "my_script.cljs"))))
+                                              :action-text "Created"}])]
+    (assert-success-response-and-name-update result "Created" "my_script.cljs")))
 
 (defn- test_handle_save_response_shows_error_on_failure []
   (let [result (panel-actions/handle-action initial-state uf-data
                                             [:editor/ax.handle-save-response
                                              {:success false
-                                              :error "Name collision"}])
-        dxs (:uf/dxs result)
-        [action-type event-type message] (first dxs)]
-    ;; Should dispatch show-system-banner with error
-    (-> (expect action-type)
-        (.toBe :editor/ax.show-system-banner))
-    (-> (expect event-type)
-        (.toBe "error"))
-    (-> (expect message)
-        (.toBe "Name collision"))
-    ;; Should not have db changes on error-only response
-    (-> (expect (:uf/db result))
-        (.toBeUndefined))))
+                                              :error "Name collision"}])]
+    (assert-error-banner-and-no-db result "Name collision")))
 
 (defn- test_handle_rename_response_updates_state_on_success []
   (let [state (assoc initial-state :panel/original-name "old_name.cljs")
         result (panel-actions/handle-action state uf-data
                                             [:editor/ax.handle-rename-response
                                              {:success true
-                                              :to-name "new_name.cljs"}])
-        new-state (:uf/db result)
-        dxs (:uf/dxs result)
-        [action-type event-type message] (first dxs)]
-    ;; Should dispatch show-system-banner with success
-    (-> (expect action-type)
-        (.toBe :editor/ax.show-system-banner))
-    (-> (expect event-type)
-        (.toBe "success"))
-    (-> (expect message)
-        (.toContain "Renamed"))
-    ;; State updates
-    (-> (expect (:panel/script-name new-state))
-        (.toBe "new_name.cljs"))
-    (-> (expect (:panel/original-name new-state))
-        (.toBe "new_name.cljs"))))
+                                              :to-name "new_name.cljs"}])]
+    (assert-success-response-and-name-update result "Renamed" "new_name.cljs")))
 
 (defn- test_handle_rename_response_shows_error_on_failure []
   (let [result (panel-actions/handle-action initial-state uf-data
                                             [:editor/ax.handle-rename-response
                                              {:success false
-                                              :error "Script not found"}])
-        dxs (:uf/dxs result)
-        [action-type event-type message] (first dxs)]
-    ;; Should dispatch show-system-banner with error
-    (-> (expect action-type)
-        (.toBe :editor/ax.show-system-banner))
-    (-> (expect event-type)
-        (.toBe "error"))
-    (-> (expect message)
-        (.toBe "Script not found"))))
+                                              :error "Script not found"}])]
+    (assert-error-banner-and-no-db result "Script not found")))
 
 (describe "panel save response handling"
           (fn []

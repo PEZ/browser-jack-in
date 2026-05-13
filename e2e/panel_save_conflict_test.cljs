@@ -15,51 +15,50 @@
 ;; Conflict Detection Tests
 ;; =============================================================================
 
+(defn- ^:async save-script-in-panel!
+  "Opens a panel page, optionally clears storage, fills manifest code, saves, then closes.
+   opts must include :expected-filename. Optional :clear-first? (default false)."
+  [context ext-id opts]
+  (let [panel (js-await (create-panel-page context ext-id))
+        textarea (.locator panel "#code-area")
+        save-btn (.locator panel "button.btn-save")]
+    (when (:clear-first? opts)
+      (js-await (clear-storage panel))
+      (js-await (.reload panel)))
+    (js-await (wait-for-panel-ready panel))
+    (js-await (.fill textarea (panel-save-helpers/code-with-manifest (dissoc opts :expected-filename :clear-first?))))
+    (js-await (.click save-btn))
+    (js-await (wait-for-save-status panel (:expected-filename opts)))
+    (js-await (.close panel))))
+
+(defn- ^:async open-popup-and-inspect!
+  "Opens popup, verifies script count, clicks inspect on the named script, then closes."
+  [context ext-id expected-count inspect-script-name]
+  (let [popup (js-await (.newPage context))
+        popup-url (str "chrome-extension://" ext-id "/popup.html")]
+    (js-await (.goto popup popup-url #js {:timeout 1000}))
+    (js-await (wait-for-popup-ready popup))
+    (js-await (wait-for-script-count popup expected-count))
+    (let [script-item (.locator popup (str ".script-item:has-text(\"" inspect-script-name "\")"))
+          inspect-btn (.locator script-item "button.script-inspect")]
+      (js-await (.click inspect-btn))
+      (js-await (wait-for-edit-hint popup)))
+    (js-await (.close popup))))
+
 (defn- ^:async test_conflict_detection_when_renaming_to_existing []
   (let [context (js-await (launch-browser))
         ext-id (js-await (get-extension-id context))]
     (try
-      ;; === PHASE 1: Create script A ===
-      (let [panel (js-await (create-panel-page context ext-id))
-            textarea (.locator panel "#code-area")
-            save-btn (.locator panel "button.btn-save")]
-        (js-await (clear-storage panel))
-        (js-await (.reload panel))
-        (js-await (wait-for-panel-ready panel))
-        (let [code-a (panel-save-helpers/code-with-manifest {:name "Script A"
-                                                             :match "*://example.com/*"
-                                                             :code "(println \"Script A\")"})]
-          (js-await (.fill textarea code-a)))
-        (js-await (.click save-btn))
-        (js-await (wait-for-save-status panel "script_a.cljs"))
-        (js-await (.close panel)))
-
-      ;; === PHASE 2: Create script B ===
-      (let [panel (js-await (create-panel-page context ext-id))
-            textarea (.locator panel "#code-area")
-            save-btn (.locator panel "button.btn-save")]
-        (js-await (wait-for-panel-ready panel))
-        (let [code-b (panel-save-helpers/code-with-manifest {:name "Script B"
-                                                             :match "*://github.com/*"
-                                                             :code "(println \"Script B\")"})]
-          (js-await (.fill textarea code-b)))
-        (js-await (.click save-btn))
-        (js-await (wait-for-save-status panel "script_b.cljs"))
-        (js-await (.close panel)))
-
-      ;; === PHASE 3: Verify both scripts exist ===
-      (let [popup (js-await (.newPage context))
-            popup-url (str "chrome-extension://" ext-id "/popup.html")]
-        (js-await (.goto popup popup-url #js {:timeout 1000}))
-        (js-await (wait-for-popup-ready popup))
-        ;; built-in + A + B
-        (js-await (wait-for-script-count popup (+ builtin-script-count 2)))
-        ;; Click inspect on script A to edit it
-        (let [script-item (.locator popup ".script-item:has-text(\"script_a.cljs\")")
-              inspect-btn (.locator script-item "button.script-inspect")]
-          (js-await (.click inspect-btn))
-          (js-await (wait-for-edit-hint popup)))
-        (js-await (.close popup)))
+      (js-await (save-script-in-panel! context ext-id
+                                       {:name "Script A" :match "*://example.com/*"
+                                        :code "(println \"Script A\")"
+                                        :expected-filename "script_a.cljs"
+                                        :clear-first? true}))
+      (js-await (save-script-in-panel! context ext-id
+                                       {:name "Script B" :match "*://github.com/*"
+                                        :code "(println \"Script B\")"
+                                        :expected-filename "script_b.cljs"}))
+      (js-await (open-popup-and-inspect! context ext-id (+ builtin-script-count 2) "script_a.cljs"))
 
       ;; === PHASE 4: Edit script A and change name to script B's name ===
       (let [panel (js-await (create-panel-page context ext-id))
@@ -69,21 +68,14 @@
             save-section (.locator panel ".save-script-section")
             name-field (.locator save-section ".property-row:has(th:text('Name')) .property-value")
             name-hint (.locator save-section ".property-row:has(th:text('Name')) .field-hint")]
-        ;; Wait for script A to load (use polling)
         (js-await (-> (expect name-field) (.toContainText "script_a.cljs")))
-        ;; Wait for scripts-list to be loaded (built-in + A + B)
         (js-await (wait-for-scripts-loaded panel (+ builtin-script-count 2)))
-        ;; Change name to script B's name (causing conflict)
-        (let [conflict-code (panel-save-helpers/code-with-manifest {:name "script_b.cljs"
-                                                                    :match "*://example.com/*"
-                                                                    :code "(println \"Script A modified\")"})]
-          (js-await (.fill textarea conflict-code)))
-        ;; Verify: warning hint appears (polling)
-        (js-await (-> (expect name-hint)
-                      (.toContainText "\"script_b.cljs\" already exists")))
-        ;; Verify: Save button is disabled
+        (js-await (.fill textarea (panel-save-helpers/code-with-manifest
+                                   {:name "script_b.cljs"
+                                    :match "*://example.com/*"
+                                    :code "(println \"Script A modified\")"})))
+        (js-await (-> (expect name-hint) (.toContainText "\"script_b.cljs\" already exists")))
         (js-await (-> (expect save-btn) (.toBeDisabled)))
-        ;; Verify: Overwrite button is visible
         (js-await (-> (expect overwrite-btn) (.toBeVisible)))
         (js-await (assert-no-errors! panel))
         (js-await (.close panel)))
@@ -95,46 +87,16 @@
   (let [context (js-await (launch-browser))
         ext-id (js-await (get-extension-id context))]
     (try
-      ;; === PHASE 1: Create script A ===
-      (let [panel (js-await (create-panel-page context ext-id))
-            textarea (.locator panel "#code-area")
-            save-btn (.locator panel "button.btn-save")]
-        (js-await (clear-storage panel))
-        (js-await (.reload panel))
-        (js-await (wait-for-panel-ready panel))
-        (let [code-a (panel-save-helpers/code-with-manifest {:name "Original Script"
-                                                             :match "*://example.com/*"
-                                                             :code "(println \"Original content\")"})]
-          (js-await (.fill textarea code-a)))
-        (js-await (.click save-btn))
-        (js-await (wait-for-save-status panel "original_script.cljs"))
-        (js-await (.close panel)))
-
-      ;; === PHASE 2: Create script B (target for overwrite) ===
-      (let [panel (js-await (create-panel-page context ext-id))
-            textarea (.locator panel "#code-area")
-            save-btn (.locator panel "button.btn-save")]
-        (js-await (wait-for-panel-ready panel))
-        (let [code-b (panel-save-helpers/code-with-manifest {:name "Target Script"
-                                                             :match "*://github.com/*"
-                                                             :code "(println \"Target content\")"})]
-          (js-await (.fill textarea code-b)))
-        (js-await (.click save-btn))
-        (js-await (wait-for-save-status panel "target_script.cljs"))
-        (js-await (.close panel)))
-
-      ;; === PHASE 3: Verify both scripts exist ===
-      (let [popup (js-await (.newPage context))
-            popup-url (str "chrome-extension://" ext-id "/popup.html")]
-        (js-await (.goto popup popup-url #js {:timeout 1000}))
-        (js-await (wait-for-popup-ready popup))
-        ;; built-in + original + target
-        (js-await (wait-for-script-count popup (+ builtin-script-count 2)))
-        (let [script-item (.locator popup ".script-item:has-text(\"original_script.cljs\")")
-              inspect-btn (.locator script-item "button.script-inspect")]
-          (js-await (.click inspect-btn))
-          (js-await (wait-for-edit-hint popup)))
-        (js-await (.close popup)))
+      (js-await (save-script-in-panel! context ext-id
+                                       {:name "Original Script" :match "*://example.com/*"
+                                        :code "(println \"Original content\")"
+                                        :expected-filename "original_script.cljs"
+                                        :clear-first? true}))
+      (js-await (save-script-in-panel! context ext-id
+                                       {:name "Target Script" :match "*://github.com/*"
+                                        :code "(println \"Target content\")"
+                                        :expected-filename "target_script.cljs"}))
+      (js-await (open-popup-and-inspect! context ext-id (+ builtin-script-count 2) "original_script.cljs"))
 
       ;; === PHASE 4: Rename to target name and click Overwrite ===
       (let [panel (js-await (create-panel-page context ext-id))
@@ -142,32 +104,24 @@
             overwrite-btn (.locator panel "button.btn-overwrite")
             save-section (.locator panel ".save-script-section")
             name-field (.locator save-section ".property-row:has(th:text('Name')) .property-value")]
-        ;; Wait for original script to load (polling)
         (js-await (-> (expect name-field) (.toContainText "original_script.cljs")))
-        ;; Change name to target_script.cljs (causing conflict)
-        (let [conflict-code (panel-save-helpers/code-with-manifest {:name "target_script.cljs"
-                                                                    :match "*://example.com/*"
-                                                                    :code "(println \"Overwritten content\")"})]
-          (js-await (.fill textarea conflict-code)))
-        ;; Click Overwrite (polling)
+        (js-await (.fill textarea (panel-save-helpers/code-with-manifest
+                                   {:name "target_script.cljs"
+                                    :match "*://example.com/*"
+                                    :code "(println \"Overwritten content\")"})))
         (js-await (-> (expect overwrite-btn) (.toBeVisible)))
         (js-await (.click overwrite-btn))
-        ;; Verify: success banner shows "Replaced"
         (js-await (wait-for-save-status panel "Replaced"))
         (js-await (.close panel)))
 
-      ;; === PHASE 5: Verify 3 scripts remain (overwrite doesn't delete original) ===
+      ;; === PHASE 5: Verify 2 scripts remain (overwrite replaces target, original stays) ===
       (let [popup (js-await (.newPage context))
             popup-url (str "chrome-extension://" ext-id "/popup.html")]
         (js-await (.goto popup popup-url #js {:timeout 1000}))
         (js-await (wait-for-popup-ready popup))
-        ;; built-in + original + target (overwrite replaces target, original stays)
         (js-await (wait-for-script-count popup (+ builtin-script-count 2)))
-        ;; Both script names still exist
-        (js-await (-> (expect (.locator popup ".script-item:has-text(\"target_script.cljs\")"))
-                      (.toBeVisible)))
-        (js-await (-> (expect (.locator popup ".script-item:has-text(\"original_script.cljs\")"))
-                      (.toBeVisible)))
+        (js-await (-> (expect (.locator popup ".script-item:has-text(\"target_script.cljs\")")) (.toBeVisible)))
+        (js-await (-> (expect (.locator popup ".script-item:has-text(\"original_script.cljs\")")) (.toBeVisible)))
         (js-await (assert-no-errors! popup))
         (js-await (.close popup)))
 

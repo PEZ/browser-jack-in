@@ -168,6 +168,62 @@
      (ensure-success! msg)
      (msg->fs-response msg fs-mv-keys))))
 
+(defn- not-found-error?
+  "Returns true when a response message indicates the script was not found."
+  [msg]
+  (let [err (.-error msg)]
+    (and err (or (.includes err "not found")
+                 (.includes err "does not exist")
+                 (.includes err "non-existent")))))
+
+(defn- ^:async rm-single!
+  "Delete a single script by name. Throws if not found or on other error."
+  [name]
+  (let [msg (await (send-and-receive "delete-script" {:name name} "delete-script-response"))]
+    (cond
+      (.-success msg)
+      (assoc (msg->fs-response msg fs-rm-keys) :fs/existed? true)
+
+      (not-found-error? msg)
+      (throw (js/Error. (or (.-error msg) "Script not found")))
+
+      :else
+      (throw (js/Error. (or (.-error msg) "Unknown error"))))))
+
+(defn- ^:async rm-bulk-one! [{:keys [bulk-id bulk-count idx name]}]
+  (let [msg (await (send-and-receive "delete-script" {:name name
+                                                      :bulk-id bulk-id
+                                                      :bulk-index idx
+                                                      :bulk-count bulk-count}
+                                     "delete-script-response"))]
+    (cond
+      (.-success msg)
+      [name (assoc (msg->fs-response msg fs-rm-keys) :fs/existed? true)]
+
+      (not-found-error? msg)
+      [name (assoc (msg->fs-response msg fs-rm-keys) :fs/existed? false)]
+
+      :else
+      (throw (js/Error. (or (.-error msg) "Unknown error"))))))
+
+(defn- ^:async rm-bulk!
+  "Delete multiple scripts by name. Throws if any are missing."
+  [names]
+  (let [bulk-id (str (.now js/Date) "-" (.random js/Math))
+        bulk-count (count names)
+        results (await (js/Promise.all
+                        (to-array
+                         (map-indexed (^:async fn [idx n]
+                                        (await (rm-bulk-one! {:bulk-id bulk-id
+                                                              :bulk-count bulk-count
+                                                              :idx idx
+                                                              :name n})))
+                                      names))))
+        missing (keep (fn [[n r]] (when (false? (:fs/existed? r)) n)) results)]
+    (when (seq missing)
+      (throw (js/Error. (str "Scripts not found: " (.join (to-array missing) ", ")))))
+    (into {} results)))
+
 (defn ^:async rm!
   "Delete script(s) by name. Requires FS REPL Sync to be enabled in settings.
 
@@ -181,52 +237,6 @@
    (epupp.fs/rm! \"my-script.cljs\")
    (epupp.fs/rm! [\"script1.cljs\" \"script2.cljs\"])"
   [name-or-names]
-  (let [not-found-error? (fn [msg]
-                           (let [err (.-error msg)]
-                             (and err (or (.includes err "not found")
-                                          (.includes err "does not exist")
-                                          (.includes err "non-existent")))))]
-    (if (vector? name-or-names)
-      ;; Bulk mode - use mapv for eager evaluation before Promise.all
-      (let [bulk-id (str (.now js/Date) "-" (.random js/Math))
-            bulk-count (count name-or-names)
-            results (await (js/Promise.all
-                             (to-array
-                               (mapv (^:async fn [idx n]
-                                       (let [msg (await (send-and-receive "delete-script" {:name n
-                                                                                           :bulk-id bulk-id
-                                                                                           :bulk-index idx
-                                                                                           :bulk-count bulk-count}
-                                                                         "delete-script-response"))]
-                                         (cond
-                                           (.-success msg)
-                                           (let [m (msg->fs-response msg fs-rm-keys)]
-                                             [n (assoc m :fs/existed? true)])
-
-                                           (not-found-error? msg)
-                                           (let [m (msg->fs-response msg fs-rm-keys)]
-                                             [n (assoc m :fs/existed? false)])
-
-                                           :else
-                                           (throw (js/Error. (or (.-error msg) "Unknown error"))))))
-                                     (range bulk-count) name-or-names))))
-            result-map (into {} results)
-            missing (->> results
-                         (keep (fn [[name result]]
-                                 (when (false? (:fs/existed? result))
-                                   name))))]
-        (if (seq missing)
-          (throw (js/Error. (str "Scripts not found: " (.join (to-array missing) ", "))))
-          result-map))
-      ;; Single mode
-      (let [msg (await (send-and-receive "delete-script" {:name name-or-names} "delete-script-response"))]
-        (cond
-          (.-success msg)
-          (let [m (msg->fs-response msg fs-rm-keys)]
-            (assoc m :fs/existed? true))
-
-          (not-found-error? msg)
-          (throw (js/Error. (or (.-error msg) "Script not found")))
-
-          :else
-          (throw (js/Error. (or (.-error msg) "Unknown error"))))))))
+  (if (vector? name-or-names)
+    (await (rm-bulk! name-or-names))
+    (await (rm-single! name-or-names))))

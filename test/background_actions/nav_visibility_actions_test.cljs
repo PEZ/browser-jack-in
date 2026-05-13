@@ -18,41 +18,38 @@
 ;; Navigation Decision Action Tests
 ;; ============================================================
 
-(defn- test-nav-decide-connection-returns-connect-effect-for-connect-all []
-  (let [context {:nav/tab-id 123
-                 :nav/url "https://example.com"
-                 :nav/auto-connect-enabled? true
-                 :nav/auto-reconnect-enabled? false
-                 :nav/auto-connect-level "all-pages"
-                 :nav/in-history? false
-                 :nav/history-port nil
-                 :nav/saved-port "1340"}
-        result (bg-actions/handle-action {} uf-data
-                 [:nav/ax.decide-connection context])
+(defn- assert-nav-connect-effect [context expected-tab-id expected-port]
+  (let [result (bg-actions/handle-action {} uf-data [:nav/ax.decide-connection context])
         fxs (:uf/fxs result)]
     (-> (expect (some #(and (= :uf/await (first %))
                             (= :nav/fx.connect (second %))
-                            (= 123 (nth % 2))
-                            (= "1340" (nth % 3))) fxs))
+                            (= expected-tab-id (nth % 2))
+                            (= expected-port (nth % 3))) fxs))
         (.toBeTruthy))))
 
+(defn- test-nav-decide-connection-returns-connect-effect-for-connect-all []
+  (assert-nav-connect-effect
+   {:nav/tab-id 123
+    :nav/url "https://example.com"
+    :nav/auto-connect-enabled? true
+    :nav/auto-reconnect-enabled? false
+    :nav/auto-connect-level "all-pages"
+    :nav/in-history? false
+    :nav/history-port nil
+    :nav/saved-port "1340"}
+   123 "1340"))
+
 (defn- test-nav-decide-connection-returns-connect-effect-for-reconnect []
-  (let [context {:nav/tab-id 456
-                 :nav/url "https://github.com"
-                 :nav/auto-connect-enabled? false
-                 :nav/auto-reconnect-enabled? true
-                 :nav/auto-connect-level "off"
-                 :nav/in-history? true
-                 :nav/history-port "1341"
-                 :nav/saved-port "1340"}
-        result (bg-actions/handle-action {} uf-data
-                 [:nav/ax.decide-connection context])
-        fxs (:uf/fxs result)]
-    (-> (expect (some #(and (= :uf/await (first %))
-                            (= :nav/fx.connect (second %))
-                            (= 456 (nth % 2))
-                            (= "1341" (nth % 3))) fxs))
-        (.toBeTruthy))))
+  (assert-nav-connect-effect
+   {:nav/tab-id 456
+    :nav/url "https://github.com"
+    :nav/auto-connect-enabled? false
+    :nav/auto-reconnect-enabled? true
+    :nav/auto-connect-level "off"
+    :nav/in-history? true
+    :nav/history-port "1341"
+    :nav/saved-port "1340"}
+   456 "1341"))
 
 (defn- test-nav-decide-connection-returns-no-connect-effect-when-none []
   (let [context {:nav/tab-id 789
@@ -97,28 +94,20 @@
 ;; Permission Granted Tests
 ;; ============================================================
 
+(defn- assert-permission-granted-effect [state tab-id expected-icon-state]
+  (let [result (bg-actions/handle-action state uf-data [:msg/ax.handle-permission-granted tab-id])
+        [fx-name actual-tab-id icon-state] (first (:uf/fxs result))]
+    (-> (expect fx-name) (.toBe :msg/fx.handle-permission-granted))
+    (-> (expect actual-tab-id) (.toBe tab-id))
+    (-> (expect icon-state) (.toBe expected-icon-state))))
+
 (defn- test-permission-granted-triggers-effect-with-icon-state []
-  (let [state (assoc initial-state :icon/states {42 :connected})
-        result (bg-actions/handle-action state uf-data
-                 [:msg/ax.handle-permission-granted 42])
-        [fx-name tab-id icon-state] (first (:uf/fxs result))]
-    (-> (expect fx-name)
-        (.toBe :msg/fx.handle-permission-granted))
-    (-> (expect tab-id)
-        (.toBe 42))
-    (-> (expect icon-state)
-        (.toBe :connected))))
+  (assert-permission-granted-effect
+   (assoc initial-state :icon/states {42 :connected})
+   42 :connected))
 
 (defn- test-permission-granted-defaults-icon-state-to-disconnected []
-  (let [result (bg-actions/handle-action initial-state uf-data
-                 [:msg/ax.handle-permission-granted 99])
-        [fx-name tab-id icon-state] (first (:uf/fxs result))]
-    (-> (expect fx-name)
-        (.toBe :msg/fx.handle-permission-granted))
-    (-> (expect tab-id)
-        (.toBe 99))
-    (-> (expect icon-state)
-        (.toBe :disconnected))))
+  (assert-permission-granted-effect initial-state 99 :disconnected))
 
 (describe ":msg/ax.handle-permission-granted"
           (fn []
@@ -136,16 +125,19 @@
     (-> (expect result)
         (.toBeFalsy))))
 
+(defn- assert-gather-reconnect-context [result tab-id]
+  (let [fxs (:uf/fxs result)]
+    (-> (expect (some #(and (= :uf/await (first %))
+                            (= :visibility/fx.gather-reconnect-context (second %))
+                            (= tab-id (nth % 2))) fxs))
+        (.toBeTruthy))))
+
 (defn- test-handle-tab-visible-returns-gather-effect-when-no-ws []
   (let [state (assoc initial-state :ws/connections {99 {:other "ws"}})
         result (bg-actions/handle-action state uf-data
-                 [:visibility/ax.handle-tab-visible 42])
-        fxs (:uf/fxs result)
+                                         [:visibility/ax.handle-tab-visible 42])
         dxs (:uf/dxs result)]
-    (-> (expect (some #(and (= :uf/await (first %))
-                            (= :visibility/fx.gather-reconnect-context (second %))
-                            (= 42 (nth % 2))) fxs))
-        (.toBeTruthy))
+    (assert-gather-reconnect-context result 42)
     (-> (expect (some #(= :visibility/ax.decide-reconnect (first %)) dxs))
         (.toBeTruthy))))
 
@@ -163,12 +155,8 @@
 
 (defn- test-handle-tab-visible-with-empty-state []
   (let [result (bg-actions/handle-action {} uf-data
-                 [:visibility/ax.handle-tab-visible 42])
-        fxs (:uf/fxs result)]
-    (-> (expect (some #(and (= :uf/await (first %))
-                            (= :visibility/fx.gather-reconnect-context (second %))
-                            (= 42 (nth % 2))) fxs))
-        (.toBeTruthy))))
+                                         [:visibility/ax.handle-tab-visible 42])]
+    (assert-gather-reconnect-context result 42)))
 
 (describe ":visibility/ax.handle-tab-visible"
           (fn []
@@ -181,84 +169,80 @@
 ;; Visibility: Decide Reconnect Tests
 ;; ============================================================
 
-(defn- test-decide-reconnect-connects-at-all-tabs-level []
-  (let [context {:visibility/tab-id 42
-                 :visibility/auto-connect-level "all-tabs"
-                 :visibility/history-port "1340"
-                 :visibility/saved-port "3340"}
-        result (bg-actions/handle-action {} uf-data
-                 [:visibility/ax.decide-reconnect context])
+(defn- assert-decide-reconnect-no-connect [context]
+  (let [result (bg-actions/handle-action {} uf-data [:visibility/ax.decide-reconnect context])]
+    (-> (expect result) (.toBeFalsy))))
+
+(defn- assert-decide-reconnect-connect [state context expected-port]
+  (let [result (bg-actions/handle-action state uf-data [:visibility/ax.decide-reconnect context])
         fxs (:uf/fxs result)]
     (-> (expect (some #(and (= :uf/await (first %))
                             (= :nav/fx.connect (second %))
-                            (= 42 (nth % 2))
-                            (= "1340" (nth % 3))) fxs))
+                            (= (:visibility/tab-id context) (nth % 2))
+                            (= expected-port (nth % 3))) fxs))
         (.toBeTruthy))))
+
+(defn- assert-decide-reconnect-icon-state [state context expected-icon-state]
+  (let [[_ _ _ _ icon-state] (first (:uf/fxs (bg-actions/handle-action state uf-data
+                                                [:visibility/ax.decide-reconnect context])))]
+    (-> (expect icon-state) (.toBe expected-icon-state))))
+
+(defn- test-decide-reconnect-connects-at-all-tabs-level []
+  (assert-decide-reconnect-connect
+   {}
+   {:visibility/tab-id 42
+    :visibility/auto-connect-level "all-tabs"
+    :visibility/history-port "1340"
+    :visibility/saved-port "3340"}
+   "1340"))
 
 (defn- test-decide-reconnect-no-connect-at-off-level []
-  (let [context {:visibility/tab-id 42
-                 :visibility/auto-connect-level "off"
-                 :visibility/history-port "1340"
-                 :visibility/saved-port "3340"}
-        result (bg-actions/handle-action {} uf-data
-                 [:visibility/ax.decide-reconnect context])]
-    (-> (expect result)
-        (.toBeFalsy))))
+  (assert-decide-reconnect-no-connect
+   {:visibility/tab-id 42
+    :visibility/auto-connect-level "off"
+    :visibility/history-port "1340"
+    :visibility/saved-port "3340"}))
 
 (defn- test-decide-reconnect-no-connect-at-all-pages-level []
-  (let [context {:visibility/tab-id 42
-                 :visibility/auto-connect-level "all-pages"
-                 :visibility/history-port "1340"
-                 :visibility/saved-port "3340"}
-        result (bg-actions/handle-action {} uf-data
-                 [:visibility/ax.decide-reconnect context])]
-    (-> (expect result)
-        (.toBeFalsy))))
+  (assert-decide-reconnect-no-connect
+   {:visibility/tab-id 42
+    :visibility/auto-connect-level "all-pages"
+    :visibility/history-port "1340"
+    :visibility/saved-port "3340"}))
 
 (defn- test-decide-reconnect-all-tabs-uses-saved-port-when-no-history []
-  (let [context {:visibility/tab-id 42
-                 :visibility/auto-connect-level "all-tabs"
-                 :visibility/history-port nil
-                 :visibility/saved-port "3340"}
-        result (bg-actions/handle-action {} uf-data
-                 [:visibility/ax.decide-reconnect context])
-        fxs (:uf/fxs result)]
-    (-> (expect (some #(and (= :nav/fx.connect (second %))
-                            (= "3340" (nth % 3))) fxs))
-        (.toBeTruthy))))
+  (assert-decide-reconnect-connect
+   {}
+   {:visibility/tab-id 42
+    :visibility/auto-connect-level "all-tabs"
+    :visibility/history-port nil
+    :visibility/saved-port "3340"}
+   "3340"))
 
 (defn- test-decide-reconnect-all-tabs-no-connect-when-no-port []
-  (let [context {:visibility/tab-id 42
-                 :visibility/auto-connect-level "all-tabs"
-                 :visibility/history-port nil
-                 :visibility/saved-port nil}
-        result (bg-actions/handle-action {} uf-data
-                 [:visibility/ax.decide-reconnect context])]
-    (-> (expect result)
-        (.toBeFalsy))))
+  (assert-decide-reconnect-no-connect
+   {:visibility/tab-id 42
+    :visibility/auto-connect-level "all-tabs"
+    :visibility/history-port nil
+    :visibility/saved-port nil}))
 
 (defn- test-decide-reconnect-uses-icon-state-from-state []
-  (let [context {:visibility/tab-id 42
-                 :visibility/auto-connect-level "all-tabs"
-                 :visibility/history-port "1340"
-                 :visibility/saved-port "3340"}
-        state {:icon/states {42 :connected}}
-        result (bg-actions/handle-action state uf-data
-                 [:visibility/ax.decide-reconnect context])
-        [_ _ _ _ icon-state] (first (:uf/fxs result))]
-    (-> (expect icon-state)
-        (.toBe :connected))))
+  (assert-decide-reconnect-icon-state
+   {:icon/states {42 :connected}}
+   {:visibility/tab-id 42
+    :visibility/auto-connect-level "all-tabs"
+    :visibility/history-port "1340"
+    :visibility/saved-port "3340"}
+   :connected))
 
 (defn- test-decide-reconnect-defaults-icon-state-to-disconnected []
-  (let [context {:visibility/tab-id 42
-                 :visibility/auto-connect-level "all-tabs"
-                 :visibility/history-port "1340"
-                 :visibility/saved-port "3340"}
-        result (bg-actions/handle-action {} uf-data
-                 [:visibility/ax.decide-reconnect context])
-        [_ _ _ _ icon-state] (first (:uf/fxs result))]
-    (-> (expect icon-state)
-        (.toBe :disconnected))))
+  (assert-decide-reconnect-icon-state
+   {}
+   {:visibility/tab-id 42
+    :visibility/auto-connect-level "all-tabs"
+    :visibility/history-port "1340"
+    :visibility/saved-port "3340"}
+   :disconnected))
 
 (describe ":visibility/ax.decide-reconnect"
           (fn []

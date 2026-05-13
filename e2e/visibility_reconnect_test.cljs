@@ -24,14 +24,14 @@
   (let [start (.now js/Date)]
     (loop []
       (let [connections (js-await (get-connections ext-page))
-            count (.-length connections)]
-        (if (zero? count)
-          true
-          (if (> (- (.now js/Date) start) (or timeout-ms 2000))
-            (throw (js/Error. (str "Timeout waiting for 0 connections. Count: " count)))
-            (do
-              (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 20))))
-              (recur))))))))
+            cnt (.-length connections)
+            timed-out? (> (- (.now js/Date) start) (or timeout-ms 2000))]
+        (cond
+          (zero? cnt) true
+          timed-out? (throw (js/Error. (str "Timeout waiting for 0 connections. Count: " cnt)))
+          :else (do
+                  (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 20))))
+                  (recur)))))))
 
 ;; =============================================================================
 ;; Test: No reconnect after explicit disconnect
@@ -194,64 +194,63 @@
 ;; Test: All-pages level - disconnect + visibility -> no reconnect
 ;; =============================================================================
 
+(defn- ^:async fresh-popup!
+  "Creates popup with clean state: clears storage, reloads, waits until ready. Returns popup page."
+  [context ext-id]
+  (let [popup (js-await (create-popup-page context ext-id))]
+    (js-await (clear-storage popup))
+    (js-await (.reload popup))
+    (js-await (wait-for-popup-ready popup))
+    popup))
+
+(defn- ^:async connect-disconnect-set-level!
+  "Navigate to test page, connect tab to ws-port-1, explicit disconnect, then set
+   auto-connect-level to the given value (verified after popup reload). Clears test events.
+   Returns {:popup popup :tab-id tab-id :page page}."
+  [context ext-id auto-connect-level]
+  (let [page (js-await (.newPage context))]
+    (js-await (.goto page "http://localhost:18080/basic.html" #js {:timeout 1000}))
+    (js-await (-> (expect (.locator page "#test-marker")) (.toContainText "ready")))
+    (let [popup (js-await (create-popup-page context ext-id))
+          tab-id (js-await (find-tab-id popup "http://localhost:18080/*"))]
+      (js-await (connect-tab popup tab-id ws-port-1))
+      (js-await (wait-for-connection popup 5000))
+      (js/console.log "Connected to tab" tab-id)
+      (js-await (send-runtime-message popup "disconnect-tab" #js {:tabId tab-id}))
+      (js-await (wait-for-no-connections popup 2000))
+      (js/console.log "Tab explicitly disconnected")
+      (let [auto-connect-select (.locator popup "#auto-connect-level")]
+        (js-await (.selectOption auto-connect-select auto-connect-level))
+        (js-await (-> (expect auto-connect-select) (.toHaveValue auto-connect-level))))
+      (js-await (.reload popup))
+      (js-await (wait-for-popup-ready popup))
+      (let [auto-connect-select (.locator popup "#auto-connect-level")]
+        (js-await (-> (expect auto-connect-select) (.toHaveValue auto-connect-level))))
+      (js/console.log (str "Auto-connect level set to " auto-connect-level " (verified after reload)"))
+      (js-await (clear-test-events! popup))
+      {:popup popup :tab-id tab-id :page page})))
+
 (defn- ^:async test_all_pages_disconnect_visibility_no_reconnect []
   (let [context (js-await (launch-browser))
         ext-id (js-await (get-extension-id context))]
     (try
-      ;; === PHASE 1: Navigate and connect manually with auto-connect off ===
-      (let [popup (js-await (create-popup-page context ext-id))]
-        (js-await (clear-storage popup))
-        (js-await (.reload popup))
-        (js-await (wait-for-popup-ready popup))
-        ;; Keep auto-connect off during setup
+      ;; === PHASE 1: Verify auto-connect starts at "off" ===
+      (let [popup (js-await (fresh-popup! context ext-id))]
         (let [auto-connect-select (.locator popup "#auto-connect-level")]
           (js-await (-> (expect auto-connect-select) (.toHaveValue "off"))))
         (js-await (.close popup)))
 
-      (let [page (js-await (.newPage context))]
-        (js-await (.goto page "http://localhost:18080/basic.html" #js {:timeout 1000}))
-        (js-await (-> (expect (.locator page "#test-marker"))
-                      (.toContainText "ready")))
-
-        (let [popup (js-await (create-popup-page context ext-id))
-              tab-id (js-await (find-tab-id popup "http://localhost:18080/*"))]
-          (js-await (connect-tab popup tab-id ws-port-1))
-          (js-await (wait-for-connection popup 5000))
-          (js/console.log "Connected to tab" tab-id)
-
-          ;; Explicit disconnect
-          (js-await (send-runtime-message popup "disconnect-tab" #js {:tabId tab-id}))
-          (js-await (wait-for-no-connections popup 2000))
-          (js/console.log "Tab explicitly disconnected")
-
-          ;; === PHASE 2: Set auto-connect level to "all-pages" AFTER disconnect ===
-          (let [auto-connect-select (.locator popup "#auto-connect-level")]
-            (js-await (.selectOption auto-connect-select "all-pages"))
-            (js-await (-> (expect auto-connect-select) (.toHaveValue "all-pages"))))
-          ;; Verify setting persisted by reloading popup
-          (js-await (.reload popup))
-          (js-await (wait-for-popup-ready popup))
-          (let [auto-connect-select (.locator popup "#auto-connect-level")]
-            (js-await (-> (expect auto-connect-select) (.toHaveValue "all-pages"))))
-          (js/console.log "Auto-connect level set to all-pages (verified after reload)")
-
-          ;; Clear test events for clean baseline
-          (js-await (clear-test-events! popup))
-
-          ;; === PHASE 3: Simulate tab becoming visible - should NOT reconnect ===
-          (js-await (simulate-tab-visible! popup tab-id))
-          (js/console.log "Simulated tab-became-visible at all-pages level")
-
-          ;; At all-pages level, visibility should NOT trigger reconnect
-          (js-await (assert-no-new-event-within popup "NAV_AUTO_CONNECT" 0 300))
-          (js/console.log "Verified: no visibility reconnect at all-pages level")
-
-          ;; Verify still disconnected
-          (let [connections (js-await (get-connections popup))]
-            (js-await (-> (expect (.-length connections)) (.toBe 0))))
-
-          (js-await (assert-no-errors! popup))
-          (js-await (.close popup)))
+      ;; === PHASE 2: Connect, disconnect, set level to all-pages ===
+      (let [{:keys [popup tab-id page]} (js-await (connect-disconnect-set-level! context ext-id "all-pages"))]
+        ;; === PHASE 3: Simulate visibility - should NOT reconnect ===
+        (js-await (simulate-tab-visible! popup tab-id))
+        (js/console.log "Simulated tab-became-visible at all-pages level")
+        (js-await (assert-no-new-event-within popup "NAV_AUTO_CONNECT" 0 300))
+        (js/console.log "Verified: no visibility reconnect at all-pages level")
+        (let [connections (js-await (get-connections popup))]
+          (js-await (-> (expect (.-length connections)) (.toBe 0))))
+        (js-await (assert-no-errors! popup))
+        (js-await (.close popup))
         (js-await (.close page)))
 
       (finally
@@ -265,67 +264,28 @@
   (let [context (js-await (launch-browser))
         ext-id (js-await (get-extension-id context))]
     (try
-      ;; === PHASE 1: Navigate and connect manually with auto-connect off ===
-      (let [popup (js-await (create-popup-page context ext-id))]
-        (js-await (clear-storage popup))
-        (js-await (.reload popup))
-        (js-await (wait-for-popup-ready popup))
-        ;; Set the default WS port so all-tabs auto-connect uses the correct port
-        ;; (explicit disconnect forgets history, so saved-port is the only fallback)
+      ;; === PHASE 1: Set default WS port, verify auto-connect starts at "off" ===
+      (let [popup (js-await (fresh-popup! context ext-id))]
         (let [ws-port-input (.locator popup "#default-ws-port")]
           (js-await (.fill ws-port-input (str ws-port-1)))
           (js-await (-> (expect ws-port-input) (.toHaveValue (str ws-port-1)))))
-        ;; Keep auto-connect off during setup
         (let [auto-connect-select (.locator popup "#auto-connect-level")]
           (js-await (-> (expect auto-connect-select) (.toHaveValue "off"))))
         (js-await (.close popup)))
 
-      (let [page (js-await (.newPage context))]
-        (js-await (.goto page "http://localhost:18080/basic.html" #js {:timeout 1000}))
-        (js-await (-> (expect (.locator page "#test-marker"))
-                      (.toContainText "ready")))
-
-        (let [popup (js-await (create-popup-page context ext-id))
-              tab-id (js-await (find-tab-id popup "http://localhost:18080/*"))]
-          (js-await (connect-tab popup tab-id ws-port-1))
-          (js-await (wait-for-connection popup 5000))
-          (js/console.log "Connected to tab" tab-id)
-
-          ;; Explicit disconnect
-          (js-await (send-runtime-message popup "disconnect-tab" #js {:tabId tab-id}))
-          (js-await (wait-for-no-connections popup 2000))
-          (js/console.log "Tab explicitly disconnected")
-
-          ;; === PHASE 2: Set auto-connect level to "all-tabs" AFTER disconnect ===
-          (let [auto-connect-select (.locator popup "#auto-connect-level")]
-            (js-await (.selectOption auto-connect-select "all-tabs"))
-            (js-await (-> (expect auto-connect-select) (.toHaveValue "all-tabs"))))
-          ;; Verify setting persisted by reloading popup
-          (js-await (.reload popup))
-          (js-await (wait-for-popup-ready popup))
-          (let [auto-connect-select (.locator popup "#auto-connect-level")]
-            (js-await (-> (expect auto-connect-select) (.toHaveValue "all-tabs"))))
-          (js/console.log "Auto-connect level set to all-tabs (verified after reload)")
-
-          ;; Clear test events for clean baseline
-          (js-await (clear-test-events! popup))
-
-          ;; === PHASE 3: Simulate tab becoming visible - SHOULD reconnect ===
-          (js-await (simulate-tab-visible! popup tab-id))
-          (js/console.log "Simulated tab-became-visible at all-tabs level")
-
-          ;; At all-tabs level, visibility SHOULD trigger reconnect
-          (let [event (js-await (wait-for-event popup "NAV_AUTO_CONNECT" 5000))]
-            (js/console.log "NAV_AUTO_CONNECT event:" (js/JSON.stringify event)))
-          (js/console.log "Verified: visibility reconnect triggered at all-tabs level")
-
-          ;; Verify reconnected
-          (js-await (wait-for-connection popup 5000))
-          (let [connections (js-await (get-connections popup))]
-            (js-await (-> (expect (.-length connections)) (.toBe 1))))
-
-          (js-await (assert-no-errors! popup))
-          (js-await (.close popup)))
+      ;; === PHASE 2: Connect, disconnect, set level to all-tabs ===
+      (let [{:keys [popup tab-id page]} (js-await (connect-disconnect-set-level! context ext-id "all-tabs"))]
+        ;; === PHASE 3: Simulate visibility - SHOULD reconnect ===
+        (js-await (simulate-tab-visible! popup tab-id))
+        (js/console.log "Simulated tab-became-visible at all-tabs level")
+        (let [event (js-await (wait-for-event popup "NAV_AUTO_CONNECT" 5000))]
+          (js/console.log "NAV_AUTO_CONNECT event:" (js/JSON.stringify event)))
+        (js/console.log "Verified: visibility reconnect triggered at all-tabs level")
+        (js-await (wait-for-connection popup 5000))
+        (let [connections (js-await (get-connections popup))]
+          (js-await (-> (expect (.-length connections)) (.toBe 1))))
+        (js-await (assert-no-errors! popup))
+        (js-await (.close popup))
         (js-await (.close page)))
 
       (finally

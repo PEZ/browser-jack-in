@@ -102,50 +102,65 @@
 ;; Detection and action
 ;; ============================================================
 
+(defn- on-expected-path?
+  "Returns true when the current page path starts with the expected sponsor path."
+  [expected-path]
+  (and expected-path
+       (.startsWith (.-pathname js/window.location) expected-path)))
+
+(defn- page-signals
+  "Collects sponsor-detection signals from the current page."
+  []
+  (let [params (js/URLSearchParams. (.-search js/window.location))
+        user-login (.-content (js/document.querySelector "meta[name='user-login']"))
+        logged-in? (and (string? user-login) (not (empty? user-login)))
+        h1 (js/document.querySelector "h1.f2")
+        h1-text (when h1 (.trim (.-textContent h1)))
+        body-text (.-textContent js/document.body)]
+    {:just-sponsored? (= "true" (.get params "success"))
+     :logged-in? logged-in?
+     :forever-message (when logged-in? (get forever-sponsors user-login))
+     :h1-text h1-text
+     :has-sponsoring-as? (re-find #"Sponsoring as" body-text)}))
+
+(defn- act-on-signals!
+  "Renders the appropriate banner and sends sponsor status based on page signals."
+  [{:keys [forever-message just-sponsored? logged-in? h1-text has-sponsoring-as?]}]
+  (cond
+    ;; Forever sponsor - personalized thank-you, always send true
+    forever-message
+    (do
+      (render-banner! (message-with-heart forever-message))
+      (send-sponsor-status!))
+
+    ;; Just completed a sponsorship (one-time or recurring confirmation)
+    just-sponsored?
+    (do
+      (render-banner! (message-with-heart "Thanks for sponsoring me!"))
+      (send-sponsor-status!))
+
+    ;; Not logged in
+    (not logged-in?)
+    (render-banner! "Log in to GitHub to update your Epupp sponsor status")
+
+    ;; Logged in, "Become a sponsor" heading present - not sponsoring
+    (and h1-text (re-find #"Become a sponsor" h1-text))
+    (render-banner! (message-with-heart "Sponsor PEZ to light up your Epupp sponsor heart!"))
+
+    ;; Logged in, "Sponsoring as" present - confirmed recurring sponsor
+    has-sponsoring-as?
+    (do
+      (render-banner! (message-with-heart "Thanks for sponsoring me!"))
+      (send-sponsor-status!))
+
+    ;; Unknown state - do nothing (graceful degradation)
+    :else nil))
+
 (defn detect-and-act! []
   (let [expected-username @!sponsored-username
         expected-path (when expected-username (str "/sponsors/" expected-username))]
-    ;; Only run detection when we know the expected username and we're on their page
-    (when (and expected-path
-               (.startsWith (.-pathname js/window.location) expected-path))
-      (let [params (js/URLSearchParams. (.-search js/window.location))
-            just-sponsored? (= "true" (.get params "success"))
-            user-login (.-content (js/document.querySelector "meta[name='user-login']"))
-            logged-in? (and (string? user-login) (not (empty? user-login)))
-            forever-message (when logged-in? (get forever-sponsors user-login))
-            h1 (js/document.querySelector "h1.f2")
-            h1-text (when h1 (.trim (.-textContent h1)))
-            body-text (.-textContent js/document.body)
-            has-sponsoring-as? (re-find #"Sponsoring as" body-text)]
-        (cond
-          ;; Forever sponsor - personalized thank-you, always send true
-          forever-message
-          (do
-            (render-banner! (message-with-heart forever-message))
-            (send-sponsor-status!))
-
-          ;; Just completed a sponsorship (one-time or recurring confirmation)
-          just-sponsored?
-          (do
-            (render-banner! (message-with-heart "Thanks for sponsoring me!"))
-            (send-sponsor-status!))
-
-          ;; Not logged in
-          (not logged-in?)
-          (render-banner! "Log in to GitHub to update your Epupp sponsor status")
-
-          ;; Logged in, "Become a sponsor" heading present - not sponsoring
-          (and h1-text (re-find #"Become a sponsor" h1-text))
-          (render-banner! (message-with-heart "Sponsor PEZ to light up your Epupp sponsor heart!"))
-
-          ;; Logged in, "Sponsoring as" present - confirmed recurring sponsor
-          has-sponsoring-as?
-          (do
-            (render-banner! (message-with-heart "Thanks for sponsoring me!"))
-            (send-sponsor-status!))
-
-          ;; Unknown state - do nothing (graceful degradation)
-          :else nil)))))
+    (when (on-expected-path? expected-path)
+      (act-on-signals! (page-signals)))))
 
 ;; ============================================================
 ;; SPA navigation guard (defonce prevents listener stacking)
@@ -157,19 +172,15 @@
 ;; Initialization
 ;; ============================================================
 
-(defn- ^:async init! []
-  ;; Fetch sponsored username once, then run detection
-  (if @!sponsored-username
-    (detect-and-act!)
+(defn- ^:async ensure-username-and-detect! []
+  (when-not @!sponsored-username
     (try
-      (let [username (await (fetch-sponsored-username!+))]
-        (when username
-          (reset! !sponsored-username username))
-        (detect-and-act!))
-      (catch :default _
-        (detect-and-act!))))
+      (when-let [username (await (fetch-sponsored-username!+))]
+        (reset! !sponsored-username username))
+      (catch :default _)))
+  (detect-and-act!))
 
-  ;; Register SPA navigation listener (once)
+(defn- register-nav-listener! []
   (when (and (not @!nav-registered) js/window.navigation)
     (reset! !nav-registered true)
     (let [!nav-timeout (atom nil)
@@ -183,5 +194,9 @@
                                  (js/clearTimeout tid))
                                (reset! !nav-timeout
                                        (js/setTimeout detect-and-act! 300)))))))))
+
+(defn- ^:async init! []
+  (await (ensure-username-and-detect!))
+  (register-nav-listener!))
 
 (init!)
