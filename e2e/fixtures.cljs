@@ -288,13 +288,13 @@
   (let [start (.now js/Date)]
     (loop []
       (let [current-count (.-length (js-await (get-connections ext-page)))]
-        (if (pos? current-count)
-          current-count
-          (if (> (- (.now js/Date) start) (or timeout-ms 5000))
-            (throw (js/Error. (str "Timeout waiting for connection. Count: " current-count)))
-            (do
-              (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 20))))
-              (recur))))))))
+        (cond
+          (pos? current-count) current-count
+          (> (- (.now js/Date) start) (or timeout-ms 5000))
+          (throw (js/Error. (str "Timeout waiting for connection. Count: " current-count)))
+          :else (do
+                  (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 20))))
+                  (recur)))))))
 
 ;; =============================================================================
 ;; Wait Helpers - Use these instead of sleep for reliable tests
@@ -314,13 +314,12 @@
    (let [start (.now js/Date)]
      (loop []
        (let [result (js-await (pred-fn))]
-         (if result
-           result
-           (if (> (- (.now js/Date) start) timeout-ms)
-             (throw (js/Error. "Timeout in poll-until"))
-             (do
-               (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve poll-interval))))
-               (recur)))))))))
+         (cond
+           result result
+           (> (- (.now js/Date) start) timeout-ms) (throw (js/Error. "Timeout in poll-until"))
+           :else (do
+                   (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve poll-interval))))
+                   (recur)))))))))
 
 (defn ^:async get-test-events-via-message
   "Read test events from storage via background worker message.
@@ -502,14 +501,14 @@
     (loop []
       (let [events (js-await (get-test-events-via-message ext-page))
             found (first (filter #(= (.-event %) event-name) events))]
-        (if found
-          found
-          (if (> (- (.now js/Date) start) timeout-ms)
-            (throw (js/Error. (str "Timeout waiting for event: " event-name
-                                   ". Events so far: " (js/JSON.stringify (clj->js (map #(.-event %) events))))))
-            (do
-              (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 20))))
-              (recur))))))))
+        (cond
+          found found
+          (> (- (.now js/Date) start) timeout-ms)
+          (throw (js/Error. (str "Timeout waiting for event: " event-name
+                                 ". Events so far: " (js/JSON.stringify (clj->js (map #(.-event %) events))))))
+          :else (do
+                  (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 20))))
+                  (recur)))))))
 
 (defn ^:async assert-no-new-event-within
   "Assert that no NEW event with given name occurs within timeout-ms.
@@ -523,19 +522,23 @@
     (loop []
       (let [events (js-await (get-test-events ext-page))
             current-count (.-length (.filter events (fn [e] (= (.-event e) event-name))))]
-        (if (> current-count initial-count)
+        (cond
+          (> current-count initial-count)
           (throw (js/Error. (str "Unexpected new event occurred: " event-name
                                  " (count went from " initial-count " to " current-count ")"
                                  " after " (- (.now js/Date) start) "ms")))
-          (if (> (- (.now js/Date) start) timeout-ms)
-            true  ; Success - no new events
-            (do
-              (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve poll-interval))))
-              (recur))))))))
+          (> (- (.now js/Date) start) timeout-ms) true
+          :else (do
+                  (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve poll-interval))))
+                  (recur)))))))
 
 ;; =============================================================================
 ;; Performance Reporting
 ;; =============================================================================
+
+(defn- timing-delta [from-perf to-perf]
+  (when (and from-perf to-perf)
+    (- to-perf from-perf)))
 
 (defn generate-timing-report
   "Extract performance metrics from test events.
@@ -558,14 +561,14 @@
         script-injected (get-perf "SCRIPT_INJECTED")
         bridge-ready (get-perf "BRIDGE_READY_CONFIRMED")
         loader-run (get-perf "LOADER_RUN")]
-    {:scittle-load-ms (when (and extension-start scittle-loaded)
-                        (- scittle-loaded extension-start))
-     :injection-overhead-ms (when (and scittle-loaded script-injected)
-                              (- script-injected scittle-loaded))
-     :bridge-setup-ms (when (and extension-start bridge-ready)
-                        (- bridge-ready extension-start))
-     :document-start-delta-ms loader-run  ; Raw value - negative means ran before page
+    {:scittle-load-ms (timing-delta extension-start scittle-loaded)
+     :injection-overhead-ms (timing-delta scittle-loaded script-injected)
+     :bridge-setup-ms (timing-delta extension-start bridge-ready)
+     :document-start-delta-ms loader-run
      :all-events (map #(.-event %) events)}))
+
+(defn- format-metric [label ms threshold warning]
+  (str label (.toFixed ms 2) "ms" (when (> ms threshold) (str " ⚠️  " warning))))
 
 (defn print-timing-report
   "Print formatted timing report to console.
@@ -573,14 +576,11 @@
   [report]
   (println "\n=== Performance Report ===")
   (when-let [ms (:scittle-load-ms report)]
-    (println (str "Scittle load time: " (.toFixed ms 2) "ms"
-                  (when (> ms 200) " ⚠️  (target: <200ms)"))))
+    (println (format-metric "Scittle load time: " ms 200 "(target: <200ms)")))
   (when-let [ms (:injection-overhead-ms report)]
-    (println (str "Injection overhead: " (.toFixed ms 2) "ms"
-                  (when (> ms 50) " ⚠️  (target: <50ms)"))))
+    (println (format-metric "Injection overhead: " ms 50 "(target: <50ms)")))
   (when-let [ms (:bridge-setup-ms report)]
-    (println (str "Bridge setup: " (.toFixed ms 2) "ms"
-                  (when (> ms 100) " ⚠️  (target: <100ms)"))))
+    (println (format-metric "Bridge setup: " ms 100 "(target: <100ms)")))
   (when-let [ms (:document-start-delta-ms report)]
     (println (str "Document-start timing: " (.toFixed ms 2) "ms"
                   (if (>= ms 0)
