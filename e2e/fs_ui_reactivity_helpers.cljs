@@ -5,9 +5,11 @@
                               clear-fs-scripts send-runtime-message
                               get-extension-id find-tab-id connect-tab]]
             [fs-write-helpers :as fs-write-helpers
-             :refer [sleep wait-for-script-tag]]))
+             :refer [wait-for-script-tag]]))
 
 (def eval-in-browser fs-write-helpers/eval-in-browser)
+
+(def sleep fs-write-helpers/sleep)
 
 (def ^:private !context (atom nil))
 (def ^:private !ext-id (atom nil))
