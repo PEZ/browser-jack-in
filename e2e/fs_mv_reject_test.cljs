@@ -5,6 +5,11 @@
 
 (def ^:private !context (atom nil))
 
+(defn- assert-save-succeeded! [result expected-filename save-label]
+  (when (.includes result "ERROR:")
+    (throw (js/Error. (str save-label " save failed: " result))))
+  (-> (expect (.includes result expected-filename)) (.toBe true)))
+
 (defn- ^:async test_mv_rejects_when_target_name_exists []
   ;; Create two scripts with different names - save sequentially to avoid races
   (let [code1 "{:epupp/script-name \"mv-collision-source\"\n               :epupp/auto-run-match \"https://example.com/*\"}\n              (ns collision-source)"
@@ -13,9 +18,7 @@
                                 "(defn ^:async do-it [] (try (reset! !save1 (pr-str (await (epupp.fs/save! " (pr-str code1) " {:fs/force? true})))) (catch :default e (reset! !save1 (str \"ERROR: \" (.-message e))))))\n"
                                 "(do-it)\n:started")
                            "(pr-str @!save1)" 3000))]
-    (when (.includes result1 "ERROR:")
-      (throw (js/Error. (str "First save failed: " result1))))
-    (-> (expect (.includes result1 "mv_collision_source.cljs")) (.toBe true)))
+    (assert-save-succeeded! result1 "mv_collision_source.cljs" "First"))
 
   ;; Save second script
   (let [code2 "{:epupp/script-name \"mv-collision-target\"\n               :epupp/auto-run-match \"https://example.com/*\"}\n              (ns collision-target)"
@@ -24,9 +27,7 @@
                                 "(defn ^:async do-it [] (try (reset! !save2 (pr-str (await (epupp.fs/save! " (pr-str code2) " {:fs/force? true})))) (catch :default e (reset! !save2 (str \"ERROR: \" (.-message e))))))\n"
                                 "(do-it)\n:started")
                            "(pr-str @!save2)" 3000))]
-    (when (.includes result2 "ERROR:")
-      (throw (js/Error. (str "Second save failed: " result2))))
-    (-> (expect (.includes result2 "mv_collision_target.cljs")) (.toBe true)))
+    (assert-save-succeeded! result2 "mv_collision_target.cljs" "Second"))
 
   ;; Ensure both scripts are visible before mv
   (let [ls-result (js-await (eval-async-and-poll!

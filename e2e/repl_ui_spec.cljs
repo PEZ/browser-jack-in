@@ -14,6 +14,14 @@
 
 (def !context (atom nil))
 
+(defn- ^:async find-tab-for-testing! [bg-page]
+  (let [result (js-await (send-runtime-message
+                          bg-page "e2e/find-tab-id"
+                          #js {:urlPattern "http://localhost:*/*"}))]
+    (when-not (and result (.-success result))
+      (throw (js/Error. (str "Could not find test tab: " (.-error result)))))
+    result))
+
 (defn ^:async setup-browser! []
   (let [extension-path (.resolve path "dist/chrome")
         ctx (js-await (.launchPersistentContext
@@ -32,11 +40,7 @@
         _ (js-await (.goto bg-page
                            (str "chrome-extension://" ext-id "/popup.html")
                            #js {:waitUntil "networkidle"}))
-        find-result (js-await (send-runtime-message
-                               bg-page "e2e/find-tab-id"
-                               #js {:urlPattern "http://localhost:*/*"}))
-        _ (when-not (and find-result (.-success find-result))
-            (throw (js/Error. (str "Could not find test tab: " (.-error find-result)))))
+        find-result (js-await (find-tab-for-testing! bg-page))
         connect-result (js-await (send-runtime-message
                                   bg-page "connect-tab"
                                   #js {:tabId (.-tabId find-result)

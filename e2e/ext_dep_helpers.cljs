@@ -89,37 +89,40 @@
 ;; Poll Helpers
 ;; =============================================================================
 
-(defn ^:async poll-for-window-property!
-  "Poll page for a window property to become non-nil.
-   Returns the property value when available, throws on timeout."
-  [page property-name timeout-ms]
+(defn- ^:async poll-until-non-nil!
+  "Generic poll loop: calls poll-fn repeatedly until it returns non-nil.
+   Throws with error-msg on timeout."
+  [poll-fn timeout-ms interval-ms error-msg]
   (let [start (.now js/Date)]
     (loop []
-      (let [result (js-await (.evaluate page (str "window['" property-name "']")))]
+      (let [result (js-await (poll-fn))]
         (cond
           (some? result) result
           (> (- (.now js/Date) start) timeout-ms)
-          (throw (js/Error. (str "Timeout waiting for window." property-name)))
+          (throw (js/Error. error-msg))
           :else
-          (do (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 50))))
+          (do (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve interval-ms))))
               (recur)))))))
 
+(defn ^:async poll-for-window-property!
+  "Poll page for a window property to become non-nil."
+  [page property-name timeout-ms]
+  (poll-until-non-nil!
+   #(.evaluate page (str "window['" property-name "']"))
+   timeout-ms 50
+   (str "Timeout waiting for window." property-name)))
+
+(def ^:private scittle-eval-safely-fn
+  "Pure JS fn for page.evaluate: tries scittle eval, returns nil on error."
+  (fn [code]
+    (try
+      (js/scittle.core.eval_string code)
+      (catch :default _e nil))))
+
 (defn ^:async poll-for-scittle-eval!
-  "Poll page for a scittle eval_string result to become non-nil.
-   Returns the result when available, throws on timeout."
+  "Poll page for a scittle eval_string result to become non-nil."
   [page eval-code timeout-ms]
-  (let [start (.now js/Date)]
-    (loop []
-      (let [result (js-await (.evaluate page
-                                        (fn [code]
-                                          (try
-                                            (js/scittle.core.eval_string code)
-                                            (catch :default _e nil)))
-                                        eval-code))]
-        (cond
-          (some? result) result
-          (> (- (.now js/Date) start) timeout-ms)
-          (throw (js/Error. (str "Timeout: scittle eval not ready: " eval-code)))
-          :else
-          (do (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 100))))
-              (recur)))))))
+  (poll-until-non-nil!
+   #(.evaluate page scittle-eval-safely-fn eval-code)
+   timeout-ms 100
+   (str "Timeout: scittle eval not ready: " eval-code)))

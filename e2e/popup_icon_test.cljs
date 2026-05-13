@@ -11,6 +11,11 @@
 ;; Popup User Journey: Toolbar Icon State
 ;; =============================================================================
 
+(defn- ^:async fetch-icon-state [popup tab-id]
+  (try
+    (js-await (fixtures/get-icon-display-state popup tab-id))
+    (catch :default _e nil)))
+
 (defn- ^:async wait-for-icon-state
   "Poll get-icon-display-state until the state is one of the allowed states.
    Returns the state string."
@@ -18,9 +23,7 @@
   (let [start (.now js/Date)
         timeout-ms (or timeout-ms 2000)]
     (loop []
-      (let [state (try
-                    (js-await (fixtures/get-icon-display-state popup tab-id))
-                    (catch :default _e nil))]
+      (let [state (js-await (fetch-icon-state popup tab-id))]
         (cond
           (and state (.includes allowed-states state))
           state

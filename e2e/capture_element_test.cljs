@@ -40,13 +40,22 @@
   [page opts]
   (js-await (.evaluate page capture-evaluate-fn (or opts #js {}))))
 
+(defn- ^:async connect-to-test-tab! [ext-page find-result]
+  (let [connect-result (js-await (send-runtime-message
+                                  ext-page "connect-tab"
+                                  #js {:tabId (.-tabId find-result)
+                                       :wsPort ws-port-1}))]
+    (when-not (and connect-result (.-success connect-result))
+      (throw (js/Error. (str "Connection failed: " (.-error connect-result)))))
+    (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 1000))))))
+
 (defn ^:async setup! []
   (let [ctx (js-await (.launchPersistentContext
-                        chromium ""
-                        #js {:headless false
-                             :args #js ["--no-sandbox"
-                                        (str "--disable-extensions-except=" extension-path)
-                                        (str "--load-extension=" extension-path)]}))]
+                       chromium ""
+                       #js {:headless false
+                            :args #js ["--no-sandbox"
+                                       (str "--disable-extensions-except=" extension-path)
+                                       (str "--load-extension=" extension-path)]}))]
     (reset! !context ctx)
     (let [ext-id (js-await (get-extension-id ctx))
           page (js-await (.newPage ctx))]
@@ -63,13 +72,7 @@
                                      #js {:urlPattern "http://localhost:*/*"}))]
           (when-not (and find-result (.-success find-result))
             (throw (js/Error. (str "Could not find test tab: " (.-error find-result)))))
-          (let [connect-result (js-await (send-runtime-message
-                                          ext-page "connect-tab"
-                                          #js {:tabId (.-tabId find-result)
-                                               :wsPort ws-port-1}))]
-            (when-not (and connect-result (.-success connect-result))
-              (throw (js/Error. (str "Connection failed: " (.-error connect-result)))))
-            (js-await (js/Promise. (fn [resolve] (js/setTimeout resolve 1000))))))))))
+          (js-await (connect-to-test-tab! ext-page find-result)))))))
 
 (defn ^:async teardown! []
   (when @!ext-page

@@ -10,6 +10,14 @@
 (defn ^:async sleep [ms]
   (js/Promise. (fn [resolve] (js/setTimeout resolve ms))))
 
+(defn- extract-parse-error [response]
+  (let [err-match (.match response (js/RegExp. "3:err(\\d+):"))]
+    (if err-match
+      (let [err-len (js/parseInt (aget err-match 1))
+            err-start (+ (.-index err-match) (.-length (aget err-match 0)))]
+        (.substring response err-start (+ err-start err-len)))
+      "Unknown error")))
+
 (defn parse-nrepl-response
   "Parse a raw bencode nREPL response into {:success :values :error}."
   [response]
@@ -24,13 +32,7 @@
         (recur (.exec value-regex response))))
     (let [success (not (or (.includes response "2:ex")
                            (.includes response "3:err")))
-          error (when-not success
-                  (let [err-match (.match response (js/RegExp. "3:err(\\d+):"))]
-                    (if err-match
-                      (let [err-len (js/parseInt (aget err-match 1))
-                            err-start (+ (.-index err-match) (.-length (aget err-match 0)))]
-                        (.substring response err-start (+ err-start err-len)))
-                      "Unknown error")))]
+          error (when-not success (extract-parse-error response))]
       #js {:success success :values @values :error error})))
 
 (defn ^:async eval-in-browser
@@ -152,6 +154,15 @@
                     (= result-str ":not-settled"))
         result-str))))
 
+(defn- ^:async poll-browser-settled! [check-code timeout-ms]
+  (let [start (.now js/Date)]
+    (loop []
+      (let [result (settled-result (js-await (eval-in-browser check-code)))]
+        (cond
+          result result
+          (> (- (.now js/Date) start) timeout-ms) (throw (js/Error. "Timeout polling async result"))
+          :else (do (js-await (sleep 20)) (recur)))))))
+
 (defn ^:async eval-async-and-poll!
   "Execute setup-code in browser, then poll with check-code until result
    is no longer :pending or :not-settled. Returns the settled result string."
@@ -159,35 +170,32 @@
   (let [setup-result (js-await (eval-in-browser setup-code))]
     (when-not (.-success setup-result)
       (throw (js/Error. (str "Async setup failed: " (.-error setup-result)))))
-    (let [start (.now js/Date)]
-      (loop []
-        (let [result (settled-result (js-await (eval-in-browser check-code)))]
-          (cond
-            result result
-            (> (- (.now js/Date) start) timeout-ms) (throw (js/Error. "Timeout polling async result"))
-            :else (do (js-await (sleep 20)) (recur))))))))
+    (js-await (poll-browser-settled! check-code timeout-ms))))
+
+(defn- ^:async run-ls-poll-setup! [script-name ls-call]
+  (let [setup-code (str "(def !ls-poll (atom :pending))\n"
+                        "(defn ^:async do-ls-poll []\n"
+                        "  (let [scripts (await " ls-call ")]\n"
+                        "    (reset! !ls-poll\n"
+                        "            (some (fn [s] (= (:fs/name s) \"" script-name "\")) scripts))))\n"
+                        "(do-ls-poll)\n"
+                        ":setup-done")
+        setup-result (js-await (eval-in-browser setup-code))]
+    (when-not (.-success setup-result)
+      (throw (js/Error. (str "Failed ls poll setup: " (.-error setup-result)))))))
 
 (defn- ^:async poll-for-ls-script!
   "Poll epupp.fs/ls via REPL until script-name appears."
   [script-name ls-call timeout-ms]
   (let [start (.now js/Date)]
     (loop []
-      (let [setup-result (js-await (eval-in-browser
-                                    (str "(def !ls-poll (atom :pending))\n"
-                                         "(defn ^:async do-ls-poll []\n"
-                                         "  (let [scripts (await " ls-call ")]\n"
-                                         "    (reset! !ls-poll\n"
-                                         "            (some (fn [s] (= (:fs/name s) \"" script-name "\")) scripts))))\n"
-                                         "(do-ls-poll)\n"
-                                         ":setup-done")))]
-        (when-not (.-success setup-result)
-          (throw (js/Error. (str "Failed ls poll setup: " (.-error setup-result)))))
-        (js-await (sleep 20))
-        (let [result (settled-result (js-await (eval-in-browser "(pr-str @!ls-poll)")))]
-          (cond
-            (= result "true") true
-            (> (- (.now js/Date) start) timeout-ms) (throw (js/Error. (str "Timeout waiting for script: " script-name)))
-            :else (recur)))))))
+      (js-await (run-ls-poll-setup! script-name ls-call))
+      (js-await (sleep 20))
+      (let [result (settled-result (js-await (eval-in-browser "(pr-str @!ls-poll)")))]
+        (cond
+          (= result "true") true
+          (> (- (.now js/Date) start) timeout-ms) (throw (js/Error. (str "Timeout waiting for script: " script-name)))
+          :else (recur))))))
 
 (defn ^:async wait-for-builtin-script-via-repl! [script-name timeout-ms]
   (poll-for-ls-script! script-name "(epupp.fs/ls {:fs/ls-hidden? true})" (or timeout-ms 5000)))

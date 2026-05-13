@@ -60,13 +60,18 @@
     (js-await (.close popup))))
 
 (defn- cache-timeout-message
-  [expected-url timeout-ms cache]
-  (str "Timeout (" timeout-ms "ms) waiting for extDepCache to contain: "
-       expected-url
-       "\nCache keys: "
-       (if cache
-         (js/JSON.stringify (.keys js/Object cache))
-         "null/undefined")))
+  [expected-url timeout-ms result]
+  (let [cache (and result (.-success result) (.-value result))]
+    (str "Timeout (" timeout-ms "ms) waiting for extDepCache to contain: "
+         expected-url
+         "\nCache keys: "
+         (if cache
+           (js/JSON.stringify (.keys js/Object cache))
+           "null/undefined"))))
+
+(defn- get-cache-entry [result expected-url]
+  (when (and result (.-success result) (.-value result))
+    (aget (.-value result) expected-url)))
 
 (defn- ^:async poll-ext-dep-cache
   "Poll extDepCache storage until the expected URL key exists.
@@ -76,14 +81,13 @@
     (loop []
       (let [result (js-await (send-runtime-message ext-page "e2e/get-storage"
                                                    #js {:key "extDepCache"}))
-            cache (when (and result (.-success result)) (.-value result))
-            entry (when cache (aget cache expected-url))]
+            entry (get-cache-entry result expected-url)]
         (cond
           entry
           entry
 
           (> (- (.now js/Date) start) timeout-ms)
-          (throw (js/Error. (cache-timeout-message expected-url timeout-ms cache)))
+          (throw (js/Error. (cache-timeout-message expected-url timeout-ms result)))
 
           :else
           (do

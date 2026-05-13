@@ -20,15 +20,18 @@
 (defn get-ext-id []
   @!ext-id)
 
+(defn- extract-eval-result-value [check-result]
+  (when (and (.-success check-result)
+             (seq (.-values check-result)))
+    (first (.-values check-result))))
+
 (defn ^:async wait-for-eval-promise
   "Wait for a REPL evaluation result stored in an atom."
   [atom-name timeout-ms]
   (let [start (.now js/Date)]
     (loop []
-      (let [check-result (js-await (eval-in-browser (str "(pr-str @" atom-name ")")))
-            value (when (and (.-success check-result)
-                             (seq (.-values check-result)))
-                    (first (.-values check-result)))]
+      (let [value (extract-eval-result-value
+                   (js-await (eval-in-browser (str "(pr-str @" atom-name ")"))))]
         (cond
           (and value (not= value ":pending")) value
           (> (- (.now js/Date) start) timeout-ms) (throw (js/Error. (str "Timeout waiting for " atom-name)))
