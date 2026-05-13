@@ -6,7 +6,10 @@ Changes to Epupp
 
 ## [Unreleased]
 
+## [0.0.20] - 2026-05-13
+
 - Add CSS file injection support in `:epupp/inject` - CSS files (any URL ending in `.css`) are injected as `<link rel="stylesheet">` tags before scripts run
+
 
 ## [0.0.19] - 2026-05-03
 
