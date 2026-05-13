@@ -87,18 +87,18 @@
       (-> (expect event-type)
           (.toBe "info")))))
 
-(defn- test-inspect-script-passes-script-to-effect []
+(defn- dispatch-script-action [action-key script-name script-code]
   (let [scripts [{:script/id "test-1"
-                  :script/name "Test Script"
+                  :script/name script-name
                   :script/match ["*://example.com/*"]
-                  :script/code "(println \"hello\")"}]
-        state (assoc initial-state :scripts/list scripts)
-        result (popup-actions/handle-action state uf-data [:script/ax.inspect-script "test-1"])
-        [_fx-name script] (first (:uf/fxs result))]
-    (-> (expect (:script/id script))
-        (.toBe "test-1"))
-    (-> (expect (:script/name script))
-        (.toBe "Test Script"))))
+                  :script/code script-code}]
+        state (assoc initial-state :scripts/list scripts)]
+    (popup-actions/handle-action state uf-data [action-key "test-1"])))
+
+(defn- test-inspect-script-passes-script-to-effect []
+  (let [[_fx-name script] (first (:uf/fxs (dispatch-script-action :script/ax.inspect-script "Test Script" "(println \"hello\")")))]
+    (-> (expect (:script/id script)) (.toBe "test-1"))
+    (-> (expect (:script/name script)) (.toBe "Test Script"))))
 
 (defn- test-inspect-script-returns-nil-for-non-existent []
   (let [scripts [{:script/id "other"}]
@@ -110,19 +110,10 @@
 ;; Evaluate action
 
 (defn- test-evaluate-script-triggers-effect []
-  (let [scripts [{:script/id "test-1"
-                  :script/name "Test"
-                  :script/match ["*://example.com/*"]
-                  :script/code "(println \"hi\")"}]
-        state (assoc initial-state :scripts/list scripts)
-        result (popup-actions/handle-action state uf-data [:script/ax.evaluate-script "test-1"])
-        [fx-name script] (first (:uf/fxs result))]
-    (-> (expect fx-name)
-        (.toBe :popup/fx.evaluate-script))
-    (-> (expect (:script/id script))
-        (.toBe "test-1"))
-    (-> (expect (:script/code script))
-        (.toBe "(println \"hi\")"))))
+  (let [[fx-name script] (first (:uf/fxs (dispatch-script-action :script/ax.evaluate-script "Test" "(println \"hi\")")))]
+    (-> (expect fx-name) (.toBe :popup/fx.evaluate-script))
+    (-> (expect (:script/id script)) (.toBe "test-1"))
+    (-> (expect (:script/code script)) (.toBe "(println \"hi\")"))))
 
 (defn- test-evaluate-script-returns-nil-for-non-existent []
   (let [scripts [{:script/id "other"}]

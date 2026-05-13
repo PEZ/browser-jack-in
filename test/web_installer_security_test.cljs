@@ -155,30 +155,21 @@
     ;; We verify the lookup returns nil, which drives the response
     ))
 
-(defn- test-script-found-with-identical-code []
-  (let [code "(println \"hello\")"
-        script {:script/name "test.cljs"
-                :script/code code}]
-    (reset! storage/!db {:storage/scripts [script]})
-    (let [result (storage/get-script-by-name "test.cljs")]
-      ;; Should find the script
-      (-> (expect result) (.toBeTruthy))
-      ;; Code should match
-      (-> (expect (= code (:script/code result)))
-          (.toBe true)))))
-
-(defn- test-script-found-with-different-code []
-  (let [stored-code "(println \"original\")"
-        incoming-code "(println \"modified\")"
-        script {:script/name "test.cljs"
+(defn- assert-script-found-with-code-match! [stored-code check-code expected-match?]
+  (let [script {:script/name "test.cljs"
                 :script/code stored-code}]
     (reset! storage/!db {:storage/scripts [script]})
     (let [result (storage/get-script-by-name "test.cljs")]
-      ;; Should find the script
       (-> (expect result) (.toBeTruthy))
-      ;; Code should NOT match
-      (-> (expect (= incoming-code (:script/code result)))
-          (.toBe false)))))
+      (-> (expect (= check-code (:script/code result)))
+          (.toBe expected-match?)))))
+
+(defn- test-script-found-with-identical-code []
+  (let [code "(println \"hello\")"]
+    (assert-script-found-with-code-match! code code true)))
+
+(defn- test-script-found-with-different-code []
+  (assert-script-found-with-code-match! "(println \"original\")" "(println \"modified\")" false))
 
 (defn- test-check-script-exists-response-shape-not-found []
   ;; Simulate the exact response logic from handle-check-script-exists
@@ -192,32 +183,24 @@
     (-> (expect (:success response)) (.toBe true))
     (-> (expect (:exists response)) (.toBe false))))
 
-(defn- test-check-script-exists-response-shape-identical []
-  (let [code "(println \"hello\")"
-        script {:script/name "test.cljs"
-                :script/code code}]
-    (reset! storage/!db {:storage/scripts [script]})
-    (let [found (storage/get-script-by-name "test.cljs")
-          response (if found
-                     {:success true :exists true :identical (= code (:script/code found))}
-                     {:success true :exists false})]
-      (-> (expect (:success response)) (.toBe true))
-      (-> (expect (:exists response)) (.toBe true))
-      (-> (expect (:identical response)) (.toBe true)))))
-
-(defn- test-check-script-exists-response-shape-different []
-  (let [stored-code "(println \"original\")"
-        incoming-code "(println \"modified\")"
-        script {:script/name "test.cljs"
+(defn- assert-script-exists-response! [stored-code check-code expected-identical?]
+  (let [script {:script/name "test.cljs"
                 :script/code stored-code}]
     (reset! storage/!db {:storage/scripts [script]})
     (let [found (storage/get-script-by-name "test.cljs")
           response (if found
-                     {:success true :exists true :identical (= incoming-code (:script/code found))}
+                     {:success true :exists true :identical (= check-code (:script/code found))}
                      {:success true :exists false})]
       (-> (expect (:success response)) (.toBe true))
       (-> (expect (:exists response)) (.toBe true))
-      (-> (expect (:identical response)) (.toBe false)))))
+      (-> (expect (:identical response)) (.toBe expected-identical?)))))
+
+(defn- test-check-script-exists-response-shape-identical []
+  (let [code "(println \"hello\")"]
+    (assert-script-exists-response! code code true)))
+
+(defn- test-check-script-exists-response-shape-different []
+  (assert-script-exists-response! "(println \"original\")" "(println \"modified\")" false))
 
 (describe "check-script-exists response logic"
           (fn []

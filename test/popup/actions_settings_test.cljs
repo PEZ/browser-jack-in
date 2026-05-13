@@ -30,29 +30,22 @@
     (-> (expect (first (first (:uf/fxs result))))
         (.toBe :popup/fx.load-auto-reconnect-setting))))
 
+(defn- check-settings-action! [state action-vec [db-key expected-value] fx-key]
+  (let [result (popup-actions/handle-action state uf-data action-vec)]
+    (-> (expect (get (:uf/db result) db-key)) (.toBe expected-value))
+    (let [[fx-name value] (first (:uf/fxs result))]
+      (-> (expect fx-name) (.toBe fx-key))
+      (-> (expect value) (.toBe expected-value)))))
+
 (defn- ^:async test-toggle-auto-reconnect-repl-toggles-true-to-false []
-  (let [state (assoc initial-state :settings/auto-reconnect-repl true)
-        result (popup-actions/handle-action state uf-data [:settings/ax.toggle-auto-reconnect-repl])]
-    (-> (expect (:settings/auto-reconnect-repl (:uf/db result)))
-        (.toBe false))
-    ;; Should trigger save effect
-    (let [[fx-name enabled] (first (:uf/fxs result))]
-      (-> (expect fx-name)
-          (.toBe :popup/fx.save-auto-reconnect-setting))
-      (-> (expect enabled)
-          (.toBe false)))))
+  (check-settings-action! (assoc initial-state :settings/auto-reconnect-repl true)
+                          [:settings/ax.toggle-auto-reconnect-repl]
+                          [:settings/auto-reconnect-repl false] :popup/fx.save-auto-reconnect-setting))
 
 (defn- ^:async test-toggle-auto-reconnect-repl-toggles-false-to-true []
-  (let [state (assoc initial-state :settings/auto-reconnect-repl false)
-        result (popup-actions/handle-action state uf-data [:settings/ax.toggle-auto-reconnect-repl])]
-    (-> (expect (:settings/auto-reconnect-repl (:uf/db result)))
-        (.toBe true))
-    ;; Should trigger save effect
-    (let [[fx-name enabled] (first (:uf/fxs result))]
-      (-> (expect fx-name)
-          (.toBe :popup/fx.save-auto-reconnect-setting))
-      (-> (expect enabled)
-          (.toBe true)))))
+  (check-settings-action! (assoc initial-state :settings/auto-reconnect-repl false)
+                          [:settings/ax.toggle-auto-reconnect-repl]
+                          [:settings/auto-reconnect-repl true] :popup/fx.save-auto-reconnect-setting))
 
 ;; ============================================================
 ;; Host Permission Tests
@@ -95,37 +88,19 @@
         (.toBe :popup/fx.load-auto-connect-level))))
 
 (defn- ^:async test-set-auto-connect-level-sets-all-pages []
-  (let [state (assoc initial-state :settings/auto-connect-level "off")
-        result (popup-actions/handle-action state uf-data [:settings/ax.set-auto-connect-level "all-pages"])]
-    (-> (expect (:settings/auto-connect-level (:uf/db result)))
-        (.toBe "all-pages"))
-    (let [[fx-name level] (first (:uf/fxs result))]
-      (-> (expect fx-name)
-          (.toBe :popup/fx.save-auto-connect-level))
-      (-> (expect level)
-          (.toBe "all-pages")))))
+  (check-settings-action! (assoc initial-state :settings/auto-connect-level "off")
+                          [:settings/ax.set-auto-connect-level "all-pages"]
+                          [:settings/auto-connect-level "all-pages"] :popup/fx.save-auto-connect-level))
 
 (defn- ^:async test-set-auto-connect-level-sets-all-tabs []
-  (let [state (assoc initial-state :settings/auto-connect-level "off")
-        result (popup-actions/handle-action state uf-data [:settings/ax.set-auto-connect-level "all-tabs"])]
-    (-> (expect (:settings/auto-connect-level (:uf/db result)))
-        (.toBe "all-tabs"))
-    (let [[fx-name level] (first (:uf/fxs result))]
-      (-> (expect fx-name)
-          (.toBe :popup/fx.save-auto-connect-level))
-      (-> (expect level)
-          (.toBe "all-tabs")))))
+  (check-settings-action! (assoc initial-state :settings/auto-connect-level "off")
+                          [:settings/ax.set-auto-connect-level "all-tabs"]
+                          [:settings/auto-connect-level "all-tabs"] :popup/fx.save-auto-connect-level))
 
 (defn- ^:async test-set-auto-connect-level-sets-off []
-  (let [state (assoc initial-state :settings/auto-connect-level "all-pages")
-        result (popup-actions/handle-action state uf-data [:settings/ax.set-auto-connect-level "off"])]
-    (-> (expect (:settings/auto-connect-level (:uf/db result)))
-        (.toBe "off"))
-    (let [[fx-name level] (first (:uf/fxs result))]
-      (-> (expect fx-name)
-          (.toBe :popup/fx.save-auto-connect-level))
-      (-> (expect level)
-          (.toBe "off")))))
+  (check-settings-action! (assoc initial-state :settings/auto-connect-level "all-pages")
+                          [:settings/ax.set-auto-connect-level "off"]
+                          [:settings/auto-connect-level "off"] :popup/fx.save-auto-connect-level))
 
 ;; ============================================================
 ;; Test Registration

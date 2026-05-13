@@ -83,17 +83,18 @@
 
 (def builtin? #(and (:script/id %) (.startsWith (:script/id %) "epupp-builtin-")))
 
+(defn- assert-sort-order! [scripts expected-names]
+  (let [result (vec (popup-utils/sort-scripts-for-display scripts builtin?))]
+    (-> (expect (:script/name (first result))) (.toBe (first expected-names)))
+    (-> (expect (:script/name (second result))) (.toBe (second expected-names)))
+    (-> (expect (:script/name (nth result 2))) (.toBe (nth expected-names 2)))))
+
 (defn- test-sorts-user-scripts-alphabetically-by-name []
-  (let [scripts [{:script/id "s1" :script/name "zebra.cljs"}
-                 {:script/id "s2" :script/name "alpha.cljs"}
-                 {:script/id "s3" :script/name "mike.cljs"}]
-        result (vec (popup-utils/sort-scripts-for-display scripts builtin?))]
-    (-> (expect (:script/name (first result)))
-        (.toBe "alpha.cljs"))
-    (-> (expect (:script/name (second result)))
-        (.toBe "mike.cljs"))
-    (-> (expect (:script/name (nth result 2)))
-        (.toBe "zebra.cljs"))))
+  (assert-sort-order!
+   [{:script/id "s1" :script/name "zebra.cljs"}
+    {:script/id "s2" :script/name "alpha.cljs"}
+    {:script/id "s3" :script/name "mike.cljs"}]
+   ["alpha.cljs" "mike.cljs" "zebra.cljs"]))
 
 (defn- test-places-builtin-scripts-after-user-scripts []
   (let [scripts [{:script/id "epupp-builtin-gist" :script/name "Gist Installer"}
@@ -105,16 +106,11 @@
         (.toBe "Gist Installer"))))
 
 (defn- test-sorts-builtin-scripts-alphabetically-among-themselves []
-  (let [scripts [{:script/id "epupp-builtin-zzz" :script/name "Zzz Builtin"}
-                 {:script/id "epupp-builtin-aaa" :script/name "Aaa Builtin"}
-                 {:script/id "s1" :script/name "user.cljs"}]
-        result (vec (popup-utils/sort-scripts-for-display scripts builtin?))]
-    (-> (expect (:script/name (first result)))
-        (.toBe "user.cljs"))
-    (-> (expect (:script/name (second result)))
-        (.toBe "Aaa Builtin"))
-    (-> (expect (:script/name (nth result 2)))
-        (.toBe "Zzz Builtin"))))
+  (assert-sort-order!
+   [{:script/id "epupp-builtin-zzz" :script/name "Zzz Builtin"}
+    {:script/id "epupp-builtin-aaa" :script/name "Aaa Builtin"}
+    {:script/id "s1" :script/name "user.cljs"}]
+   ["user.cljs" "Aaa Builtin" "Zzz Builtin"]))
 
 (defn- test-sorts-case-insensitively []
   (let [scripts [{:script/id "s1" :script/name "Zebra.cljs"}

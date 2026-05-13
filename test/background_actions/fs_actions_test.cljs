@@ -150,40 +150,31 @@
 ;; ws-actions/unregister FS cleanup Tests
 ;; ============================================================
 
-(defn- test-ws-unregister-clears-fs-sync-when-tab-matches []
+(defn- assert-ws-unregister-fs-sync! [sync-tab-id tab-matches?]
   (let [conn {:ws/socket :dummy-ws :ws/port 5555}
         state {:ws/connections {9 conn}
-               :fs/sync-tab-id 9}
-        result (bg-actions/handle-action state uf-data
-                 [:ws/ax.unregister 9])]
-    ;; Should clear fs/sync-tab-id
-    (-> (expect (:fs/sync-tab-id (:uf/db result)))
-        (.toBeNull))
-    ;; Should emit ws broadcast
+               :fs/sync-tab-id sync-tab-id}
+        result (bg-actions/handle-action state uf-data [:ws/ax.unregister 9])]
     (-> (expect (some #(= :ws/fx.broadcast-connections-changed! (first %))
                       (:uf/fxs result)))
         (.toBeTruthy))
-    ;; Should emit fs sync broadcast with nil
-    (-> (expect (some #(and (= :fs/fx.broadcast-sync-status! (first %))
-                            (nil? (second %))) (:uf/fxs result)))
-        (.toBeTruthy))))
+    (if tab-matches?
+      (do
+        (-> (expect (:fs/sync-tab-id (:uf/db result))) (.toBeNull))
+        (-> (expect (some #(and (= :fs/fx.broadcast-sync-status! (first %))
+                                (nil? (second %))) (:uf/fxs result)))
+            (.toBeTruthy)))
+      (do
+        (-> (expect (:fs/sync-tab-id (:uf/db result))) (.toBe sync-tab-id))
+        (-> (expect (some #(= :fs/fx.broadcast-sync-status! (first %))
+                          (:uf/fxs result)))
+            (.toBeFalsy))))))
+
+(defn- test-ws-unregister-clears-fs-sync-when-tab-matches []
+  (assert-ws-unregister-fs-sync! 9 true))
 
 (defn- test-ws-unregister-leaves-fs-sync-when-tab-differs []
-  (let [conn {:ws/socket :dummy-ws :ws/port 5555}
-        state {:ws/connections {9 conn}
-               :fs/sync-tab-id 42}
-        result (bg-actions/handle-action state uf-data
-                 [:ws/ax.unregister 9])]
-    ;; Should NOT clear fs/sync-tab-id (different tab)
-    (-> (expect (:fs/sync-tab-id (:uf/db result)))
-        (.toBe 42))
-    ;; Should emit ws broadcast but NOT fs broadcast
-    (-> (expect (some #(= :ws/fx.broadcast-connections-changed! (first %))
-                      (:uf/fxs result)))
-        (.toBeTruthy))
-    (-> (expect (some #(= :fs/fx.broadcast-sync-status! (first %))
-                      (:uf/fxs result)))
-        (.toBeFalsy))))
+  (assert-ws-unregister-fs-sync! 42 false))
 
 (describe ":ws/ax.unregister - FS sync cleanup"
           (fn []
