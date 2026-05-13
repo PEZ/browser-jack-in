@@ -63,143 +63,120 @@
 ;; Handle System Banner Tests (D-11, D-12)
 ;; ============================================================
 
+(defn- handle-system-banner [state-overrides response-data]
+  (panel-actions/handle-action (merge initial-state state-overrides)
+                               uf-data
+                               [:panel/ax.handle-system-banner response-data]))
+
+(defn- find-by-type [events event-type]
+  (some #(when (= event-type (first %)) %) events))
+
+(def own-script-overrides
+  {:panel/script-name "test.cljs"
+   :panel/original-name "test.cljs"
+   :panel/system-bulk-names {}})
+
+(defn- own-script-save-dxs []
+  (:uf/dxs (handle-system-banner own-script-overrides
+                                  {:event-type "success"
+                                   :operation "save"
+                                   :script-name "test.cljs"})))
+
 (defn- test-handle-system-banner-simple-success []
-  (let [state (assoc initial-state
-                     :panel/system-bulk-names {}
-                     :panel/original-name "other.cljs")
-        result (panel-actions/handle-action state uf-data
-                                            [:panel/ax.handle-system-banner
-                                             {:event-type "success"
-                                              :operation "save"
-                                              :script-name "test.cljs"}])
+  (let [result (handle-system-banner {:panel/system-bulk-names {}
+                                      :panel/original-name "other.cljs"}
+                                     {:event-type "success"
+                                      :operation "save"
+                                      :script-name "test.cljs"})
         dxs (:uf/dxs result)
-        show-banner-dx (some #(when (= :editor/ax.show-system-banner (first %)) %) dxs)]
+        show-banner-dx (find-by-type dxs :editor/ax.show-system-banner)]
     ;; Should dispatch show-system-banner
     (-> (expect show-banner-dx) (.toBeTruthy))
     (-> (expect (second show-banner-dx)) (.toBe "success"))
     (-> (expect (nth show-banner-dx 2)) (.toBe "Script \"test.cljs\" saved"))))
 
 (defn- test-handle-system-banner-error []
-  (let [state (assoc initial-state :panel/system-bulk-names {})
-        result (panel-actions/handle-action state uf-data
-                                            [:panel/ax.handle-system-banner
-                                             {:event-type "error"
-                                              :operation "save"
-                                              :script-name "test.cljs"
-                                              :error "Permission denied"}])
+  (let [result (handle-system-banner {:panel/system-bulk-names {}}
+                                     {:event-type "error"
+                                      :operation "save"
+                                      :script-name "test.cljs"
+                                      :error "Permission denied"})
         dxs (:uf/dxs result)
-        show-banner-dx (some #(when (= :editor/ax.show-system-banner (first %)) %) dxs)]
+        show-banner-dx (find-by-type dxs :editor/ax.show-system-banner)]
     (-> (expect (second show-banner-dx)) (.toBe "error"))
     (-> (expect (nth show-banner-dx 2)) (.toBe "FS sync error: Permission denied"))))
 
 (defn- test-handle-system-banner-skip-own-saves []
-  (let [state (assoc initial-state
-                     :panel/script-name "test.cljs"
-                     :panel/original-name "test.cljs"
-                     :panel/system-bulk-names {})
-        result (panel-actions/handle-action state uf-data
-                                            [:panel/ax.handle-system-banner
-                                             {:event-type "success"
-                                              :operation "save"
-                                              :script-name "test.cljs"}])
-        dxs (:uf/dxs result)
-        show-banner-dx (some #(when (= :editor/ax.show-system-banner (first %)) %) dxs)]
+  (let [dxs (own-script-save-dxs)]
     ;; Should NOT show banner for panel's own saves
-    (-> (expect show-banner-dx) (.toBeFalsy))))
+    (-> (expect (find-by-type dxs :editor/ax.show-system-banner)) (.toBeFalsy))))
 
 (defn- test-handle-system-banner-affects-current-reloads []
-  (let [state (assoc initial-state
-                     :panel/script-name "test.cljs"
-                     :panel/original-name "test.cljs"
-                     :panel/system-bulk-names {})
-        result (panel-actions/handle-action state uf-data
-                                            [:panel/ax.handle-system-banner
-                                             {:event-type "success"
-                                              :operation "save"
-                                              :script-name "test.cljs"}])
-        dxs (:uf/dxs result)
-        reload-dx (some #(when (= :editor/ax.reload-script-from-storage (first %)) %) dxs)]
+  (let [dxs (own-script-save-dxs)
+        reload-dx (find-by-type dxs :editor/ax.reload-script-from-storage)]
     ;; Should reload script from storage when current script is affected
     (-> (expect reload-dx) (.toBeTruthy))
     (-> (expect (second reload-dx)) (.toBe "test.cljs"))))
 
 (defn- test-handle-system-banner-affects-current-delete-clears []
-  (let [state (assoc initial-state
-                     :panel/script-name "test.cljs"
-                     :panel/original-name "test.cljs"
-                     :panel/system-bulk-names {})
-        result (panel-actions/handle-action state uf-data
-                                            [:panel/ax.handle-system-banner
-                                             {:event-type "success"
-                                              :operation "delete"
-                                              :script-name "test.cljs"}])
-        dxs (:uf/dxs result)
-        new-script-dx (some #(when (= :editor/ax.new-script (first %)) %) dxs)]
+  (let [dxs (:uf/dxs (handle-system-banner own-script-overrides
+                                           {:event-type "success"
+                                            :operation "delete"
+                                            :script-name "test.cljs"}))]
     ;; Should new-script when current script is deleted
-    (-> (expect new-script-dx) (.toBeTruthy))))
+    (-> (expect (find-by-type dxs :editor/ax.new-script)) (.toBeTruthy))))
 
 (defn- test-handle-system-banner-from-name-matching []
-  (let [state (assoc initial-state
-                     :panel/script-name "new_name.cljs"
-                     :panel/original-name "old_name.cljs"
-                     :panel/system-bulk-names {})
-        result (panel-actions/handle-action state uf-data
-                                            [:panel/ax.handle-system-banner
-                                             {:event-type "success"
-                                              :operation "save"
-                                              :script-name "other.cljs"
-                                              :from-name "old_name.cljs"}])
+  (let [result (handle-system-banner {:panel/script-name "new_name.cljs"
+                                      :panel/original-name "old_name.cljs"
+                                      :panel/system-bulk-names {}}
+                                     {:event-type "success"
+                                      :operation "save"
+                                      :script-name "other.cljs"
+                                      :from-name "old_name.cljs"})
         dxs (:uf/dxs result)
-        reload-dx (some #(when (= :editor/ax.reload-script-from-storage (first %)) %) dxs)]
+        reload-dx (find-by-type dxs :editor/ax.reload-script-from-storage)]
     ;; Should match via from-name against original-name
     (-> (expect reload-dx) (.toBeTruthy))))
 
 (defn- test-handle-system-banner-bulk-tracks-and-clears []
-  (let [state (assoc initial-state :panel/system-bulk-names {"bulk-1" ["a.cljs"]})
-        result (panel-actions/handle-action state uf-data
-                                            [:panel/ax.handle-system-banner
-                                             {:event-type "success"
-                                              :operation "save"
-                                              :script-name "b.cljs"
-                                              :bulk-id "bulk-1"
-                                              :bulk-count 2
-                                              :bulk-index 1}])
+  (let [result (handle-system-banner {:panel/system-bulk-names {"bulk-1" ["a.cljs"]}}
+                                     {:event-type "success"
+                                      :operation "save"
+                                      :script-name "b.cljs"
+                                      :bulk-id "bulk-1"
+                                      :bulk-count 2
+                                      :bulk-index 1})
         new-state (:uf/db result)]
     ;; Bulk final should clear bulk names
     (-> (expect (get-in new-state [:panel/system-bulk-names "bulk-1"]))
         (.toBeUndefined))))
 
 (defn- test-handle-system-banner-bulk-final-log-effect []
-  (let [state (assoc initial-state
-                     :panel/system-bulk-names {"bulk-1" ["a.cljs"]}
-                     :panel/original-name "other.cljs")
-        result (panel-actions/handle-action state uf-data
-                                            [:panel/ax.handle-system-banner
-                                             {:event-type "success"
-                                              :operation "save"
-                                              :script-name "b.cljs"
-                                              :bulk-id "bulk-1"
-                                              :bulk-count 2
-                                              :bulk-index 1}])
+  (let [result (handle-system-banner {:panel/system-bulk-names {"bulk-1" ["a.cljs"]}
+                                      :panel/original-name "other.cljs"}
+                                     {:event-type "success"
+                                      :operation "save"
+                                      :script-name "b.cljs"
+                                      :bulk-id "bulk-1"
+                                      :bulk-count 2
+                                      :bulk-index 1})
         fxs (:uf/fxs result)
-        log-fx (some #(when (= :panel/fx.log-system-banner (first %)) %) fxs)]
+        log-fx (find-by-type fxs :panel/fx.log-system-banner)]
     ;; Should dispatch log effect with bulk names
     (-> (expect log-fx) (.toBeTruthy))
     (-> (expect (nth log-fx 2)) (.toEqual ["a.cljs" "b.cljs"]))))
 
 (defn- test-handle-system-banner-no-affects-different-script []
-  (let [state (assoc initial-state
-                     :panel/script-name "other.cljs"
-                     :panel/original-name "other.cljs"
-                     :panel/system-bulk-names {})
-        result (panel-actions/handle-action state uf-data
-                                            [:panel/ax.handle-system-banner
-                                             {:event-type "success"
-                                              :operation "save"
-                                              :script-name "test.cljs"}])
+  (let [result (handle-system-banner {:panel/script-name "other.cljs"
+                                      :panel/original-name "other.cljs"
+                                      :panel/system-bulk-names {}}
+                                     {:event-type "success"
+                                      :operation "save"
+                                      :script-name "test.cljs"})
         dxs (:uf/dxs result)
-        reload-dx (some #(when (= :editor/ax.reload-script-from-storage (first %)) %) dxs)
-        show-banner-dx (some #(when (= :editor/ax.show-system-banner (first %)) %) dxs)]
+        reload-dx (find-by-type dxs :editor/ax.reload-script-from-storage)
+        show-banner-dx (find-by-type dxs :editor/ax.show-system-banner)]
     ;; Should NOT reload (different script)
     (-> (expect reload-dx) (.toBeFalsy))
     ;; Should show banner (not panel's own save)

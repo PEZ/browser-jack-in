@@ -47,53 +47,49 @@
     (-> (expect (.-builtin js-script))
         (.toBe true))))
 
-(defn- test-script-js-roundtrips-special-flags []
-  (let [script {:script/id "installer-1"
-                :script/code "(ns installer)"
-                :script/enabled false
-                :script/created "2026-01-01T00:00:00.000Z"
-                :script/modified "2026-01-02T00:00:00.000Z"
-                :script/builtin? true
-                :script/special? true
-                :script/web-installer-scan true}
-        js-script (script-utils/script->js script)
+(defn- assert-script-flags-roundtrip [script expect-special? expect-web-installer-scan?]
+  (let [js-script (script-utils/script->js script)
         parsed (first (script-utils/parse-scripts #js [js-script]))]
-    ;; Verify JS object has the flags
-    (-> (expect (.-special js-script))
-        (.toBe true))
-    (-> (expect (.-webInstallerScan js-script))
-        (.toBe true))
-    ;; Verify roundtrip preserves flags
-    (-> (expect (:script/special? parsed))
-        (.toBe true))
-    (-> (expect (:script/web-installer-scan parsed))
-        (.toBe true))))
-
-(defn- test-script-js-roundtrips-without-special-flags []
-  (let [script {:script/id "regular-1"
-                :script/code "(ns regular)"
-                :script/enabled true
-                :script/created "2026-01-01T00:00:00.000Z"
-                :script/modified "2026-01-02T00:00:00.000Z"
-                :script/builtin? false}
-        js-script (script-utils/script->js script)
-        parsed (first (script-utils/parse-scripts #js [js-script]))]
-    ;; Verify JS object has nil/undefined for flags
-    (-> (expect (.-special js-script))
-        (.toBeFalsy))
-    (-> (expect (.-webInstallerScan js-script))
-        (.toBeFalsy))
-    ;; Verify roundtrip: flags should not be set
-    (-> (expect (:script/special? parsed))
-        (.toBeUndefined))
-    (-> (expect (:script/web-installer-scan parsed))
-        (.toBeUndefined))))
+    (if expect-special?
+      (-> (expect (.-special js-script)) (.toBe true))
+      (-> (expect (.-special js-script)) (.toBeFalsy)))
+    (if expect-web-installer-scan?
+      (-> (expect (.-webInstallerScan js-script)) (.toBe true))
+      (-> (expect (.-webInstallerScan js-script)) (.toBeFalsy)))
+    (if expect-special?
+      (-> (expect (:script/special? parsed)) (.toBe true))
+      (-> (expect (:script/special? parsed)) (.toBeUndefined)))
+    (if expect-web-installer-scan?
+      (-> (expect (:script/web-installer-scan parsed)) (.toBe true))
+      (-> (expect (:script/web-installer-scan parsed)) (.toBeUndefined)))))
 
 (describe "script->js"
           (fn []
             (test "stores only primary fields, not derived" test-script-js-stores-only-primary-fields)
-            (test "roundtrips special flags through parse-scripts" test-script-js-roundtrips-special-flags)
-            (test "roundtrips scripts without special flags" test-script-js-roundtrips-without-special-flags)))
+            (test "roundtrips special flags through parse-scripts"
+                  (fn []
+                    (assert-script-flags-roundtrip
+                     {:script/id "installer-1"
+                      :script/code "(ns installer)"
+                      :script/enabled false
+                      :script/created "2026-01-01T00:00:00.000Z"
+                      :script/modified "2026-01-02T00:00:00.000Z"
+                      :script/builtin? true
+                      :script/special? true
+                      :script/web-installer-scan true}
+                     true
+                     true)))
+            (test "roundtrips scripts without special flags"
+                  (fn []
+                    (assert-script-flags-roundtrip
+                     {:script/id "regular-1"
+                      :script/code "(ns regular)"
+                      :script/enabled true
+                      :script/created "2026-01-01T00:00:00.000Z"
+                      :script/modified "2026-01-02T00:00:00.000Z"
+                      :script/builtin? false}
+                     false
+                     false)))))
 
 ;; ============================================================
 ;; Storage contract pinning

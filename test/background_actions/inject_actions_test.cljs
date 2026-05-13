@@ -236,53 +236,58 @@
 ;; inject-libs resolver integration tests
 ;; ============================================================
 
+(defn- assert-resolution-error-response! [fxs dxs response]
+  (-> (expect (seq dxs)) (.toBeTruthy))
+  (-> (expect (first (first dxs))) (.toBe :banner/ax.broadcast-resolution-errors))
+  (-> (expect (execute-plan-effect fxs)) (.toBeFalsy))
+  (-> (expect (:success response)) (.toBe false)))
+
+(defn- assert-library-only-plan! [fxs plan result library-count]
+  (-> (expect (count (filter #(= :msg/fx.execute-plan (second %)) fxs))) (.toBe 1))
+  (-> (expect (plan-step-count plan :library-script)) (.toBe library-count))
+  (-> (expect (plan-step-count plan :vendor-file)) (.toBe 0))
+  (-> (expect (plan-step-count plan :root-script)) (.toBe 0))
+  (-> (expect (:uf/dxs result)) (.toBeFalsy)))
+
+(defn- assert-vendor-library-plan! [fxs plan result]
+  (-> (expect (count (filter #(= :msg/fx.execute-plan (second %)) fxs))) (.toBe 1))
+  (-> (expect (plan-step-count plan :vendor-file)) (.toBeGreaterThanOrEqual 1))
+  (-> (expect (plan-step-count plan :library-script)) (.toBe 1))
+  (-> (expect (plan-step-count plan :root-script)) (.toBe 0))
+  (-> (expect (:uf/dxs result)) (.toBeFalsy)))
+
 (defn- test-inject-libs-resolves-epupp-library-script []
   (let [all-scripts [library-script-plain]
         result (bg-actions/handle-action initial-state uf-data
-                 [:msg/ax.inject-libs :mock-send 42 ["epupp://helpers.cljs"] all-scripts])
+                                         [:msg/ax.inject-libs :mock-send 42 ["epupp://helpers.cljs"] all-scripts])
         fxs (:uf/fxs result)
         plan (effect-plan fxs)]
-    (-> (expect (count (filter #(= :msg/fx.execute-plan (second %)) fxs))) (.toBe 1))
-    (-> (expect (plan-step-count plan :library-script)) (.toBe 1))
-    (-> (expect (plan-step-count plan :vendor-file)) (.toBe 0))
-    (-> (expect (plan-step-count plan :root-script)) (.toBe 0))
-    (-> (expect (:uf/dxs result)) (.toBeFalsy))))
+    (assert-library-only-plan! fxs plan result 1)))
 
 (defn- test-inject-libs-resolves-epupp-with-vendor-deps []
   (let [all-scripts [library-script-with-vendor]
         result (bg-actions/handle-action initial-state uf-data
-                 [:msg/ax.inject-libs :mock-send 42 ["epupp://utils.cljs"] all-scripts])
+                                         [:msg/ax.inject-libs :mock-send 42 ["epupp://utils.cljs"] all-scripts])
         fxs (:uf/fxs result)
         plan (effect-plan fxs)]
-    (-> (expect (count (filter #(= :msg/fx.execute-plan (second %)) fxs))) (.toBe 1))
-    (-> (expect (plan-step-count plan :vendor-file)) (.toBeGreaterThanOrEqual 1))
-    (-> (expect (plan-step-count plan :library-script)) (.toBe 1))
-    (-> (expect (plan-step-count plan :root-script)) (.toBe 0))
-    (-> (expect (:uf/dxs result)) (.toBeFalsy))))
+    (assert-vendor-library-plan! fxs plan result)))
 
 (defn- test-inject-libs-epupp-missing-library-produces-errors []
   (let [result (bg-actions/handle-action initial-state uf-data
-                 [:msg/ax.inject-libs :mock-send 42 ["epupp://nonexistent.cljs"] []])
+                                         [:msg/ax.inject-libs :mock-send 42 ["epupp://nonexistent.cljs"] []])
         dxs (:uf/dxs result)
         fxs (:uf/fxs result)
         response (response-payload fxs)]
-    (-> (expect (seq dxs)) (.toBeTruthy))
-    (-> (expect (first (first dxs))) (.toBe :banner/ax.broadcast-resolution-errors))
-    (-> (expect (execute-plan-effect fxs)) (.toBeFalsy))
-    (-> (expect (:success response)) (.toBe false))))
+    (assert-resolution-error-response! fxs dxs response)))
 
 (defn- test-inject-libs-mixed-scittle-and-epupp []
   (let [all-scripts [library-script-plain]
         result (bg-actions/handle-action initial-state uf-data
-                 [:msg/ax.inject-libs :mock-send 42
-                  ["scittle://pprint.js" "epupp://helpers.cljs"] all-scripts])
+                                         [:msg/ax.inject-libs :mock-send 42
+                                          ["scittle://pprint.js" "epupp://helpers.cljs"] all-scripts])
         fxs (:uf/fxs result)
         plan (effect-plan fxs)]
-    (-> (expect (count (filter #(= :msg/fx.execute-plan (second %)) fxs))) (.toBe 1))
-    (-> (expect (plan-step-count plan :vendor-file)) (.toBeGreaterThanOrEqual 1))
-    (-> (expect (plan-step-count plan :library-script)) (.toBe 1))
-    (-> (expect (plan-step-count plan :root-script)) (.toBe 0))
-    (-> (expect (:uf/dxs result)) (.toBeFalsy))))
+    (assert-vendor-library-plan! fxs plan result)))
 
 (describe "inject-libs resolver integration"
           (fn []
@@ -303,40 +308,29 @@
   (let [manifest #js {"inject" #js ["epupp://helpers.cljs"]}
         all-scripts [library-script-plain]
         result (bg-actions/handle-action initial-state uf-data
-                 [:msg/ax.load-manifest :mock-send 42 manifest all-scripts])
+                                         [:msg/ax.load-manifest :mock-send 42 manifest all-scripts])
         fxs (:uf/fxs result)
         plan (effect-plan fxs)]
-    (-> (expect (count (filter #(= :msg/fx.execute-plan (second %)) fxs))) (.toBe 1))
-    (-> (expect (plan-step-count plan :library-script)) (.toBe 1))
-    (-> (expect (plan-step-count plan :vendor-file)) (.toBe 0))
-    (-> (expect (plan-step-count plan :root-script)) (.toBe 0))
-    (-> (expect (first (last fxs))) (.toBe :msg/fx.send-response))
-    (-> (expect (:uf/dxs result)) (.toBeFalsy))))
+    (assert-library-only-plan! fxs plan result 1)
+    (-> (expect (first (last fxs))) (.toBe :msg/fx.send-response))))
 
 (defn- test-load-manifest-epupp-missing-library-produces-errors []
   (let [manifest #js {"inject" #js ["epupp://missing.cljs"]}
         result (bg-actions/handle-action initial-state uf-data
-                 [:msg/ax.load-manifest :mock-send 42 manifest []])
+                                         [:msg/ax.load-manifest :mock-send 42 manifest []])
         dxs (:uf/dxs result)
         fxs (:uf/fxs result)
         response (response-payload fxs)]
-    (-> (expect (seq dxs)) (.toBeTruthy))
-    (-> (expect (first (first dxs))) (.toBe :banner/ax.broadcast-resolution-errors))
-    (-> (expect (execute-plan-effect fxs)) (.toBeFalsy))
-    (-> (expect (:success response)) (.toBe false))))
+    (assert-resolution-error-response! fxs dxs response)))
 
 (defn- test-load-manifest-transitive-epupp-deps []
   (let [manifest #js {"inject" #js ["epupp://advanced.cljs"]}
         all-scripts [library-script-plain library-script-transitive]
         result (bg-actions/handle-action initial-state uf-data
-                 [:msg/ax.load-manifest :mock-send 42 manifest all-scripts])
+                                         [:msg/ax.load-manifest :mock-send 42 manifest all-scripts])
         fxs (:uf/fxs result)
         plan (effect-plan fxs)]
-    (-> (expect (count (filter #(= :msg/fx.execute-plan (second %)) fxs))) (.toBe 1))
-    (-> (expect (plan-step-count plan :library-script)) (.toBe 2))
-    (-> (expect (plan-step-count plan :vendor-file)) (.toBe 0))
-    (-> (expect (plan-step-count plan :root-script)) (.toBe 0))
-    (-> (expect (:uf/dxs result)) (.toBeFalsy))))
+    (assert-library-only-plan! fxs plan result 2)))
 
 (describe "load-manifest resolver integration"
           (fn []

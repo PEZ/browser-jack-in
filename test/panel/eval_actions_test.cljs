@@ -36,45 +36,39 @@
     (-> (expect result)
         (.toBeNull))))
 
-(defn- test_eval_with_loaded_scittle_triggers_direct_eval []
+(defn- eval-action-result [scittle-status]
   (let [state (-> initial-state
                   (assoc :panel/code "(+ 1 2)")
-                  (assoc :panel/scittle-status :loaded))
-        result (panel-actions/handle-action state uf-data [:editor/ax.eval])
+                  (assoc :panel/scittle-status scittle-status))]
+    (panel-actions/handle-action state uf-data [:editor/ax.eval])))
+
+(defn- test_eval_with_loaded_scittle_triggers_direct_eval []
+  (let [result (eval-action-result :loaded)
         new-state (:uf/db result)]
-    (-> (expect (:panel/evaluating? new-state))
-        (.toBe true))
-    (-> (expect (count (:panel/results new-state)))
-        (.toBe 1))
-    ;; Should trigger fx.eval-in-page
-    (-> (expect (first (first (:uf/fxs result))))
-        (.toBe :editor/fx.eval-in-page))))
+    (-> (expect (:panel/evaluating? new-state)) (.toBe true))
+    (-> (expect (count (:panel/results new-state))) (.toBe 1))
+    (-> (expect (first (first (:uf/fxs result)))) (.toBe :editor/fx.eval-in-page))))
 
 (defn- test_eval_without_scittle_triggers_inject_and_eval []
-  (let [state (-> initial-state
-                  (assoc :panel/code "(+ 1 2)")
-                  (assoc :panel/scittle-status :unknown))
-        result (panel-actions/handle-action state uf-data [:editor/ax.eval])
+  (let [result (eval-action-result :unknown)
         new-state (:uf/db result)]
-    (-> (expect (:panel/evaluating? new-state))
-        (.toBe true))
-    (-> (expect (:panel/scittle-status new-state))
-        (.toBe :loading))
-    ;; Should trigger fx.inject-and-eval
-    (-> (expect (first (first (:uf/fxs result))))
-        (.toBe :editor/fx.inject-and-eval))))
+    (-> (expect (:panel/evaluating? new-state)) (.toBe true))
+    (-> (expect (:panel/scittle-status new-state)) (.toBe :loading))
+    (-> (expect (first (first (:uf/fxs result)))) (.toBe :editor/fx.inject-and-eval))))
 
-(defn- test_eval_without_scittle_passes_inject_libs []
+(defn- assert-inject-libs-passed [action scittle-status expected-effect-name]
   (let [state (-> initial-state
                   (assoc :panel/code "(+ 1 2)")
-                  (assoc :panel/scittle-status :unknown)
+                  (assoc :panel/scittle-status scittle-status)
                   (assoc :panel/manifest-hints {:inject ["scittle://reagent.js"]}))
-        result (panel-actions/handle-action state uf-data [:editor/ax.eval])
-        [effect-name _effect-code effect-libs] (first (:uf/fxs result))]
+        [effect-name _effect-code effect-libs] (first (:uf/fxs (panel-actions/handle-action state uf-data [action])))]
     (-> (expect effect-name)
-        (.toBe :editor/fx.inject-and-eval))
+        (.toBe expected-effect-name))
     (-> (expect effect-libs)
         (.toEqual ["scittle://reagent.js"]))))
+
+(defn- test_eval_without_scittle_passes_inject_libs []
+  (assert-inject-libs-passed :editor/ax.eval :unknown :editor/fx.inject-and-eval))
 
 (describe "panel eval action"
           (fn []
@@ -177,16 +171,7 @@
         (.toBe :loading))))
 
 (defn- test_eval_selection_with_loaded_scittle_passes_inject_libs []
-  (let [state (-> initial-state
-                  (assoc :panel/code "(+ 1 2)")
-                  (assoc :panel/scittle-status :loaded)
-                  (assoc :panel/manifest-hints {:inject ["scittle://reagent.js"]}))
-        result (panel-actions/handle-action state uf-data [:editor/ax.eval-selection])
-        [effect-name _effect-code effect-libs] (first (:uf/fxs result))]
-    (-> (expect effect-name)
-        (.toBe :editor/fx.eval-in-page))
-    (-> (expect effect-libs)
-        (.toEqual ["scittle://reagent.js"]))))
+  (assert-inject-libs-passed :editor/ax.eval-selection :loaded :editor/fx.eval-in-page))
 
 (describe "panel selection actions"
           (fn []
@@ -204,33 +189,21 @@
 ;; Panel eval inject threading baseline tests
 ;; ============================================================
 
-(defn- test-panel-eval-loaded-passes-inject-to-eval-effect []
+(defn- assert-inject-threading [scittle-status inject-libs expected-effect-name]
   (let [state (assoc initial-state
                      :panel/code "(+ 1 2)"
-                     :panel/scittle-status :loaded
-                     :panel/manifest-hints {:inject ["scittle://reagent.js" "epupp://utils.cljs"]})
-        result (panel-actions/handle-action state uf-data [:editor/ax.eval])
-        fxs (:uf/fxs result)
-        eval-effect (first fxs)]
-    ;; Effect should be eval-in-page with code and inject libs
-    (-> (expect (first eval-effect)) (.toBe :editor/fx.eval-in-page))
+                     :panel/scittle-status scittle-status
+                     :panel/manifest-hints {:inject inject-libs})
+        eval-effect (first (:uf/fxs (panel-actions/handle-action state uf-data [:editor/ax.eval])))]
+    (-> (expect (first eval-effect)) (.toBe expected-effect-name))
     (-> (expect (second eval-effect)) (.toBe "(+ 1 2)"))
-    (-> (expect (nth eval-effect 2))
-        (.toEqual ["scittle://reagent.js" "epupp://utils.cljs"]))))
+    (-> (expect (nth eval-effect 2)) (.toEqual inject-libs))))
+
+(defn- test-panel-eval-loaded-passes-inject-to-eval-effect []
+  (assert-inject-threading :loaded ["scittle://reagent.js" "epupp://utils.cljs"] :editor/fx.eval-in-page))
 
 (defn- test-panel-eval-not-loaded-passes-inject-to-inject-and-eval-effect []
-  (let [state (assoc initial-state
-                     :panel/code "(+ 1 2)"
-                     :panel/scittle-status :unknown
-                     :panel/manifest-hints {:inject ["scittle://pprint.js"]})
-        result (panel-actions/handle-action state uf-data [:editor/ax.eval])
-        fxs (:uf/fxs result)
-        eval-effect (first fxs)]
-    ;; Should inject-and-eval when scittle not loaded
-    (-> (expect (first eval-effect)) (.toBe :editor/fx.inject-and-eval))
-    (-> (expect (second eval-effect)) (.toBe "(+ 1 2)"))
-    (-> (expect (nth eval-effect 2))
-        (.toEqual ["scittle://pprint.js"]))))
+  (assert-inject-threading :unknown ["scittle://pprint.js"] :editor/fx.inject-and-eval))
 
 (defn- test-panel-eval-nil-inject-passes-nil []
   (let [state (assoc initial-state

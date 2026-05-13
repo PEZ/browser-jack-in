@@ -14,6 +14,21 @@
 ;; System Banner Multi-Message Tests
 ;; ============================================================
 
+(defn- show-system-banner
+  ([state type msg opts]
+   (popup-actions/handle-action state uf-data
+                                [:banner/ax.show-system-banner type msg opts]))
+  ([state type msg opts category]
+   (popup-actions/handle-action state uf-data
+                                [:banner/ax.show-system-banner type msg opts category])))
+
+(defn- handle-banner-event [state event-map]
+  (popup-actions/handle-action state uf-data
+                               [:banner/ax.handle-system-banner event-map]))
+
+(defn- find-dx [dxs action-name]
+  (some #(when (= action-name (first %)) %) dxs))
+
 (defn- test-show-system-banner-appends-to-empty-list []
   (let [state {:ui/system-banners []}
         result (popup-actions/handle-action state uf-data
@@ -40,8 +55,7 @@
 (defn- test-show-system-banner-appends-to-existing-list []
   (let [existing-banner {:id "msg-1" :type "info" :message "Processing..."}
         state {:ui/system-banners [existing-banner]}
-        result (popup-actions/handle-action state uf-data
-                                            [:banner/ax.show-system-banner "success" "Done!" {}])
+        result (show-system-banner state "success" "Done!" {})
         banners (:ui/system-banners (:uf/db result))]
     ;; Should have two banners
     (-> (expect (count banners))
@@ -124,8 +138,7 @@
 (defn- test-show-system-banner-with-category-replaces-existing []
   (let [existing-banner {:id "msg-1" :type "info" :message "Connecting..." :category "connection"}
         state {:ui/system-banners [existing-banner]}
-        result (popup-actions/handle-action state uf-data
-                                            [:banner/ax.show-system-banner "success" "Connected!" {} "connection"])
+        result (show-system-banner state "success" "Connected!" {} "connection")
         banners (:ui/system-banners (:uf/db result))]
     ;; Should still have one banner (replaced, not appended)
     (-> (expect (count banners))
@@ -188,14 +201,12 @@
 
 (defn- test-handle-system-banner-error []
   (let [state {:ui/system-bulk-names {}}
-        result (popup-actions/handle-action state uf-data
-                                            [:banner/ax.handle-system-banner
-                                             {:event-type "error"
-                                              :operation "save"
-                                              :script-name "test.cljs"
-                                              :error "Permission denied"}])
+        result (handle-banner-event state {:event-type "error"
+                                           :operation "save"
+                                           :script-name "test.cljs"
+                                           :error "Permission denied"})
         dxs (:uf/dxs result)
-        show-banner-dx (some #(when (= :banner/ax.show-system-banner (first %)) %) dxs)]
+        show-banner-dx (find-dx dxs :banner/ax.show-system-banner)]
     ;; Should dispatch show-system-banner with error
     (-> (expect (second show-banner-dx)) (.toBe "error"))
     (-> (expect (nth show-banner-dx 2)) (.toBe "FS sync error: Permission denied"))))
@@ -203,14 +214,12 @@
 (defn- test-handle-system-banner-error-save-marks-modified []
   (let [state {:ui/system-bulk-names {}
                :ui/recently-modified-scripts #{}}
-        result (popup-actions/handle-action state uf-data
-                                            [:banner/ax.handle-system-banner
-                                             {:event-type "error"
-                                              :operation "save"
-                                              :script-name "test.cljs"
-                                              :error "Failed"}])
+        result (handle-banner-event state {:event-type "error"
+                                           :operation "save"
+                                           :script-name "test.cljs"
+                                           :error "Failed"})
         dxs (:uf/dxs result)
-        mark-dx (some #(when (= :ui/ax.mark-scripts-modified (first %)) %) dxs)]
+        mark-dx (find-dx dxs :ui/ax.mark-scripts-modified)]
     ;; Should dispatch mark-scripts-modified for error saves
     (-> (expect mark-dx) (.toBeTruthy))
     (-> (expect (second mark-dx)) (.toEqual ["test.cljs"]))))
@@ -218,44 +227,43 @@
 (defn- test-handle-system-banner-unchanged-marks-modified []
   (let [state {:ui/system-bulk-names {}
                :ui/recently-modified-scripts #{}}
-        result (popup-actions/handle-action state uf-data
-                                            [:banner/ax.handle-system-banner
-                                             {:event-type "success"
-                                              :operation "save"
-                                              :script-name "test.cljs"
-                                              :unchanged true}])
+        result (handle-banner-event state {:event-type "success"
+                                           :operation "save"
+                                           :script-name "test.cljs"
+                                           :unchanged true})
         dxs (:uf/dxs result)
-        mark-dx (some #(when (= :ui/ax.mark-scripts-modified (first %)) %) dxs)]
+        mark-dx (find-dx dxs :ui/ax.mark-scripts-modified)]
     ;; Should dispatch mark-scripts-modified for unchanged saves
     (-> (expect mark-dx) (.toBeTruthy))))
 
+(defn- bulk-intermediate-result []
+  (handle-banner-event {:ui/system-bulk-names {}}
+                       {:event-type "success"
+                        :operation "save"
+                        :script-name "a.cljs"
+                        :bulk-id "bulk-1"
+                        :bulk-count 3
+                        :bulk-index 0}))
+
+(defn- bulk-final-result []
+  (handle-banner-event {:ui/system-bulk-names {"bulk-1" ["a.cljs" "b.cljs"]}}
+                       {:event-type "success"
+                        :operation "save"
+                        :script-name "c.cljs"
+                        :bulk-id "bulk-1"
+                        :bulk-count 3
+                        :bulk-index 2}))
+
 (defn- test-handle-system-banner-bulk-tracks-name []
-  (let [state {:ui/system-bulk-names {}}
-        result (popup-actions/handle-action state uf-data
-                                            [:banner/ax.handle-system-banner
-                                             {:event-type "success"
-                                              :operation "save"
-                                              :script-name "a.cljs"
-                                              :bulk-id "bulk-1"
-                                              :bulk-count 3
-                                              :bulk-index 0}])
-        new-state (:uf/db result)]
+  (let [new-state (:uf/db (bulk-intermediate-result))]
     ;; Should track bulk name in state
     (-> (expect (get-in new-state [:ui/system-bulk-names "bulk-1"]))
         (.toEqual ["a.cljs"]))))
 
 (defn- test-handle-system-banner-bulk-final-shows-summary []
-  (let [state {:ui/system-bulk-names {"bulk-1" ["a.cljs" "b.cljs"]}}
-        result (popup-actions/handle-action state uf-data
-                                            [:banner/ax.handle-system-banner
-                                             {:event-type "success"
-                                              :operation "save"
-                                              :script-name "c.cljs"
-                                              :bulk-id "bulk-1"
-                                              :bulk-count 3
-                                              :bulk-index 2}])
+  (let [result (bulk-final-result)
         dxs (:uf/dxs result)
-        show-banner-dx (some #(when (= :banner/ax.show-system-banner (first %)) %) dxs)
+        show-banner-dx (find-dx dxs :banner/ax.show-system-banner)
         bulk-info (nth show-banner-dx 3)]
     ;; Should show summary banner
     (-> (expect (nth show-banner-dx 2)) (.toBe "3 files saved"))
@@ -263,48 +271,28 @@
     (-> (expect (:bulk-names bulk-info)) (.toEqual ["a.cljs" "b.cljs" "c.cljs"]))))
 
 (defn- test-handle-system-banner-bulk-final-clears-names []
-  (let [state {:ui/system-bulk-names {"bulk-1" ["a.cljs" "b.cljs"]}}
-        result (popup-actions/handle-action state uf-data
-                                            [:banner/ax.handle-system-banner
-                                             {:event-type "success"
-                                              :operation "save"
-                                              :script-name "c.cljs"
-                                              :bulk-id "bulk-1"
-                                              :bulk-count 3
-                                              :bulk-index 2}])
-        new-state (:uf/db result)]
+  (let [new-state (:uf/db (bulk-final-result))]
     ;; Should clear bulk names after final
     (-> (expect (get-in new-state [:ui/system-bulk-names "bulk-1"]))
         (.toBeUndefined))))
 
 (defn- test-handle-system-banner-bulk-intermediate-no-banner []
-  (let [state {:ui/system-bulk-names {}}
-        result (popup-actions/handle-action state uf-data
-                                            [:banner/ax.handle-system-banner
-                                             {:event-type "success"
-                                              :operation "save"
-                                              :script-name "a.cljs"
-                                              :bulk-id "bulk-1"
-                                              :bulk-count 3
-                                              :bulk-index 0}])
-        dxs (:uf/dxs result)
-        show-banner-dx (some #(when (= :banner/ax.show-system-banner (first %)) %) dxs)]
+  (let [dxs (:uf/dxs (bulk-intermediate-result))
+        show-banner-dx (find-dx dxs :banner/ax.show-system-banner)]
     ;; Intermediate bulk ops should not show banner
     (-> (expect show-banner-dx) (.toBeFalsy))))
 
 (defn- test-handle-system-banner-no-state-read []
   ;; Verify the action does NOT require @!state - it works with passed state parameter
   (let [state {:ui/system-bulk-names {"bulk-1" ["existing.cljs"]}}
-        result (popup-actions/handle-action state uf-data
-                                            [:banner/ax.handle-system-banner
-                                             {:event-type "success"
-                                              :operation "save"
-                                              :script-name "new.cljs"
-                                              :bulk-id "bulk-1"
-                                              :bulk-count 2
-                                              :bulk-index 1}])
+        result (handle-banner-event state {:event-type "success"
+                                           :operation "save"
+                                           :script-name "new.cljs"
+                                           :bulk-id "bulk-1"
+                                           :bulk-count 2
+                                           :bulk-index 1})
         dxs (:uf/dxs result)
-        show-banner-dx (some #(when (= :banner/ax.show-system-banner (first %)) %) dxs)
+        show-banner-dx (find-dx dxs :banner/ax.show-system-banner)
         bulk-info (nth show-banner-dx 3)]
     ;; Bulk names should include both existing and newly tracked
     (-> (expect (:bulk-names bulk-info)) (.toEqual ["existing.cljs" "new.cljs"]))))

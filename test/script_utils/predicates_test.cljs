@@ -69,20 +69,25 @@
 ;; Library section classification tests
 ;; ============================================================
 
-(defn- test-classify-library-only-no-match []
-  (let [script {:script/name "my_lib.cljs"
-                :script/library? true
-                :script/match []}
-        is-library-section? (and (script-utils/library-script? script)
+(defn- assert-section-classification [script expected-library? expected-manual?]
+  (let [is-library-section? (and (script-utils/library-script? script)
                                  (not (script-utils/special-script? script))
                                  (empty? (:script/match script)))
         is-manual-section? (and (not (script-utils/special-script? script))
                                 (not (script-utils/library-script? script))
                                 (empty? (:script/match script)))]
     (-> (expect is-library-section?)
-        (.toBe true))
+        (.toBe expected-library?))
     (-> (expect is-manual-section?)
-        (.toBe false))))
+        (.toBe expected-manual?))))
+
+(defn- test-classify-library-only-no-match []
+  (assert-section-classification
+   {:script/name "my_lib.cljs"
+    :script/library? true
+    :script/match []}
+   true
+   false))
 
 (defn- test-classify-library-with-match-goes-to-matching []
   (let [script {:script/name "lib_with_match.cljs"
@@ -98,18 +103,11 @@
         (.toBeTruthy))))
 
 (defn- test-classify-non-library-no-match-goes-to-manual []
-  (let [script {:script/name "manual.cljs"
-                :script/match []}
-        is-library-section? (and (script-utils/library-script? script)
-                                 (not (script-utils/special-script? script))
-                                 (empty? (:script/match script)))
-        is-manual-section? (and (not (script-utils/special-script? script))
-                                (not (script-utils/library-script? script))
-                                (empty? (:script/match script)))]
-    (-> (expect is-library-section?)
-        (.toBe false))
-    (-> (expect is-manual-section?)
-        (.toBe true))))
+  (assert-section-classification
+   {:script/name "manual.cljs"
+    :script/match []}
+   false
+   true))
 
 (describe "Library section classification"
   (fn []

@@ -44,46 +44,35 @@
     (-> (expect (count (:uf/fxs result)))
         (.toBe 0))))
 
+(defn- inc-handler [s _uf [action & _args]]
+  (case action
+    :inc {:uf/db (update s :count inc)}
+    :uf/unhandled-ax))
+
+(defn- run-batch [state handler actions]
+  (event-handler/handle-actions state {} handler actions))
+
 (defn- test-processes-single-action []
-  (let [state {:count 0}
-        handler (fn [s _uf [action & _args]]
-                  (case action
-                    :inc {:uf/db (update s :count inc)}
-                    :uf/unhandled-ax))
-        result (event-handler/handle-actions state {} handler [[:inc]])]
+  (let [result (run-batch {:count 0} inc-handler [[:inc]])]
     (-> (expect (get (:uf/db result) :count))
         (.toBe 1))))
 
 (defn- test-chains-multiple-actions-each-sees-updated-state []
-  (let [state {:count 0}
-        handler (fn [s _uf [action & _args]]
-                  (case action
-                    :inc {:uf/db (update s :count inc)}
-                    :uf/unhandled-ax))
-        result (event-handler/handle-actions
-                state {} handler [[:inc] [:inc] [:inc]])]
+  (let [result (run-batch {:count 0} inc-handler [[:inc] [:inc] [:inc]])]
     (-> (expect (get (:uf/db result) :count))
         (.toBe 3))))
 
 (defn- test-accumulates-effects-from-multiple-actions []
-  (let [state {}
-        handler (fn [s _uf [action & args]]
+  (let [handler (fn [s _uf [action & args]]
                   (case action
                     :emit {:uf/db s :uf/fxs [[:effect (first args)]]}
                     :uf/unhandled-ax))
-        result (event-handler/handle-actions
-                state {} handler [[:emit "a"] [:emit "b"]])]
+        result (run-batch {} handler [[:emit "a"] [:emit "b"]])]
     (-> (expect (count (:uf/fxs result)))
         (.toBe 2))))
 
 (defn- test-filters-nil-actions []
-  (let [state {:count 0}
-        handler (fn [s _uf [action & _args]]
-                  (case action
-                    :inc {:uf/db (update s :count inc)}
-                    :uf/unhandled-ax))
-        result (event-handler/handle-actions
-                state {} handler [nil [:inc] nil [:inc] nil])]
+  (let [result (run-batch {:count 0} inc-handler [nil [:inc] nil [:inc] nil])]
     (-> (expect (get (:uf/db result) :count))
         (.toBe 2))))
 
@@ -101,13 +90,11 @@
         (.toBe 2))))
 
 (defn- test-accumulates-uf-dxs-in-batch []
-  (let [state {}
-        handler (fn [s _uf [action & args]]
+  (let [handler (fn [s _uf [action & args]]
                   (case action
                     :set-dxs {:uf/db s :uf/dxs (first args)}
                     :uf/unhandled-ax))
-        result (event-handler/handle-actions
-                state {} handler [[:set-dxs [[:first]]] [:set-dxs [[:second]]]])]
+        result (run-batch {} handler [[:set-dxs [[:first]]] [:set-dxs [[:second]]]])]
     (-> (expect (:uf/dxs result))
         (.toEqual [[:first] [:second]]))))
 

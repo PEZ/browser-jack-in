@@ -14,17 +14,18 @@
 ;; Shadow List Sync Tests
 ;; ============================================================
 
+(defn- scripts-shadow-after-action [state action]
+  (:ui/scripts-shadow (:uf/db (popup-actions/handle-action state uf-data action))))
+
 (defn- test-sync-scripts-shadow-updates-content-without-entering-flag []
   (let [state {:scripts/list [{:script/id "test-1" :script/code "updated code"}]
                :ui/scripts-shadow [{:item {:script/id "test-1" :script/code "old code"}
                                     :ui/entering? false
                                     :ui/leaving? false}]}
-        result (popup-actions/handle-action
-                state uf-data
-                [:shadow-list/ax.sync-scripts-shadow
-                 {:added-items [] :removed-ids #{}}])
-        updated-shadow (:ui/scripts-shadow (:uf/db result))
-        shadow-item (first updated-shadow)]
+        shadow-item (first (scripts-shadow-after-action
+                            state
+                            [:shadow-list/ax.sync-scripts-shadow
+                             {:added-items [] :removed-ids #{}}]))]
     (-> (expect (get-in shadow-item [:item :script/code]))
         (.toBe "updated code"))
     (-> (expect (:ui/entering? shadow-item))
@@ -36,12 +37,10 @@
   (let [new-script {:script/id "new-1" :script/code "new code"}
         state {:scripts/list [new-script]
                :ui/scripts-shadow []}
-        result (popup-actions/handle-action
-                state uf-data
-                [:shadow-list/ax.sync-scripts-shadow
-                 {:added-items [new-script] :removed-ids #{}}])
-        updated-shadow (:ui/scripts-shadow (:uf/db result))
-        shadow-item (first updated-shadow)]
+        shadow-item (first (scripts-shadow-after-action
+                            state
+                            [:shadow-list/ax.sync-scripts-shadow
+                             {:added-items [new-script] :removed-ids #{}}]))]
     (-> (expect (get-in shadow-item [:item :script/id]))
         (.toBe "new-1"))
     (-> (expect (:ui/entering? shadow-item))
@@ -54,18 +53,20 @@
                :ui/scripts-shadow [{:item {:script/id "to-remove"}
                                     :ui/entering? false
                                     :ui/leaving? false}]}
-        result (popup-actions/handle-action
-                state uf-data
-                [:shadow-list/ax.sync-scripts-shadow
-                 {:added-items [] :removed-ids #{"to-remove"}}])
-        updated-shadow (:ui/scripts-shadow (:uf/db result))
-        shadow-item (first updated-shadow)]
+        shadow-item (first (scripts-shadow-after-action
+                            state
+                            [:shadow-list/ax.sync-scripts-shadow
+                             {:added-items [] :removed-ids #{"to-remove"}}]))]
     (-> (expect (:ui/leaving? shadow-item))
         (.toBe true))))
 
 ;; ============================================================
 ;; Shadow List Deferred Cleanup Tests
 ;; ============================================================
+
+(defn- find-deferred-dispatch-fx [result action-name]
+  (let [defer-fxs (filter #(= :uf/fx.defer-dispatch (first %)) (:uf/fxs result))]
+    (some #(when (= action-name (first (first (second %)))) %) defer-fxs)))
 
 (defn- test-sync-scripts-shadow-schedules-clear-entering []
   (let [new-script {:script/id "new-1" :script/code "new code"}
@@ -75,11 +76,7 @@
                 state uf-data
                 [:shadow-list/ax.sync-scripts-shadow
                  {:added-items [new-script] :removed-ids #{}}])
-        defer-fxs (filter #(= :uf/fx.defer-dispatch (first %)) (:uf/fxs result))
-        clear-entering-fx (some #(when (= :shadow-list/ax.clear-entering-scripts
-                                          (first (first (second %))))
-                                   %)
-                                defer-fxs)]
+        clear-entering-fx (find-deferred-dispatch-fx result :shadow-list/ax.clear-entering-scripts)]
     (-> (expect clear-entering-fx)
         (.toBeTruthy))
     (let [[_fx-name _actions delay] clear-entering-fx]
@@ -95,27 +92,22 @@
                 state uf-data
                 [:shadow-list/ax.sync-scripts-shadow
                  {:added-items [] :removed-ids #{"to-remove"}}])
-        defer-fxs (filter #(= :uf/fx.defer-dispatch (first %)) (:uf/fxs result))
-        remove-leaving-fx (some #(when (= :shadow-list/ax.remove-leaving-scripts
-                                          (first (first (second %))))
-                                   %)
-                                defer-fxs)]
+        remove-leaving-fx (find-deferred-dispatch-fx result :shadow-list/ax.remove-leaving-scripts)]
     (-> (expect remove-leaving-fx)
         (.toBeTruthy))
     (let [[_fx-name _actions delay] remove-leaving-fx]
       (-> (expect delay)
           (.toBe 250)))))
 
+(defn- make-shadow-item [id entering? leaving?]
+  {:item {:script/id id}
+   :ui/entering? entering?
+   :ui/leaving? leaving?})
+
 (defn- test-clear-entering-scripts-removes-flag []
-  (let [state {:ui/scripts-shadow [{:item {:script/id "new-1"}
-                                    :ui/entering? true
-                                    :ui/leaving? false}
-                                   {:item {:script/id "old-1"}
-                                    :ui/entering? false
-                                    :ui/leaving? false}]}
-        result (popup-actions/handle-action state uf-data
-                                            [:shadow-list/ax.clear-entering-scripts #{"new-1"}])
-        shadow (:ui/scripts-shadow (:uf/db result))
+  (let [state {:ui/scripts-shadow [(make-shadow-item "new-1" true false)
+                                   (make-shadow-item "old-1" false false)]}
+        shadow (scripts-shadow-after-action state [:shadow-list/ax.clear-entering-scripts #{"new-1"}])
         new-item (first shadow)
         old-item (second shadow)]
     (-> (expect (:ui/entering? new-item))
@@ -124,15 +116,9 @@
         (.toBe false))))
 
 (defn- test-remove-leaving-scripts-removes-items []
-  (let [state {:ui/scripts-shadow [{:item {:script/id "leaving-1"}
-                                    :ui/entering? false
-                                    :ui/leaving? true}
-                                   {:item {:script/id "staying-1"}
-                                    :ui/entering? false
-                                    :ui/leaving? false}]}
-        result (popup-actions/handle-action state uf-data
-                                            [:shadow-list/ax.remove-leaving-scripts #{"leaving-1"}])
-        shadow (:ui/scripts-shadow (:uf/db result))]
+  (let [state {:ui/scripts-shadow [(make-shadow-item "leaving-1" false true)
+                                   (make-shadow-item "staying-1" false false)]}
+        shadow (scripts-shadow-after-action state [:shadow-list/ax.remove-leaving-scripts #{"leaving-1"}])]
     (-> (expect (count shadow))
         (.toBe 1))
     (-> (expect (get-in shadow [0 :item :script/id]))

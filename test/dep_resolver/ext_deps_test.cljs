@@ -121,11 +121,9 @@
     (-> (expect (:error/type (first errors)))
         (.toBe :ext-dep/cache-miss))))
 
-(defn- test-ext-dep-transitive []
-  (let [cache {ext-url-a ext-cache-a
-               ext-url-b ext-cache-b-depends-on-a}
-        script {:script/id "id-trans" :script/name "trans.cljs" :script/code "(ns trans)"
-                :script/inject [ext-url-b] :script/enabled true}
+(defn- assert-ext-dep-ordering [cache inject-url expected-count ordered-urls]
+  (let [script {:script/id "id-test" :script/name "test.cljs" :script/code "(ns test)"
+                :script/inject [inject-url] :script/enabled true}
         all [script]
         plan (resolver/resolve-execution-plan [script] all cache)
         steps (:plan/steps plan)
@@ -133,32 +131,29 @@
     (-> (expect (count (:plan/errors plan)))
         (.toBe 0))
     (-> (expect (count ext-steps))
-        (.toBe 2))
-    (let [urls (mapv :step/url ext-steps)
-          a-idx (.indexOf urls ext-url-a)
-          b-idx (.indexOf urls ext-url-b)]
-      (-> (expect (< a-idx b-idx)) (.toBe true)))))
+        (.toBe expected-count))
+    (let [urls (mapv :step/url ext-steps)]
+      (doseq [i (range (dec (count ordered-urls)))]
+        (-> (expect (< (.indexOf urls (nth ordered-urls i))
+                       (.indexOf urls (nth ordered-urls (inc i)))))
+            (.toBe true))))))
+
+(defn- test-ext-dep-transitive []
+  (assert-ext-dep-ordering
+   {ext-url-a ext-cache-a
+    ext-url-b ext-cache-b-depends-on-a}
+   ext-url-b
+   2
+   [ext-url-a ext-url-b]))
 
 (defn- test-ext-dep-deep-transitive []
-  (let [cache {ext-url-a ext-cache-a
-               ext-url-b ext-cache-b-depends-on-a
-               ext-url-c ext-cache-c-depends-on-b}
-        script {:script/id "id-deep" :script/name "deep.cljs" :script/code "(ns deep)"
-                :script/inject [ext-url-c] :script/enabled true}
-        all [script]
-        plan (resolver/resolve-execution-plan [script] all cache)
-        steps (:plan/steps plan)
-        ext-steps (filterv #(= :ext-dep-script (:step/type %)) steps)]
-    (-> (expect (count (:plan/errors plan)))
-        (.toBe 0))
-    (-> (expect (count ext-steps))
-        (.toBe 3))
-    (let [urls (mapv :step/url ext-steps)
-          a-idx (.indexOf urls ext-url-a)
-          b-idx (.indexOf urls ext-url-b)
-          c-idx (.indexOf urls ext-url-c)]
-      (-> (expect (< a-idx b-idx)) (.toBe true))
-      (-> (expect (< b-idx c-idx)) (.toBe true)))))
+  (assert-ext-dep-ordering
+   {ext-url-a ext-cache-a
+    ext-url-b ext-cache-b-depends-on-a
+    ext-url-c ext-cache-c-depends-on-b}
+   ext-url-c
+   3
+   [ext-url-a ext-url-b ext-url-c]))
 
 (defn- test-ext-dep-mixed-graph []
   (let [cache {ext-url-a ext-cache-a}

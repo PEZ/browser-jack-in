@@ -7,51 +7,36 @@
 ;; diff-scripts tests
 ;; ============================================================
 
-(defn- test-diff-scripts-detects-added []
-  (let [old-scripts [{:script/name "existing.cljs" :script/code "(ns existing)"}]
-        new-scripts [{:script/name "existing.cljs" :script/code "(ns existing)"}
-                     {:script/name "new.cljs" :script/code "(ns new)"}]
-        diff (script-utils/diff-scripts old-scripts new-scripts)]
+(defn- assert-diff [old-scripts new-scripts expected]
+  (let [diff (script-utils/diff-scripts old-scripts new-scripts)]
     (-> (expect (:added diff))
-        (.toEqual ["new.cljs"]))
+        (.toEqual (:added expected)))
     (-> (expect (:modified diff))
-        (.toEqual []))
+        (.toEqual (:modified expected)))
     (-> (expect (:removed diff))
-        (.toEqual []))))
+        (.toEqual (:removed expected)))))
+
+(defn- test-diff-scripts-detects-added []
+  (assert-diff [{:script/name "existing.cljs" :script/code "(ns existing)"}]
+               [{:script/name "existing.cljs" :script/code "(ns existing)"}
+                {:script/name "new.cljs" :script/code "(ns new)"}]
+               {:added ["new.cljs"] :modified [] :removed []}))
 
 (defn- test-diff-scripts-detects-removed []
-  (let [old-scripts [{:script/name "existing.cljs" :script/code "(ns existing)"}
-                     {:script/name "removed.cljs" :script/code "(ns removed)"}]
-        new-scripts [{:script/name "existing.cljs" :script/code "(ns existing)"}]
-        diff (script-utils/diff-scripts old-scripts new-scripts)]
-    (-> (expect (:added diff))
-        (.toEqual []))
-    (-> (expect (:modified diff))
-        (.toEqual []))
-    (-> (expect (:removed diff))
-        (.toEqual ["removed.cljs"]))))
+  (assert-diff [{:script/name "existing.cljs" :script/code "(ns existing)"}
+                {:script/name "removed.cljs" :script/code "(ns removed)"}]
+               [{:script/name "existing.cljs" :script/code "(ns existing)"}]
+               {:added [] :modified [] :removed ["removed.cljs"]}))
 
 (defn- test-diff-scripts-detects-modified-code []
-  (let [old-scripts [{:script/name "changed.cljs" :script/code "(ns old)"}]
-        new-scripts [{:script/name "changed.cljs" :script/code "(ns new)"}]
-        diff (script-utils/diff-scripts old-scripts new-scripts)]
-    (-> (expect (:added diff))
-        (.toEqual []))
-    (-> (expect (:modified diff))
-        (.toEqual ["changed.cljs"]))
-    (-> (expect (:removed diff))
-        (.toEqual []))))
+  (assert-diff [{:script/name "changed.cljs" :script/code "(ns old)"}]
+               [{:script/name "changed.cljs" :script/code "(ns new)"}]
+               {:added [] :modified ["changed.cljs"] :removed []}))
 
 (defn- test-diff-scripts-no-changes []
-  (let [old-scripts [{:script/name "unchanged.cljs" :script/code "(ns unchanged)"}]
-        new-scripts [{:script/name "unchanged.cljs" :script/code "(ns unchanged)"}]
-        diff (script-utils/diff-scripts old-scripts new-scripts)]
-    (-> (expect (:added diff))
-        (.toEqual []))
-    (-> (expect (:modified diff))
-        (.toEqual []))
-    (-> (expect (:removed diff))
-        (.toEqual []))))
+  (assert-diff [{:script/name "unchanged.cljs" :script/code "(ns unchanged)"}]
+               [{:script/name "unchanged.cljs" :script/code "(ns unchanged)"}]
+               {:added [] :modified [] :removed []}))
 
 (defn- test-diff-scripts-multiple-changes []
   (let [old-scripts [{:script/name "a.cljs" :script/code "(ns a)"}

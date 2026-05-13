@@ -60,25 +60,20 @@
     (-> (expect (:panel/code (:uf/db result)))
         (.toBe ""))))
 
-(defn- test_handle_eval_result_adds_output_to_results []
+(defn- assert-eval-result [eval-data expected-type]
   (let [state-evaluating (assoc initial-state :panel/evaluating? true)
-        result (panel-actions/handle-action state-evaluating uf-data [:editor/ax.handle-eval-result {:result "42"}])
-        new-state (:uf/db result)]
-    (-> (expect (:panel/evaluating? new-state))
-        (.toBe false))
+        new-state (:uf/db (panel-actions/handle-action state-evaluating uf-data [:editor/ax.handle-eval-result eval-data]))]
+    (-> (expect (:panel/evaluating? new-state)) (.toBe false))
+    (-> (expect (:type (first (:panel/results new-state)))) (.toBe expected-type))
+    new-state))
+
+(defn- test_handle_eval_result_adds_output_to_results []
+  (let [new-state (assert-eval-result {:result "42"} :output)]
     (-> (expect (count (:panel/results new-state)))
-        (.toBe 1))
-    (-> (expect (:type (first (:panel/results new-state))))
-        (.toBe :output))))
+        (.toBe 1))))
 
 (defn- test_handle_eval_result_adds_error_to_results []
-  (let [state-evaluating (assoc initial-state :panel/evaluating? true)
-        result (panel-actions/handle-action state-evaluating uf-data [:editor/ax.handle-eval-result {:error "oops"}])
-        new-state (:uf/db result)]
-    (-> (expect (:panel/evaluating? new-state))
-        (.toBe false))
-    (-> (expect (:type (first (:panel/results new-state))))
-        (.toBe :error))))
+  (assert-eval-result {:error "oops"} :error))
 
 (defn- test_load_script_for_editing_populates_all_fields []
   (let [result (panel-actions/handle-action initial-state uf-data

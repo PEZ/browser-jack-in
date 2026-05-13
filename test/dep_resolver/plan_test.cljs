@@ -179,31 +179,24 @@
     (-> (expect (:step/type (first b-steps)))
         (.toBe :library-script))))
 
-(defn- test-disabled-script-as-library []
-  (let [all [script-uses-disabled script-disabled-lib]
-        plan (resolver/resolve-execution-plan [script-uses-disabled] all)
+(defn- assert-library-script-plan [uses-script lib-script expected-first-name]
+  (let [all [uses-script lib-script]
+        plan (resolver/resolve-execution-plan [uses-script] all)
         steps (:plan/steps plan)]
     (-> (expect (count (:plan/errors plan)))
         (.toBe 0))
     (-> (expect (count steps))
         (.toBe 2))
     (-> (expect (:step/name (first steps)))
-        (.toBe "disabled_lib.cljs"))
+        (.toBe expected-first-name))
     (-> (expect (:step/type (first steps)))
         (.toBe :library-script))))
 
+(defn- test-disabled-script-as-library []
+  (assert-library-script-plan script-uses-disabled script-disabled-lib "disabled_lib.cljs"))
+
 (defn- test-builtin-script-as-library []
-  (let [all [script-uses-builtin script-builtin]
-        plan (resolver/resolve-execution-plan [script-uses-builtin] all)
-        steps (:plan/steps plan)]
-    (-> (expect (count (:plan/errors plan)))
-        (.toBe 0))
-    (-> (expect (count steps))
-        (.toBe 2))
-    (-> (expect (:step/name (first steps)))
-        (.toBe "epupp/sponsor.cljs"))
-    (-> (expect (:step/type (first steps)))
-        (.toBe :library-script))))
+  (assert-library-script-plan script-uses-builtin script-builtin "epupp/sponsor.cljs"))
 
 (defn- test-unknown-protocol-ignored []
   (let [script-with-unknown {:script/id "id-unk" :script/name "unk.cljs"

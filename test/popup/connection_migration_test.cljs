@@ -55,18 +55,18 @@
     (-> (expect (second marker-fx))
         (.toBe "epupp_migration_ports_normalized_v1"))))
 
-(defn- test-migration-preserves-explicit-overrides []
-  ;; ports_custom.com has different ports => keep
-  (let [defaults {:nrepl "1339" :ws "1340"}
-        storage-data {"ports_custom.com" {:nrepl "9999" :ws "9998"}}
-        migration-data {:defaults defaults :port-entries storage-data}
-        result (popup-actions/handle-action initial-state uf-data
-                 [:connection/ax.apply-port-migration migration-data])
+(defn- assert-no-keys-removed [storage-data]
+  (let [result (popup-actions/handle-action initial-state uf-data
+                                            [:connection/ax.apply-port-migration
+                                             {:defaults {:nrepl "1339" :ws "1340"} :port-entries storage-data}])
         fxs (:uf/fxs result)
         remove-fx (first (filter #(= :popup/fx.remove-storage-keys (first %)) fxs))]
-    ;; No keys to remove
     (-> (expect (second remove-fx))
         (.toEqual []))))
+
+(defn- test-migration-preserves-explicit-overrides []
+  ;; ports_custom.com has different ports => keep
+  (assert-no-keys-removed {"ports_custom.com" {:nrepl "9999" :ws "9998"}}))
 
 (defn- test-migration-mixed-redundant-and-overrides []
   ;; Mix of redundant and explicit overrides
@@ -83,12 +83,13 @@
     (-> (expect (set (second remove-fx)))
         (.toEqual (set ["ports_default.com" "ports_also-default.com"])))))
 
+(defn- apply-empty-migration-fxs []
+  (:uf/fxs (popup-actions/handle-action initial-state uf-data
+                                        [:connection/ax.apply-port-migration
+                                         {:defaults {:nrepl "1339" :ws "1340"} :port-entries {}}])))
+
 (defn- test-migration-sets-marker-key []
-  (let [defaults {:nrepl "1339" :ws "1340"}
-        migration-data {:defaults defaults :port-entries {}}
-        result (popup-actions/handle-action initial-state uf-data
-                 [:connection/ax.apply-port-migration migration-data])
-        fxs (:uf/fxs result)
+  (let [fxs (apply-empty-migration-fxs)
         marker-fx (first (filter #(= :popup/fx.set-storage-key (first %)) fxs))]
     (-> (expect (second marker-fx))
         (.toBe "epupp_migration_ports_normalized_v1"))
@@ -96,27 +97,14 @@
         (.toBe true))))
 
 (defn- test-migration-handles-empty-storage []
-  (let [defaults {:nrepl "1339" :ws "1340"}
-        migration-data {:defaults defaults :port-entries {}}
-        result (popup-actions/handle-action initial-state uf-data
-                 [:connection/ax.apply-port-migration migration-data])
-        fxs (:uf/fxs result)
+  (let [fxs (apply-empty-migration-fxs)
         remove-fx (first (filter #(= :popup/fx.remove-storage-keys (first %)) fxs))]
     (-> (expect (second remove-fx))
         (.toEqual []))))
 
 (defn- test-migration-partial-override-kept []
   ;; One port matches default, other is overridden => keep (has real override)
-  (let [defaults {:nrepl "1339" :ws "1340"}
-        storage-data {"ports_partial.com" {:nrepl "1339" :ws "9999"}}
-        migration-data {:defaults defaults :port-entries storage-data}
-        result (popup-actions/handle-action initial-state uf-data
-                 [:connection/ax.apply-port-migration migration-data])
-        fxs (:uf/fxs result)
-        remove-fx (first (filter #(= :popup/fx.remove-storage-keys (first %)) fxs))]
-    ;; Should NOT remove - ws port is overridden
-    (-> (expect (second remove-fx))
-        (.toEqual []))))
+  (assert-no-keys-removed {"ports_partial.com" {:nrepl "1339" :ws "9999"}}))
 
 (describe "port migration cleanup"
           (fn []

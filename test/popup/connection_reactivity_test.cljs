@@ -50,35 +50,25 @@
     (-> (expect (:ports/nrepl db)) (.toBe "5555"))
     (-> (expect (:ports/ws db)) (.toBe "5556"))))
 
+(defn- assert-on-default-changed-with-override [initial-ws domain-ports expected-ws]
+  (let [state (assoc initial-state :ports/nrepl "7777" :ports/ws initial-ws)
+        db (:uf/db (popup-actions/handle-action state uf-data
+                                                [:connection/ax.on-default-ports-changed {:nrepl "5555" :ws "5556"}
+                                                 domain-ports]))]
+    (-> (expect (:settings/default-nrepl-port db)) (.toBe "5555"))
+    (-> (expect (:settings/default-ws-port db)) (.toBe "5556"))
+    (-> (expect (:ports/nrepl db)) (.toBe "7777"))
+    (-> (expect (:ports/ws db)) (.toBe expected-ws))))
+
 (defn- test-default-change-preserves-explicit-override []
   ;; Domain has explicit override "7777"/"7778"
   ;; When defaults change, effective ports should keep the override
-  (let [state (assoc initial-state :ports/nrepl "7777" :ports/ws "7778")
-        result (popup-actions/handle-action state uf-data
-                 [:connection/ax.on-default-ports-changed {:nrepl "5555" :ws "5556"}
-                  {:nrepl "7777" :ws "7778"}])
-        db (:uf/db result)]
-    ;; Settings update to new defaults
-    (-> (expect (:settings/default-nrepl-port db)) (.toBe "5555"))
-    (-> (expect (:settings/default-ws-port db)) (.toBe "5556"))
-    ;; Effective ports keep explicit override
-    (-> (expect (:ports/nrepl db)) (.toBe "7777"))
-    (-> (expect (:ports/ws db)) (.toBe "7778"))))
+  (assert-on-default-changed-with-override "7778" {:nrepl "7777" :ws "7778"} "7778"))
 
 (defn- test-default-change-partial-override-keeps-override-cascades-default []
   ;; Domain has override only for nrepl "7777", ws inherits
   ;; When defaults change to "5555"/"5556", nrepl keeps "7777" but ws cascades to "5556"
-  (let [state (assoc initial-state :ports/nrepl "7777" :ports/ws "3340")
-        result (popup-actions/handle-action state uf-data
-                 [:connection/ax.on-default-ports-changed {:nrepl "5555" :ws "5556"}
-                  {:nrepl "7777"}])
-        db (:uf/db result)]
-    ;; Settings update to new defaults
-    (-> (expect (:settings/default-nrepl-port db)) (.toBe "5555"))
-    (-> (expect (:settings/default-ws-port db)) (.toBe "5556"))
-    ;; nrepl keeps explicit override, ws cascades to new default
-    (-> (expect (:ports/nrepl db)) (.toBe "7777"))
-    (-> (expect (:ports/ws db)) (.toBe "5556"))))
+  (assert-on-default-changed-with-override "3340" {:nrepl "7777"} "5556"))
 
 (defn- test-default-change-no-op-when-unchanged []
   ;; Defaults "change" to the same values they already are

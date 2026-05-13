@@ -37,9 +37,11 @@
 ;; normalize-domain-ports tests
 ;; ============================================================
 
+(defn- normalize-with-test-defaults [domain-ports]
+  (popup-actions/normalize-domain-ports {:nrepl "1339" :ws "1340"} domain-ports))
+
 (defn- test-normalize-no-domain-entry []
-  (let [defaults {:nrepl "1339" :ws "1340"}
-        result (popup-actions/normalize-domain-ports defaults nil)]
+  (let [result (normalize-with-test-defaults nil)]
     (-> (expect (:nrepl (:effective-ports result))) (.toBe "1339"))
     (-> (expect (:ws (:effective-ports result))) (.toBe "1340"))
     (-> (expect (:persist? result)) (.toBe false))
@@ -48,9 +50,7 @@
     (-> (expect (:ws (:source result))) (.toBe :default))))
 
 (defn- test-normalize-domain-differs-from-defaults []
-  (let [defaults {:nrepl "1339" :ws "1340"}
-        domain-ports {:nrepl "5678" :ws "5679"}
-        result (popup-actions/normalize-domain-ports defaults domain-ports)]
+  (let [result (normalize-with-test-defaults {:nrepl "5678" :ws "5679"})]
     (-> (expect (:nrepl (:effective-ports result))) (.toBe "5678"))
     (-> (expect (:ws (:effective-ports result))) (.toBe "5679"))
     (-> (expect (:persist? result)) (.toBe true))
@@ -60,9 +60,7 @@
     (-> (expect (:ws (:source result))) (.toBe :override))))
 
 (defn- test-normalize-domain-equals-defaults []
-  (let [defaults {:nrepl "1339" :ws "1340"}
-        domain-ports {:nrepl "1339" :ws "1340"}
-        result (popup-actions/normalize-domain-ports defaults domain-ports)]
+  (let [result (normalize-with-test-defaults {:nrepl "1339" :ws "1340"})]
     (-> (expect (:nrepl (:effective-ports result))) (.toBe "1339"))
     (-> (expect (:ws (:effective-ports result))) (.toBe "1340"))
     (-> (expect (:persist? result)) (.toBe false))
@@ -71,9 +69,7 @@
     (-> (expect (:ws (:source result))) (.toBe :default))))
 
 (defn- test-normalize-partial-domain-entry []
-  (let [defaults {:nrepl "1339" :ws "1340"}
-        domain-ports {:nrepl "5678"}
-        result (popup-actions/normalize-domain-ports defaults domain-ports)]
+  (let [result (normalize-with-test-defaults {:nrepl "5678"})]
     (-> (expect (:nrepl (:effective-ports result))) (.toBe "5678"))
     (-> (expect (:ws (:effective-ports result))) (.toBe "1340"))
     (-> (expect (:persist? result)) (.toBe true))
@@ -102,12 +98,13 @@
     (-> (expect (first (first (:uf/fxs result))))
         (.toBe :popup/fx.init-ports))))
 
+(defn- apply-init-ports-db [init-data]
+  (:uf/db (popup-actions/handle-action initial-state uf-data
+                                       [:connection/ax.apply-init-ports init-data])))
+
 (defn- test-apply-init-ports-fresh-install []
   ;; No stored defaults, no domain ports => hardcoded fallbacks
-  (let [init-data {:stored-defaults nil :domain-ports nil}
-        result (popup-actions/handle-action initial-state uf-data
-                 [:connection/ax.apply-init-ports init-data])
-        db (:uf/db result)]
+  (let [db (apply-init-ports-db {:stored-defaults nil :domain-ports nil})]
     (-> (expect (:settings/default-nrepl-port db)) (.toBe "3339"))
     (-> (expect (:settings/default-ws-port db)) (.toBe "3340"))
     (-> (expect (:ports/nrepl db)) (.toBe "3339"))
@@ -115,10 +112,7 @@
 
 (defn- test-apply-init-ports-stored-defaults-no-domain []
   ;; Stored defaults "5555"/"5556", no domain override => uses stored defaults
-  (let [init-data {:stored-defaults {:nrepl "5555" :ws "5556"} :domain-ports nil}
-        result (popup-actions/handle-action initial-state uf-data
-                 [:connection/ax.apply-init-ports init-data])
-        db (:uf/db result)]
+  (let [db (apply-init-ports-db {:stored-defaults {:nrepl "5555" :ws "5556"} :domain-ports nil})]
     (-> (expect (:settings/default-nrepl-port db)) (.toBe "5555"))
     (-> (expect (:settings/default-ws-port db)) (.toBe "5556"))
     (-> (expect (:ports/nrepl db)) (.toBe "5555"))
@@ -126,11 +120,8 @@
 
 (defn- test-apply-init-ports-stored-defaults-with-domain-override []
   ;; Stored defaults "5555"/"5556", domain override "7777"/"7778"
-  (let [init-data {:stored-defaults {:nrepl "5555" :ws "5556"}
-                   :domain-ports {:nrepl "7777" :ws "7778"}}
-        result (popup-actions/handle-action initial-state uf-data
-                 [:connection/ax.apply-init-ports init-data])
-        db (:uf/db result)]
+  (let [db (apply-init-ports-db {:stored-defaults {:nrepl "5555" :ws "5556"}
+                                 :domain-ports {:nrepl "7777" :ws "7778"}})]
     ;; Settings still reflect the stored defaults
     (-> (expect (:settings/default-nrepl-port db)) (.toBe "5555"))
     (-> (expect (:settings/default-ws-port db)) (.toBe "5556"))
@@ -140,20 +131,14 @@
 
 (defn- test-apply-init-ports-sets-source-default []
   ;; No domain override => source is both :default
-  (let [init-data {:stored-defaults {:nrepl "5555" :ws "5556"} :domain-ports nil}
-        result (popup-actions/handle-action initial-state uf-data
-                 [:connection/ax.apply-init-ports init-data])
-        db (:uf/db result)]
+  (let [db (apply-init-ports-db {:stored-defaults {:nrepl "5555" :ws "5556"} :domain-ports nil})]
     (-> (expect (:nrepl (:ports/source db))) (.toBe :default))
     (-> (expect (:ws (:ports/source db))) (.toBe :default))))
 
 (defn- test-apply-init-ports-sets-source-override []
   ;; Domain override => source reflects overrides
-  (let [init-data {:stored-defaults {:nrepl "5555" :ws "5556"}
-                   :domain-ports {:nrepl "7777" :ws "7778"}}
-        result (popup-actions/handle-action initial-state uf-data
-                 [:connection/ax.apply-init-ports init-data])
-        db (:uf/db result)]
+  (let [db (apply-init-ports-db {:stored-defaults {:nrepl "5555" :ws "5556"}
+                                 :domain-ports {:nrepl "7777" :ws "7778"}})]
     (-> (expect (:nrepl (:ports/source db))) (.toBe :override))
     (-> (expect (:ws (:ports/source db))) (.toBe :override))))
 

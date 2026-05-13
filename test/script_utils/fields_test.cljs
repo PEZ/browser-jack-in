@@ -143,38 +143,30 @@
     (-> (expect (:script/enabled s)) (.toBe false))
     (-> (expect (:script/created s)) (.toBe "2026-01-01T00:00:00.000Z"))))
 
-(defn- test-normalize-merge-update-preserves-enabled []
+(defn- normalize-with-existing [script manifest]
   (let [existing {:script/id "script-1"
                   :script/name "test.cljs"
                   :script/code "(ns old)"
                   :script/enabled true
                   :script/match ["https://example.com/*"]
-                  :script/created "2025-01-01T00:00:00.000Z"
-                  :script/modified "2025-06-01T00:00:00.000Z"}
-        code "^{:epupp/script-name \"test.cljs\"\n  :epupp/auto-run-match \"https://example.com/*\"}\n(ns test)"
+                  :script/created "2025-01-01T00:00:00.000Z"}]
+    (script-utils/normalize-and-merge-script
+     script existing manifest
+     {:now-iso "2026-01-01T00:00:00.000Z"})))
+
+(defn- test-normalize-merge-update-preserves-enabled []
+  (let [code "^{:epupp/script-name \"test.cljs\"\n  :epupp/auto-run-match \"https://example.com/*\"}\n(ns test)"
         manifest (mp/extract-manifest code)
-        script {:script/id "script-1" :script/code code}
-        result (script-utils/normalize-and-merge-script
-                 script existing manifest
-                 {:now-iso "2026-01-01T00:00:00.000Z"})
+        result (normalize-with-existing {:script/id "script-1" :script/code code} manifest)
         s (:script result)]
     (-> (expect (:script/enabled s)) (.toBe true))
     (-> (expect (:script/created s)) (.toBe "2025-01-01T00:00:00.000Z"))
     (-> (expect (:script/modified s)) (.toBe "2026-01-01T00:00:00.000Z"))))
 
 (defn- test-normalize-merge-manifest-revokes-auto-run []
-  (let [existing {:script/id "script-1"
-                  :script/name "test.cljs"
-                  :script/code "(ns old)"
-                  :script/enabled true
-                  :script/match ["https://example.com/*"]
-                  :script/created "2025-01-01T00:00:00.000Z"}
-        code "^{:epupp/script-name \"test.cljs\"}\n(ns test)"
+  (let [code "^{:epupp/script-name \"test.cljs\"}\n(ns test)"
         manifest (mp/extract-manifest code)
-        script {:script/id "script-1" :script/code code}
-        result (script-utils/normalize-and-merge-script
-                 script existing manifest
-                 {:now-iso "2026-01-01T00:00:00.000Z"})
+        result (normalize-with-existing {:script/id "script-1" :script/code code} manifest)
         s (:script result)]
     (-> (expect (:script/match s)) (.toEqual []))
     (-> (expect (:script/enabled s)) (.toBe false))))
@@ -188,17 +180,19 @@
                  {:now-iso "2026-01-01T00:00:00.000Z"})]
     (-> (expect (:error result)) (.toContain "reserved namespace"))))
 
+(defn- normalize-new-script [script opts]
+  (-> (script-utils/normalize-and-merge-script
+       script nil nil
+       (merge {:now-iso "2026-01-01T00:00:00.000Z"} opts))
+      :script))
+
 (defn- test-normalize-merge-builtin-bypasses-normalization []
   (let [script {:script/id "builtin-1"
                 :script/code "(ns builtin)"
                 :script/name "Builtin Name"
                 :script/builtin? true
                 :script/match ["<all_urls>"]}
-        result (script-utils/normalize-and-merge-script
-                 script nil nil
-                 {:is-builtin? true
-                  :now-iso "2026-01-01T00:00:00.000Z"})
-        s (:script result)]
+        s (normalize-new-script script {:is-builtin? true})]
     (-> (expect (:script/name s)) (.toBe "Builtin Name"))))
 
 (defn- test-normalize-merge-always-enabled []
@@ -207,24 +201,11 @@
                 :script/name "test.cljs"
                 :script/always-enabled? true
                 :script/match []}
-        result (script-utils/normalize-and-merge-script
-                 script nil nil
-                 {:now-iso "2026-01-01T00:00:00.000Z"})
-        s (:script result)]
+        s (normalize-new-script script {})]
     (-> (expect (:script/enabled s)) (.toBe true))))
 
 (defn- test-normalize-merge-no-manifest-falls-back-to-existing-match []
-  (let [existing {:script/id "script-1"
-                  :script/name "test.cljs"
-                  :script/code "(ns old)"
-                  :script/enabled true
-                  :script/match ["https://example.com/*"]
-                  :script/created "2025-01-01T00:00:00.000Z"}
-        script {:script/id "script-1"
-                :script/code "(ns updated-code)"}
-        result (script-utils/normalize-and-merge-script
-                 script existing nil
-                 {:now-iso "2026-01-01T00:00:00.000Z"})
+  (let [result (normalize-with-existing {:script/id "script-1" :script/code "(ns updated-code)"} nil)
         s (:script result)]
     (-> (expect (:script/match s)) (.toEqual ["https://example.com/*"]))
     (-> (expect (:script/enabled s)) (.toBe true))))

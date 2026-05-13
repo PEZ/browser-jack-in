@@ -7,6 +7,26 @@
 ;; Test Functions
 ;; ============================================================
 
+(defn- bundled-result [id name code]
+  (storage/build-bundled-script {:script/id id
+                                 :path (str "userscripts/" name)
+                                 :name name}
+                                code))
+
+(defn- assert-inject [id name code expected-inject]
+  (-> (expect (:script/inject (bundled-result id name code)))
+      (.toEqual expected-inject)))
+
+(defn- assert-match [id name code expected-match]
+  (-> (expect (:script/match (bundled-result id name code)))
+      (.toEqual expected-match)))
+
+(defn- normal-result []
+  (bundled-result "builtin-normal" "normal.cljs"
+                  "{:epupp/script-name \"normal.cljs\"}
+
+(ns normal)"))
+
 (defn- test-build-bundled-complete-manifest-all-fields []
   (let [bundled {:script/id "builtin-1"
                  :path "userscripts/test.cljs"
@@ -62,52 +82,36 @@
         (.toBe false))))
 
 (defn- test-build-bundled-manifest-with-string-inject []
-  (let [bundled {:script/id "builtin-3"
-                 :path "userscripts/string-inject.cljs"
-                 :name "string-inject.cljs"}
-        code "{:epupp/script-name \"string-inject.cljs\"
+  (assert-inject "builtin-3" "string-inject.cljs"
+                 "{:epupp/script-name \"string-inject.cljs\"
  :epupp/inject \"scittle://reagent.js\"}
 
 (ns string-inject)"
-        result (storage/build-bundled-script bundled code)]
-    (-> (expect (:script/inject result))
-        (.toEqual ["scittle://reagent.js"]))))
+                 ["scittle://reagent.js"]))
 
 (defn- test-build-bundled-manifest-with-array-inject []
-  (let [bundled {:script/id "builtin-4"
-                 :path "userscripts/array-inject.cljs"
-                 :name "array-inject.cljs"}
-        code "{:epupp/script-name \"array-inject.cljs\"
+  (assert-inject "builtin-4" "array-inject.cljs"
+                 "{:epupp/script-name \"array-inject.cljs\"
  :epupp/inject [\"scittle://reagent.js\" \"scittle://pprint.js\"]}
 
 (ns array-inject)"
-        result (storage/build-bundled-script bundled code)]
-    (-> (expect (:script/inject result))
-        (.toEqual ["scittle://reagent.js" "scittle://pprint.js"]))))
+                 ["scittle://reagent.js" "scittle://pprint.js"]))
 
 (defn- test-build-bundled-manifest-with-match-patterns []
-  (let [bundled {:script/id "builtin-5"
-                 :path "userscripts/with-match.cljs"
-                 :name "with-match.cljs"}
-        code "{:epupp/script-name \"with-match.cljs\"
+  (assert-match "builtin-5" "with-match.cljs"
+                "{:epupp/script-name \"with-match.cljs\"
  :epupp/auto-run-match \"https://github.com/*\"}
 
 (ns with-match)"
-        result (storage/build-bundled-script bundled code)]
-    (-> (expect (:script/match result))
-        (.toEqual ["https://github.com/*"]))))
+                ["https://github.com/*"]))
 
 (defn- test-build-bundled-manifest-without-match-manual-only []
-  (let [bundled {:script/id "builtin-6"
-                 :path "userscripts/manual-only.cljs"
-                 :name "manual-only.cljs"}
-        code "{:epupp/script-name \"manual-only.cljs\"
+  (assert-match "builtin-6" "manual-only.cljs"
+                "{:epupp/script-name \"manual-only.cljs\"
  :epupp/description \"Manual execution only\"}
 
 (ns manual-only)"
-        result (storage/build-bundled-script bundled code)]
-    (-> (expect (:script/match result))
-        (.toEqual []))))
+                []))
 
 (defn- test-build-bundled-invalid-run-at-defaults-to-document-idle []
   (let [bundled {:script/id "builtin-7"
@@ -136,28 +140,20 @@
         (.toBe false))))
 
 (defn- test-build-bundled-manifest-with-string-match []
-  (let [bundled {:script/id "builtin-9"
-                 :path "userscripts/string-match.cljs"
-                 :name "string-match.cljs"}
-        code "{:epupp/script-name \"string-match.cljs\"
+  (assert-match "builtin-9" "string-match.cljs"
+                "{:epupp/script-name \"string-match.cljs\"
  :epupp/auto-run-match \"https://example.com/*\"}
 
 (ns string-match)"
-        result (storage/build-bundled-script bundled code)]
-    (-> (expect (:script/match result))
-        (.toEqual ["https://example.com/*"]))))
+                ["https://example.com/*"]))
 
 (defn- test-build-bundled-manifest-with-empty-match-array []
-  (let [bundled {:script/id "builtin-10"
-                 :path "userscripts/empty-match.cljs"
-                 :name "empty-match.cljs"}
-        code "{:epupp/script-name \"empty-match.cljs\"
+  (assert-match "builtin-10" "empty-match.cljs"
+                "{:epupp/script-name \"empty-match.cljs\"
  :epupp/auto-run-match []}
 
 (ns empty-match)"
-        result (storage/build-bundled-script bundled code)]
-    (-> (expect (:script/match result))
-        (.toEqual []))))
+                []))
 
 (defn- test-build-bundled-always-enabled-propagated []
   (let [bundled {:script/id "builtin-sponsor"
@@ -173,15 +169,8 @@
         (.toBe true))))
 
 (defn- test-build-bundled-without-always-enabled []
-  (let [bundled {:script/id "builtin-normal"
-                 :path "userscripts/normal.cljs"
-                 :name "normal.cljs"}
-        code "{:epupp/script-name \"normal.cljs\"}
-
-(ns normal)"
-        result (storage/build-bundled-script bundled code)]
-    (-> (expect (contains? result :script/always-enabled?))
-        (.toBe false))))
+  (-> (expect (contains? (normal-result) :script/always-enabled?))
+      (.toBe false)))
 
 (defn- test-build-bundled-special-flags-propagated []
   (let [bundled {:script/id "builtin-installer"
@@ -221,13 +210,7 @@
         (.toEqual []))))
 
 (defn- test-build-bundled-without-special-flags []
-  (let [bundled {:script/id "builtin-normal"
-                 :path "userscripts/normal.cljs"
-                 :name "normal.cljs"}
-        code "{:epupp/script-name \"normal.cljs\"}
-
-(ns normal)"
-        result (storage/build-bundled-script bundled code)]
+  (let [result (normal-result)]
     (-> (expect (contains? result :script/special?))
         (.toBe false))
     (-> (expect (contains? result :script/web-installer-scan))

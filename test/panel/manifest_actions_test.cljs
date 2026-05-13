@@ -54,16 +54,18 @@
     (-> (expect (:raw-script-name (:panel/manifest-hints new-state)))
         (.toBe "GitHub Tweaks"))))
 
+(defn- manifest-hints-for-code [code]
+  (:panel/manifest-hints (:uf/db (panel-actions/handle-action initial-state uf-data [:editor/ax.set-code code]))))
+
 (defn- test_set_code_stores_unknown_keys_in_hints []
   (let [code "^{:epupp/script-name \"test.cljs\"
   :epupp/author \"PEZ\"
   :epupp/version \"1.0\"}
 (ns test)"
-        result (panel-actions/handle-action initial-state uf-data [:editor/ax.set-code code])
-        new-state (:uf/db result)]
-    (-> (expect (:unknown-keys (:panel/manifest-hints new-state)))
+        hints (manifest-hints-for-code code)]
+    (-> (expect (:unknown-keys hints))
         (.toContain "epupp/author"))
-    (-> (expect (:unknown-keys (:panel/manifest-hints new-state)))
+    (-> (expect (:unknown-keys hints))
         (.toContain "epupp/version"))))
 
 (defn- test_set_code_clears_hints_when_no_manifest []
@@ -92,11 +94,10 @@
   (let [code "^{:epupp/script-name \"test.cljs\"
   :epupp/run-at \"invalid-timing\"}
 (ns test)"
-        result (panel-actions/handle-action initial-state uf-data [:editor/ax.set-code code])
-        new-state (:uf/db result)]
-    (-> (expect (:run-at-invalid? (:panel/manifest-hints new-state)))
+        hints (manifest-hints-for-code code)]
+    (-> (expect (:run-at-invalid? hints))
         (.toBe true))
-    (-> (expect (:raw-run-at (:panel/manifest-hints new-state)))
+    (-> (expect (:raw-run-at hints))
         (.toBe "invalid-timing"))))
 
 (defn- test_set_code_stores_inject_in_manifest_hints []

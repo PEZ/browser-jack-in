@@ -47,23 +47,33 @@
 ;; Test Functions
 ;; ============================================================
 
+(defn- get-manifest-and-match [code]
+  (let [manifest (mp/extract-manifest code)]
+    #js {:manifest manifest :match (aget manifest "auto-run-match")}))
+
+(defn- check-full-result [result expected-match expected-has-manifest? expected-explicit-empty?]
+  (-> (expect (:match result))
+      (.toEqual expected-match))
+  (-> (expect (:has-manifest? result))
+      (.toBe expected-has-manifest?))
+  (-> (expect (:explicit-empty? result))
+      (.toBe expected-explicit-empty?)))
+
 (defn- test-manifest-with-auto-run-match-has-match []
   (let [code "^{:epupp/script-name \"test.cljs\"
   :epupp/auto-run-match \"https://example.com/*\"}
 (ns test)"
-        manifest (mp/extract-manifest code)
-        manifest-match (get manifest "auto-run-match")]
-    (-> (expect manifest-match)
+        result (get-manifest-and-match code)]
+    (-> (expect (.-match result))
         (.toBe "https://example.com/*"))))
 
 (defn- test-manifest-without-auto-run-match-is-nil []
   (let [code "^{:epupp/script-name \"test.cljs\"}
 (ns test)"
-        manifest (mp/extract-manifest code)
-        manifest-match (get manifest "auto-run-match")]
-    (-> (expect manifest)
+        result (get-manifest-and-match code)]
+    (-> (expect (.-manifest result))
         (.toBeTruthy))
-    (-> (expect manifest-match)
+    (-> (expect (.-match result))
         (.toBeUndefined))))
 
 (defn- test-no-manifest-returns-nil []
@@ -76,11 +86,10 @@
   (let [code "^{:epupp/script-name \"test.cljs\"
   :epupp/auto-run-match []}
 (ns test)"
-        manifest (mp/extract-manifest code)
-        manifest-match (get manifest "auto-run-match")]
-    (-> (expect (js/Array.isArray manifest-match))
+        result (get-manifest-and-match code)]
+    (-> (expect (js/Array.isArray (.-match result)))
         (.toBe true))
-    (-> (expect (.-length manifest-match))
+    (-> (expect (.-length (.-match result)))
         (.toBe 0))))
 
 (defn- test-extract-manifest-with-match-returns-match []
@@ -88,12 +97,7 @@
   :epupp/auto-run-match \"https://example.com/*\"}
 (ns test)"
         result (extract-auto-run-from-manifest code nil)]
-    (-> (expect (:match result))
-        (.toEqual ["https://example.com/*"]))
-    (-> (expect (:has-manifest? result))
-        (.toBe true))
-    (-> (expect (:explicit-empty? result))
-        (.toBe false))))
+    (check-full-result result ["https://example.com/*"] true false)))
 
 (defn- test-extract-manifest-with-vector-match-returns-vector []
   (let [code "^{:epupp/script-name \"test.cljs\"
@@ -108,23 +112,13 @@
 (ns test)"
         existing-match ["https://old-pattern.com/*"]
         result (extract-auto-run-from-manifest code existing-match)]
-    (-> (expect (:match result))
-        (.toEqual []))
-    (-> (expect (:has-manifest? result))
-        (.toBe true))
-    (-> (expect (:explicit-empty? result))
-        (.toBe true))))
+    (check-full-result result [] true true)))
 
 (defn- test-extract-no-manifest-preserves-existing-match []
   (let [code "(defn foo [] 42)"
         existing-match ["https://preserve-me.com/*"]
         result (extract-auto-run-from-manifest code existing-match)]
-    (-> (expect (:match result))
-        (.toEqual ["https://preserve-me.com/*"]))
-    (-> (expect (:has-manifest? result))
-        (.toBe false))
-    (-> (expect (:explicit-empty? result))
-        (.toBe false))))
+    (check-full-result result ["https://preserve-me.com/*"] false false)))
 
 (defn- test-extract-no-manifest-no-existing-empty-match []
   (let [code "(defn foo [] 42)"
