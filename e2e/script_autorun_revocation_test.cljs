@@ -9,7 +9,7 @@
                               wait-for-panel-ready wait-for-popup-ready
                               wait-for-save-status
                               assert-no-errors! get-script-item]]
-            [fs-write-helpers :refer [setup-browser! eval-in-browser sleep]]))
+            [fs-write-helpers :refer [setup-browser! eval-async-and-poll!]]))
 
 ;; =============================================================================
 ;; Helpers
@@ -123,27 +123,26 @@
 ;; Test: REPL save removes auto-run
 ;; =============================================================================
 
+(defn- ^:async repl-save-script!
+  "Save a script via REPL eval-in-browser + poll for completion.
+   atom-name: unique atom symbol string (e.g. \"!save1\")
+   code: the script source string to save."
+  [atom-name code]
+  (js-await (eval-async-and-poll!
+             (str "(def " atom-name " (atom :pending))\n"
+                  "(defn ^:async do-it [] (reset! " atom-name " (await (epupp.fs/save! " (pr-str code) " {:fs/force? true}))))\n"
+                  "(do-it)\n"
+                  ":setup-done")
+             (str "(let [r @" atom-name "] (if (map? r) (str (:fs/success r)) :pending))")
+             3000)))
+
 (defn- ^:async test_repl_save_removes_autorun_converts_to_manual []
   (let [context (js-await (setup-browser!))
         ext-id (js-await (get-extension-id context))]
     (try
       ;; === PHASE 1: Create script WITH auto-run-match via REPL ===
-      (let [code-with-match "^{:epupp/script-name \"repl-revoke-test\"\n  :epupp/auto-run-match \"https://example.com/*\"}\n(ns repl-revoke-test)\n(println \"v1 with match\")"
-            setup-result (js-await (eval-in-browser
-                                    (str "(def !save1 (atom :pending))\n"
-                                         "(defn ^:async do-it [] (reset! !save1 (await (epupp.fs/save! " (pr-str code-with-match) " {:fs/force? true}))))\n"
-                                         "(do-it)\n"
-                                         ":setup-done")))]
-        (js-await (-> (expect (.-success setup-result)) (.toBe true)))
-        ;; Wait for save to complete
-        (let [start (.now js/Date)]
-          (loop []
-            (let [check (js-await (eval-in-browser "(let [r @!save1] (if (map? r) (:fs/success r) :pending))"))]
-              (if (and (.-success check) (= (first (.-values check)) "true"))
-                true
-                (if (> (- (.now js/Date) start) 3000)
-                  (throw (js/Error. "Timeout waiting for REPL save"))
-                  (do (js-await (sleep 20)) (recur))))))))
+      (let [code-with-match "^{:epupp/script-name \"repl-revoke-test\"\n  :epupp/auto-run-match \"https://example.com/*\"}\n(ns repl-revoke-test)\n(println \"v1 with match\")"]
+        (js-await (repl-save-script! "!save1" code-with-match)))
 
       ;; === PHASE 2: Verify popup shows script with auto-run UI ===
       (let [popup (js-await (create-popup-page context ext-id))]
@@ -152,22 +151,8 @@
         (js-await (.close popup)))
 
       ;; === PHASE 3: Update script via REPL WITHOUT auto-run-match ===
-      (let [code-without-match "^{:epupp/script-name \"repl_revoke_test.cljs\"}\n(ns repl-revoke-test)\n(println \"v2 no match - manual only\")"
-            update-result (js-await (eval-in-browser
-                                     (str "(def !save2 (atom :pending))\n"
-                                          "(defn ^:async do-it [] (reset! !save2 (await (epupp.fs/save! " (pr-str code-without-match) " {:fs/force? true}))))\n"
-                                          "(do-it)\n"
-                                          ":setup-done")))]
-        (js-await (-> (expect (.-success update-result)) (.toBe true)))
-        ;; Wait for save to complete
-        (let [start (.now js/Date)]
-          (loop []
-            (let [check (js-await (eval-in-browser "(let [r @!save2] (if (map? r) (:fs/success r) :pending))"))]
-              (if (and (.-success check) (= (first (.-values check)) "true"))
-                true
-                (if (> (- (.now js/Date) start) 3000)
-                  (throw (js/Error. "Timeout waiting for REPL update save"))
-                  (do (js-await (sleep 20)) (recur))))))))
+      (let [code-without-match "^{:epupp/script-name \"repl_revoke_test.cljs\"}\n(ns repl-revoke-test)\n(println \"v2 no match - manual only\")"]
+        (js-await (repl-save-script! "!save2" code-without-match)))
 
       ;; === PHASE 4: Verify popup now shows script as manual-only ===
       (let [popup (js-await (create-popup-page context ext-id))]
