@@ -4,7 +4,7 @@
   "type": "module",
   "devDependencies": {
     "@playwright/test": "^1.57.0",
-    "squint-cljs": "^0.9.182",
+    "squint-cljs": "^0.12.192",
     "vitest": "^4.0.16"
   },
   "dependencies": {
