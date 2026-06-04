@@ -15,7 +15,7 @@ name: docs-updater
     area: read(the_doc_being_updated) → understand_current_content
     source: read(relevant_source_files) → confirm_accuracy
   | ¬write_from_change_summary_alone | always_verify_against_source
-  | squint_gotcha: read(.github/squint.instructions.md) when_code_examples_involved
+  | squint_gotcha: load(epupp-squint skill) when_code_examples_involved
   | uniflow: read(dev/docs/architecture/uniflow.md) when_state_or_action_docs
   | depth: scale_orientation_to_task | quick_fix → skim | new_doc → thorough
 
@@ -55,8 +55,8 @@ name: docs-updater
     docs/repl-fs-sync.md                  → FS_sync_for_users
   orientation_sources:
     .github/copilot-instructions.md       → system_identity ∧ docs_index(read_only)
-    .github/reagami.instructions.md       → UI_patterns(reference_for_accuracy)
-    .github/squint.instructions.md        → squint_gotchas(reference_for_accuracy)
+    reagami skill                         → UI_patterns(reference_for_accuracy)
+    epupp-squint skill                    → squint_gotchas(reference_for_accuracy)
     dev/docs/architecture.md              → system_overview(primary_orientation)
     src/**/*.cljs                         → source_of_truth(verify_claims)
   | boundary: ¬rewrite_agent_instructions | that_is_nucleus-updater_territory

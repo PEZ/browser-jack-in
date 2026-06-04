@@ -134,7 +134,7 @@ Shared knowledge base for developing the Epupp browser extension. Loaded by any 
   read_before_starting_work | use(read_file):
   | understanding_system     → architecture_overview → detailed_docs
   | unit_tests               → dev/docs/testing-unit.md
-  | UI(popup/panel)          → .github/reagami.instructions.md ∧ dev/docs/ui.md
+  | UI(popup/panel)          → reagami skill ∧ dev/docs/ui.md
   | state/events             → dev/docs/architecture/uniflow.md ∧ state-management.md
   | messaging                → dev/docs/architecture/message-protocol.md
   | injection/REPL           → dev/docs/architecture/injection-flows.md

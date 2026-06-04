@@ -1,11 +1,11 @@
 ---
-description: 'Epupp Squint source conventions - project-specific patterns beyond the universal Squint skill'
-applyTo: 'src/**'
+name: epupp-squint
+description: 'Epupp-specific Squint source conventions for src/**. Use when: editing Squint/ClojureScript in src/, testing pure functions via squint-nrepl, debugging Squint-to-Scittle message interop, avoiding direct .mjs edits, or rewriting legacy JS interop to Clojure style. For universal Squint semantics (keywords, data structures, async, compilation model) load the universal Squint skill separately. IMPORTANT: Also load when planning changes to src/** Squint code.'
 ---
 
 # Epupp Squint Conventions
 
-For universal Squint semantics (keywords, data structures, async, function availability, compilation model), load the **Squint skill**. This file covers only epupp-specific patterns.
+For universal Squint semantics (keywords, data structures, async, function availability, compilation model), load the **Squint skill**. This skill covers only epupp-specific patterns.
 
 ## Prefer Clojure Style Over JS Interop
 

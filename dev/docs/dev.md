@@ -34,7 +34,7 @@ bb test:watch   # Terminal 2: Unit test watcher
 bb squint-nrepl # Terminal 3: Squint nREPL
 ```
 
-The Squint REPL lets you evaluate code in a Node.js environment, useful for testing pure functions that do not need the browser execution environment. See [squint.instructions.md](../../.github/squint.instructions.md#testing-code-in-squint-nrepl) for details.
+The Squint REPL lets you evaluate code in a Node.js environment, useful for testing pure functions that do not need the browser execution environment. See the [epupp-squint skill](../../.github/skills/epupp-squint/SKILL.md#testing-code-in-squint-nrepl) for details.
 
 #### Scittle Dev REPL
 

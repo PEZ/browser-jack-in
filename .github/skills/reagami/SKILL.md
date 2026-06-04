@@ -1,6 +1,6 @@
 ---
-description: 'Effective Reagami usages'
-applyTo: '**'
+name: reagami
+description: 'Reagami UI library patterns for Epupp Squint components. Use when: writing or modifying Reagami components, hiccup UI in popup.cljs or panel.cljs, event handlers with Uniflow dispatch, :on-render lifecycle hooks, list rendering with keys, or comparing Reagami to Reagent. Covers component patterns, class shorthand, and Epupp-specific examples. IMPORTANT: Also load when planning UI changes that use Reagami.'
 ---
 
 # Reagami
@@ -103,7 +103,7 @@ Combine static and dynamic classes:
 
 ## Event Handling
 
-Reagami components dispatch actions via Uniflow. See [../dev/docs/architecture/uniflow.md](../dev/docs/architecture/uniflow.md) for the full event system documentation.
+Reagami components dispatch actions via Uniflow. See [../../../dev/docs/architecture/uniflow.md](../../../dev/docs/architecture/uniflow.md) for the full event system documentation.
 
 ```clojure
 ;; In components, call the module's dispatch! function

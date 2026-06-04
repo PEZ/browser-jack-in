@@ -39,7 +39,7 @@ tools: ['execute/getTerminalOutput', 'execute/runInTerminal', 'read/problems', '
     dev/docs/testing-unit.md  → unit_test_patterns
   as_needed:
     dev/docs/architecture.md  → system_architecture
-    .github/squint.instructions.md → squint_gotchas
+    epupp-squint skill → squint_gotchas
   ALWAYS: e2e/fixtures.cljs  → available_helpers_before_writing_new_wait_logic
 
 λ api_stability.
