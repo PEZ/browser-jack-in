@@ -60,16 +60,11 @@
 
 (def ^:private user-kv-action-set
   {:user-kv/ax.get true
-   :user-kv/ax.get-ready true
    :user-kv/ax.set true
-   :user-kv/ax.set-ready true
    :user-kv/ax.remove true
-   :user-kv/ax.remove-ready true
    :user-kv/ax.keys true
-   :user-kv/ax.keys-ready true
    :user-kv/ax.clear true
-   :user-kv/ax.clear-ready true
-   :user-kv/ax.write-respond true})
+   :user-kv/ax.op-respond true})
 
 ;; Simple delegation handlers for existing modules
 (def ^:private delegation-handlers

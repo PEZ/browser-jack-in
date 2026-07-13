@@ -14,73 +14,58 @@
 (defn- test-get-declares-await-and-dxs []
   (let [result (user-kv/handle-action {} {} [:user-kv/ax.get identity "my/key"])]
     (-> (expect (first-await-fx result))
-        (.toEqual [:uf/await :storage/fx.user-kv-read]))
+        (.toEqual [:uf/await :storage/fx.user-kv-op {:op :get :key "my/key"}]))
     (-> (expect (:uf/dxs result))
-        (.toEqual [[:user-kv/ax.get-ready identity "my/key" :uf/prev-result]]))))
+        (.toEqual [[:user-kv/ax.op-respond identity :uf/prev-result]]))))
 
-(defn- test-get-ready-success-sends-value []
-  (let [result (user-kv/handle-action {} {} [:user-kv/ax.get-ready identity "my/key"
-                                             {:success true :blob {"my/key" "42"}}])]
-    (-> (expect (first-send-response-fx result))
-        (.toEqual [:msg/fx.send-response identity {:success true :value "42"}]))))
-
-(defn- test-get-ready-read-failure-sends-error []
-  (let [result (user-kv/handle-action {} {} [:user-kv/ax.get-ready identity "my/key"
-                                             {:success false :error "boom" :blob {}}])]
-    (-> (expect (first-send-response-fx result))
-        (.toEqual [:msg/fx.send-response identity {:success false :error "boom"}]))))
-
-(defn- test-set-ready-awaits-user-kv-write []
-  (let [result (user-kv/handle-action {} {} [:user-kv/ax.set-ready identity "k" "v"
-                                             {:success true :blob {}}])]
+(defn- test-set-declares-op-await []
+  (let [result (user-kv/handle-action {} {} [:user-kv/ax.set identity "k" "v"])]
     (-> (expect (first-await-fx result))
-        (.toEqual [:uf/await :storage/fx.user-kv-write {"k" "v"}]))
-    (-> (expect (:uf/dxs result))
-        (.toEqual [[:user-kv/ax.write-respond identity {:success true :value "v"} :uf/prev-result]]))
+        (.toEqual [:uf/await :storage/fx.user-kv-op {:op :set :key "k" :value "v"}]))
     (-> (expect (contains? (fx-keywords result) :storage/fx.get-local-storage))
         (.toBe false))
     (-> (expect (contains? (fx-keywords result) :storage/fx.set-local-storage))
         (.toBe false))))
 
-(defn- test-remove-ready-awaits-write-with-key-removed []
-  (let [result (user-kv/handle-action {} {} [:user-kv/ax.remove-ready identity "a"
-                                              {:success true :blob {"a" "1" "b" "2"}}])]
+(defn- test-remove-declares-op-await []
+  (let [result (user-kv/handle-action {} {} [:user-kv/ax.remove identity "a"])]
     (-> (expect (first-await-fx result))
-        (.toEqual [:uf/await :storage/fx.user-kv-write {"b" "2"}]))))
-
-(defn- test-keys-ready-returns-sorted-keys []
-  (let [result (user-kv/handle-action {} {} [:user-kv/ax.keys-ready identity
-                                             {:success true :blob {"z" "1" "a" "2"}}])]
-    (-> (expect (first-send-response-fx result))
-        (.toEqual [:msg/fx.send-response identity {:success true :keys ["a" "z"]}]))))
-
-(defn- test-clear-ready-awaits-empty-blob-write []
-  (let [result (user-kv/handle-action {} {} [:user-kv/ax.clear-ready identity
-                                             {:success true :blob {"a" "1"}}])]
-    (-> (expect (first-await-fx result))
-        (.toEqual [:uf/await :storage/fx.user-kv-write {}]))
+        (.toEqual [:uf/await :storage/fx.user-kv-op {:op :remove :key "a"}]))
     (-> (expect (:uf/dxs result))
-        (.toEqual [[:user-kv/ax.write-respond identity {:success true} :uf/prev-result]]))))
+        (.toEqual [[:user-kv/ax.op-respond identity :uf/prev-result]]))))
 
-(defn- test-write-respond-success-sends-payload []
-  (let [result (user-kv/handle-action {} {} [:user-kv/ax.write-respond identity {:success true} {:success true}])]
-    (-> (expect (first-send-response-fx result))
-        (.toEqual [:msg/fx.send-response identity {:success true}]))))
+(defn- test-keys-declares-op-await []
+  (let [result (user-kv/handle-action {} {} [:user-kv/ax.keys identity])]
+    (-> (expect (first-await-fx result))
+        (.toEqual [:uf/await :storage/fx.user-kv-op {:op :keys}]))
+    (-> (expect (:uf/dxs result))
+        (.toEqual [[:user-kv/ax.op-respond identity :uf/prev-result]]))))
 
-(defn- test-write-respond-failure-sends-error []
-  (let [result (user-kv/handle-action {} {} [:user-kv/ax.write-respond identity {:success true}
-                                             {:success false :error "disk full"}])]
+(defn- test-clear-declares-op-await []
+  (let [result (user-kv/handle-action {} {} [:user-kv/ax.clear identity])]
+    (-> (expect (first-await-fx result))
+        (.toEqual [:uf/await :storage/fx.user-kv-op {:op :clear}]))
+    (-> (expect (:uf/dxs result))
+        (.toEqual [[:user-kv/ax.op-respond identity :uf/prev-result]]))))
+
+(defn- test-op-respond-sends-prev-result []
+  (let [result (user-kv/handle-action {} {} [:user-kv/ax.op-respond identity
+                                             {:success true :value "42"}])]
     (-> (expect (first-send-response-fx result))
-        (.toEqual [:msg/fx.send-response identity {:success false :error "disk full"}]))))
+        (.toEqual [:msg/fx.send-response identity {:success true :value "42"}]))))
+
+(defn- test-op-respond-sends-error []
+  (let [result (user-kv/handle-action {} {} [:user-kv/ax.op-respond identity
+                                             {:success false :error "boom"}])]
+    (-> (expect (first-send-response-fx result))
+        (.toEqual [:msg/fx.send-response identity {:success false :error "boom"}]))))
 
 (describe "user-kv wire actions"
           (fn []
-            (test "get declares await user-kv-read and dxs get-ready" test-get-declares-await-and-dxs)
-            (test "get-ready success sends value" test-get-ready-success-sends-value)
-            (test "get-ready read failure sends error" test-get-ready-read-failure-sends-error)
-            (test "set-ready awaits user-kv-write with updated blob" test-set-ready-awaits-user-kv-write)
-            (test "remove-ready awaits write with key removed" test-remove-ready-awaits-write-with-key-removed)
-            (test "keys-ready returns sorted keys" test-keys-ready-returns-sorted-keys)
-            (test "clear-ready awaits empty blob write" test-clear-ready-awaits-empty-blob-write)
-            (test "write-respond success sends ok payload" test-write-respond-success-sends-payload)
-            (test "write-respond failure sends error" test-write-respond-failure-sends-error)))
+            (test "get declares await user-kv-op and dxs op-respond" test-get-declares-await-and-dxs)
+            (test "set declares await user-kv-op" test-set-declares-op-await)
+            (test "remove declares await user-kv-op" test-remove-declares-op-await)
+            (test "keys declares await user-kv-op" test-keys-declares-op-await)
+            (test "clear declares await user-kv-op" test-clear-declares-op-await)
+            (test "op-respond sends prev-result" test-op-respond-sends-prev-result)
+            (test "op-respond sends error" test-op-respond-sends-error)))

@@ -2,24 +2,51 @@
   (:require [storage :as storage]
             [background-actions.user-kv-actions :as user-kv]))
 
-(defn- ^:async user-kv-read!
-  []
-  (try
-    (let [result (js-await (js/chrome.storage.local.get #js [user-kv/user-kv-storage-key]))
-          blob (or (aget result user-kv/user-kv-storage-key) {})]
-      {:success true :blob blob})
-    (catch :default err
-      {:success false :error (.-message err) :blob {}})))
+(def ^:private !user-kv-chain (atom (js/Promise.resolve)))
 
-(defn- ^:async user-kv-write!
-  [blob]
+(defn- enqueue-user-kv! [thunk]
+  (let [result (atom nil)]
+    (swap! !user-kv-chain
+           (fn [chain]
+             (let [next (-> chain
+                            (.catch (fn [_] nil))
+                            (.then (fn [_] (thunk))))]
+               (reset! result next)
+               next)))
+    @result))
+
+(defn- ^:async user-kv-read-blob! []
+  (let [result (js-await (js/chrome.storage.local.get #js [user-kv/user-kv-storage-key]))]
+    (or (aget result user-kv/user-kv-storage-key) {})))
+
+(defn- ^:async user-kv-write-blob! [blob]
+  (let [plain (js/JSON.parse (js/JSON.stringify blob))]
+    (js-await (js/chrome.storage.local.set
+               (js-obj user-kv/user-kv-storage-key plain)))))
+
+(defn- ^:async user-kv-op-set! [blob op-map]
+  (let [new-blob (user-kv/blob-set blob (:key op-map) (:value op-map))]
+    (js-await (user-kv-write-blob! new-blob))
+    {:success true :value (:value op-map)}))
+
+(defn- ^:async user-kv-op-remove! [blob op-map]
+  (let [new-blob (user-kv/blob-remove blob (:key op-map))]
+    (js-await (user-kv-write-blob! new-blob))
+    {:success true}))
+
+(defn- ^:async user-kv-op-clear! [_blob _op-map]
+  (js-await (user-kv-write-blob! {}))
+  {:success true})
+
+(defn- ^:async run-user-kv-op! [op-map]
   (try
-    (js-await (js/Promise.
-               (fn [resolve]
-                 (js/chrome.storage.local.set
-                  (js-obj user-kv/user-kv-storage-key blob)
-                  resolve))))
-    {:success true}
+    (let [blob (js-await (user-kv-read-blob!))]
+      (case (:op op-map)
+        :get {:success true :value (user-kv/blob-get blob (:key op-map))}
+        :set (js-await (user-kv-op-set! blob op-map))
+        :remove (js-await (user-kv-op-remove! blob op-map))
+        :keys {:success true :keys (user-kv/blob-keys blob)}
+        :clear (js-await (user-kv-op-clear! blob op-map))))
     (catch :default err
       {:success false :error (.-message err)})))
 
@@ -51,12 +78,9 @@
     :storage/fx.persist!
     (storage/persist!)
 
-    :storage/fx.user-kv-read
-    (user-kv-read!)
-
-    :storage/fx.user-kv-write
-    (let [[blob] args]
-      (user-kv-write! blob))
+    :storage/fx.user-kv-op
+    (let [[op-map] args]
+      (js-await (enqueue-user-kv! #(run-user-kv-op! op-map))))
 
     :storage/fx.persist-ext-dep-cache!
     (let [[cache] args]
