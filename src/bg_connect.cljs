@@ -94,6 +94,8 @@
     :path "bundled/epupp/fs.cljs"}
    {:id "epupp-internal-helpers"
     :path "bundled/epupp/internal/helpers.cljs"}
+   {:id "epupp-storage"
+    :path "bundled/epupp/storage.cljs"}
    {:id "epupp-tools"
     :path "bundled/epupp/tools.cljs"}])
 
