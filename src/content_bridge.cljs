@@ -54,6 +54,17 @@
 
    ;; Screenshot capture
    "capture-element"        {:msg/sources #{"epupp-page"}
+                             :msg/response? true}
+
+   "storage-get"            {:msg/sources #{"epupp-page"}
+                             :msg/response? true}
+   "storage-set"            {:msg/sources #{"epupp-page"}
+                             :msg/response? true}
+   "storage-remove"         {:msg/sources #{"epupp-page"}
+                             :msg/response? true}
+   "storage-keys"           {:msg/sources #{"epupp-page"}
+                             :msg/response? true}
+   "storage-clear"          {:msg/sources #{"epupp-page"}
                              :msg/response? true}})
 
 (def !state (atom {:bridge/connected? false

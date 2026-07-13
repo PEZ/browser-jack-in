@@ -325,8 +325,28 @@
   false)
 
 ;; ============================================================
-;; Capture handlers
+;; User storage handlers
 ;; ============================================================
+
+(defn- handle-storage-get [message dispatch! send-response]
+  (dispatch! [[:user-kv/ax.get send-response (.-key message)]])
+  true)
+
+(defn- handle-storage-set [message dispatch! send-response]
+  (dispatch! [[:user-kv/ax.set send-response (.-key message) (.-value message)]])
+  true)
+
+(defn- handle-storage-remove [message dispatch! send-response]
+  (dispatch! [[:user-kv/ax.remove send-response (.-key message)]])
+  true)
+
+(defn- handle-storage-keys [_message dispatch! send-response]
+  (dispatch! [[:user-kv/ax.keys send-response]])
+  true)
+
+(defn- handle-storage-clear [_message dispatch! send-response]
+  (dispatch! [[:user-kv/ax.clear send-response]])
+  true)
 
 (defn- ^:async capture-visible-tab!
   "Capture screenshot of the visible area of a tab."
@@ -335,6 +355,10 @@
                        #js {:format "jpeg" :quality quality}
                        #js {:format "png"})]
     (js-await (js/chrome.tabs.captureVisibleTab window-id capture-opts))))
+
+;; ============================================================
+;; Capture handlers
+;; ============================================================
 
 (defn- handle-capture-element
   "Handle capture-element message: take viewport screenshot."
@@ -386,49 +410,63 @@
 ;; Message router
 ;; ============================================================
 
+(defn- route-runtime-message
+  "Route a chrome.runtime message to the matching thin handler."
+  [{:keys [config ensure-initialized-fn dispatch!]} message sender send-response]
+  (let [tab-id (when (.-tab sender) (.. sender -tab -id))
+        msg-type (.-type message)]
+    (case msg-type
+      "ws-connect" (handle-ws-connect message tab-id dispatch!)
+      "ws-send" (handle-ws-send message tab-id dispatch!)
+      "ws-close" (handle-ws-close tab-id dispatch!)
+      "ping" false
+      "tab-became-visible" (handle-tab-became-visible tab-id dispatch!)
+      "list-scripts" (handle-list-scripts message tab-id dispatch! send-response)
+      "save-script" (handle-save-script message tab-id dispatch! send-response)
+      "panel-save-script" (handle-panel-save-script message send-response)
+      "panel-rename-script" (handle-panel-rename-script message send-response)
+      "rename-script" (handle-rename-script message tab-id dispatch! send-response)
+      "delete-script" (handle-delete-script message tab-id dispatch! send-response)
+      "get-script" (handle-get-script message tab-id dispatch! send-response)
+      "check-script-exists" (handle-check-script-exists message dispatch! send-response)
+      "web-installer-save-script" (handle-web-installer-save-script message sender dispatch! send-response)
+      "load-manifest" (handle-load-manifest message tab-id dispatch! send-response)
+      "get-connections" (handle-get-connections dispatch! send-response)
+      "get-runtime-status" (handle-get-runtime-status message dispatch! send-response)
+      "loader-resolution-errors" (handle-loader-resolution-errors message sender dispatch!)
+      "connect-tab" (handle-connect-tab message dispatch! send-response)
+      "check-status" (handle-check-status message dispatch! send-response)
+      "disconnect-tab" (handle-disconnect-tab message dispatch!)
+      "toggle-fs-sync"
+      (do (dispatch! [[:fs/ax.toggle-sync (.-tabId message) (.-enabled message) send-response]])
+          true)
+      "get-fs-sync-status"
+      (do (dispatch! [[:fs/ax.get-sync-status send-response]])
+          true)
+      "capture-element" (handle-capture-element message sender send-response)
+      "storage-get" (handle-storage-get message dispatch! send-response)
+      "storage-set" (handle-storage-set message dispatch! send-response)
+      "storage-remove" (handle-storage-remove message dispatch! send-response)
+      "storage-keys" (handle-storage-keys message dispatch! send-response)
+      "storage-clear" (handle-storage-clear message dispatch! send-response)
+      "ensure-scittle" (handle-ensure-scittle message dispatch! send-response)
+      "inject-libs" (handle-inject-libs message dispatch! send-response)
+      "evaluate-script" (handle-evaluate-script message dispatch! send-response)
+      "sponsor-status" (handle-sponsor-status message sender dispatch! send-response)
+      "get-sponsored-username" (handle-get-sponsored-username message send-response)
+      "permission-granted" (handle-permission-granted message dispatch!)
+      (if (.startsWith msg-type "e2e/")
+        (handle-e2e-message {:config config :ensure-initialized-fn ensure-initialized-fn :dispatch! dispatch!} msg-type message send-response)
+        (handle-unknown-message msg-type)))))
+
 (defn add-on-message-handler
   "Register the chrome.runtime.onMessage handler.
    config and ensure-initialized-fn are passed to avoid circular deps."
   [config ensure-initialized-fn dispatch!]
   (.addListener js/chrome.runtime.onMessage
                 (fn [message sender send-response]
-                  (let [tab-id (when (.-tab sender) (.. sender -tab -id))
-                        msg-type (.-type message)]
-                    (case msg-type
-                      "ws-connect" (handle-ws-connect message tab-id dispatch!)
-                      "ws-send" (handle-ws-send message tab-id dispatch!)
-                      "ws-close" (handle-ws-close tab-id dispatch!)
-                      "ping" false
-                      "tab-became-visible" (handle-tab-became-visible tab-id dispatch!)
-                      "list-scripts" (handle-list-scripts message tab-id dispatch! send-response)
-                      "save-script" (handle-save-script message tab-id dispatch! send-response)
-                      "panel-save-script" (handle-panel-save-script message send-response)
-                      "panel-rename-script" (handle-panel-rename-script message send-response)
-                      "rename-script" (handle-rename-script message tab-id dispatch! send-response)
-                      "delete-script" (handle-delete-script message tab-id dispatch! send-response)
-                      "get-script" (handle-get-script message tab-id dispatch! send-response)
-                      "check-script-exists" (handle-check-script-exists message dispatch! send-response)
-                      "web-installer-save-script" (handle-web-installer-save-script message sender dispatch! send-response)
-                      "load-manifest" (handle-load-manifest message tab-id dispatch! send-response)
-                      "get-connections" (handle-get-connections dispatch! send-response)
-                      "get-runtime-status" (handle-get-runtime-status message dispatch! send-response)
-                      "loader-resolution-errors" (handle-loader-resolution-errors message sender dispatch!)
-                      "connect-tab" (handle-connect-tab message dispatch! send-response)
-                      "check-status" (handle-check-status message dispatch! send-response)
-                      "disconnect-tab" (handle-disconnect-tab message dispatch!)
-                      "toggle-fs-sync"
-                      (do (dispatch! [[:fs/ax.toggle-sync (.-tabId message) (.-enabled message) send-response]])
-                          true)
-                      "get-fs-sync-status"
-                      (do (dispatch! [[:fs/ax.get-sync-status send-response]])
-                          true)
-                      "capture-element" (handle-capture-element message sender send-response)
-                      "ensure-scittle" (handle-ensure-scittle message dispatch! send-response)
-                      "inject-libs" (handle-inject-libs message dispatch! send-response)
-                      "evaluate-script" (handle-evaluate-script message dispatch! send-response)
-                      "sponsor-status" (handle-sponsor-status message sender dispatch! send-response)
-                      "get-sponsored-username" (handle-get-sponsored-username message send-response)
-                      "permission-granted" (handle-permission-granted message dispatch!)
-                      (if (.startsWith msg-type "e2e/")
-                        (handle-e2e-message {:config config :ensure-initialized-fn ensure-initialized-fn :dispatch! dispatch!} msg-type message send-response)
-                        (handle-unknown-message msg-type)))))))
+                  (route-runtime-message
+                   {:config config
+                    :ensure-initialized-fn ensure-initialized-fn
+                    :dispatch! dispatch!}
+                   message sender send-response))))

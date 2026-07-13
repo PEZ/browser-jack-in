@@ -124,3 +124,37 @@
           (fn []
             (test "capture-element has correct registry entry"
                   test-capture-element-registry-entry)))
+
+;; ============================================================
+;; User storage message registry tests
+;; ============================================================
+
+(defn- storage-registry-entry? [msg-type]
+  (let [entry (get message-registry msg-type)]
+    (and entry
+         (contains? (:msg/sources entry) "epupp-page")
+         (not (contains? (:msg/sources entry) "epupp-userscript"))
+         (= true (:msg/response? entry)))))
+
+(defn- test-storage-get-registry-entry []
+  (-> (expect (storage-registry-entry? "storage-get")) (.toBe true)))
+
+(defn- test-storage-set-registry-entry []
+  (-> (expect (storage-registry-entry? "storage-set")) (.toBe true)))
+
+(defn- test-storage-remove-registry-entry []
+  (-> (expect (storage-registry-entry? "storage-remove")) (.toBe true)))
+
+(defn- test-storage-keys-registry-entry []
+  (-> (expect (storage-registry-entry? "storage-keys")) (.toBe true)))
+
+(defn- test-storage-clear-registry-entry []
+  (-> (expect (storage-registry-entry? "storage-clear")) (.toBe true)))
+
+(describe "user storage message registry"
+          (fn []
+            (test "storage-get has correct registry entry" test-storage-get-registry-entry)
+            (test "storage-set has correct registry entry" test-storage-set-registry-entry)
+            (test "storage-remove has correct registry entry" test-storage-remove-registry-entry)
+            (test "storage-keys has correct registry entry" test-storage-keys-registry-entry)
+            (test "storage-clear has correct registry entry" test-storage-clear-registry-entry)))

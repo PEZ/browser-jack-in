@@ -10,6 +10,7 @@
             [background-actions.history-actions :as history-actions]
             [background-actions.ws-actions :as ws-actions]
             [background-actions.sponsor-actions :as sponsor-actions]
+            [background-actions.user-kv-actions :as user-kv-actions]
             [background-utils :as bg-utils]))
 
 (def ^:private msg-action-set
@@ -56,6 +57,19 @@
    :runtime/ax.re-resolve-on-change true
    :ext-dep/ax.resolve-uncached-urls true
    :ext-dep/ax.cache-results true})
+
+(def ^:private user-kv-action-set
+  {:user-kv/ax.get true
+   :user-kv/ax.get-ready true
+   :user-kv/ax.set true
+   :user-kv/ax.set-ready true
+   :user-kv/ax.remove true
+   :user-kv/ax.remove-ready true
+   :user-kv/ax.keys true
+   :user-kv/ax.keys-ready true
+   :user-kv/ax.clear true
+   :user-kv/ax.clear-ready true
+   :user-kv/ax.write-respond true})
 
 ;; Simple delegation handlers for existing modules
 (def ^:private delegation-handlers
@@ -235,6 +249,9 @@
 
     (get dep-action-set action)
     (dep-actions/handle-action state uf-data action-vec)
+
+    (get user-kv-action-set action)
+    (user-kv-actions/handle-action state uf-data action-vec)
 
     (get delegation-handlers action)
     ((get delegation-handlers action) state uf-data args)
