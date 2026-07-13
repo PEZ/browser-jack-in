@@ -22,6 +22,11 @@ Via `window.postMessage` with source identifiers.
 | `web-installer-save-script` | `{code}` | Save script from whitelisted domain (web installer) |
 | `rename-script` | `{from, to, force?, requestId}` | Rename script (REPL FS write) |
 | `delete-script` | `{name, requestId, bulk-id?, bulk-index?, bulk-count?}` | Delete script (REPL FS write) |
+| `storage-get` | `{key, requestId}` | Get EDN string from user KV (`epuppUserKv`) |
+| `storage-set` | `{key, value, requestId}` | Set EDN string in user KV |
+| `storage-remove` | `{key, requestId}` | Remove key from user KV |
+| `storage-keys` | `{requestId}` | List user KV keys |
+| `storage-clear` | `{requestId}` | Clear user KV only |
 | `get-sponsored-username` | - | Get configured sponsor username |
 | `get-icon-url` | `{requestId}` | Get extension icon URL (handled locally by bridge) |
 | `log` | `{level, subsystem, messages}` | Log from page context (handled locally by bridge) |
@@ -46,6 +51,11 @@ Via `window.postMessage` with source identifiers.
 | `save-script-response` | `{success, requestId, error?, fs/name?, fs/modified?, fs/created?, fs/auto-run-match?, fs/enabled?, fs/description?, fs/run-at?, fs/inject?, fs/unchanged?}` | Response for `save-script` |
 | `rename-script-response` | `{success, requestId, error?, fs/name?, fs/modified?, fs/created?, fs/auto-run-match?, fs/enabled?, fs/description?, fs/run-at?, fs/inject?, fs/from-name?, fs/to-name?}` | Response for `rename-script` |
 | `delete-script-response` | `{success, requestId, error?, fs/name?, fs/modified?, fs/created?, fs/auto-run-match?, fs/enabled?, fs/description?, fs/run-at?, fs/inject?}` | Response for `delete-script` |
+| `storage-get-response` | `{success, requestId, error?, value?}` | Response for `storage-get`; `value` is an EDN string when present |
+| `storage-set-response` | `{success, requestId, error?, value?}` | Response for `storage-set`; `value` is the stored EDN string |
+| `storage-remove-response` | `{success, requestId, error?}` | Response for `storage-remove` |
+| `storage-keys-response` | `{success, requestId, error?, keys?}` | Response for `storage-keys`; `keys` is a string array |
+| `storage-clear-response` | `{success, requestId, error?}` | Response for `storage-clear` |
 | `get-icon-url-response` | `{url, requestId}` | Response for `get-icon-url` |
 
 ## Content Bridge ↔ Background
@@ -139,6 +149,42 @@ preserving the source script's identity, but built-in targets still reject. All
 FS operations (reads and writes) return an error when FS REPL Sync is not
 enabled for the requesting tab or the tab has no active WebSocket connection.
 Only one tab can have FS sync enabled at a time.
+
+## User Storage (`epupp.storage`)
+
+User storage extends the page bridge with key-value operations on the `epuppUserKv` blob in `chrome.storage.local`. The page sends a request with `requestId` and receives a response with the same `requestId` so callers can resolve the right promise. No FS REPL Sync is required.
+
+Values are EDN strings on the wire. The page-side `epupp.storage` API owns `pr-str` encoding and `edn/read-string` decoding; the background stores opaque strings in the user bucket only. `clear!` empties `epuppUserKv` and does not touch `scripts` or extension settings.
+
+### Page → Content Bridge (source: "epupp-page")
+
+| Type | Payload | Purpose |
+|------|---------|---------|
+| `storage-get` | `{key, requestId}` | Get EDN string from user KV |
+| `storage-set` | `{key, value, requestId}` | Set EDN string in user KV |
+| `storage-remove` | `{key, requestId}` | Remove key from user KV |
+| `storage-keys` | `{requestId}` | List user KV keys |
+| `storage-clear` | `{requestId}` | Clear user KV only |
+
+### Content Bridge → Page (source: "epupp-bridge")
+
+| Type | Payload | Purpose |
+|------|---------|---------|
+| `storage-get-response` | `{success, requestId, error?, value?}` | Response for `storage-get`; `value` is an EDN string when present |
+| `storage-set-response` | `{success, requestId, error?, value?}` | Response for `storage-set`; `value` is the stored EDN string |
+| `storage-remove-response` | `{success, requestId, error?}` | Response for `storage-remove` |
+| `storage-keys-response` | `{success, requestId, error?, keys?}` | Response for `storage-keys`; `keys` is a string array |
+| `storage-clear-response` | `{success, requestId, error?}` | Response for `storage-clear` |
+
+### Content Bridge → Background
+
+| Type | Payload | Purpose |
+|------|---------|---------|
+| `storage-get` | `{key, requestId}` | Read EDN string from user KV |
+| `storage-set` | `{key, value, requestId}` | Write EDN string to user KV |
+| `storage-remove` | `{key, requestId}` | Remove key from user KV |
+| `storage-keys` | `{requestId}` | List user KV keys |
+| `storage-clear` | `{requestId}` | Clear user KV only |
 
 ## Popup/Panel → Background
 

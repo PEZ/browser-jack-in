@@ -362,6 +362,7 @@ External CSS URLs are supported alongside `scittle://` and `epupp://` dependenci
 | Inject URL | Namespace | Description |
 |------------|-----------|-------------|
 | `epupp://epupp/ui.cljs` | `epupp.ui` | Epupp branding components: icon, header, banner hiccup |
+| `epupp://epupp/storage.cljs` | `epupp.storage` | User key-value storage in extension (`get`/`set!`/`remove!`/`keys`/`clear!`) |
 
 Built-in libraries are always available - just add the inject URL and require the namespace.
 
@@ -373,6 +374,7 @@ These namespaces are automatically available when the REPL connects - no `:epupp
 |-----------|-------------|
 | `epupp.repl` | REPL utilities including `manifest!` for library loading |
 | `epupp.fs` | File system operations: `ls`, `show`, `save!`, `mv!`, `rm!` |
+| `epupp.storage` | User key-value storage (also available via inject) |
 | `epupp.tools` | Element and viewport screenshot capture |
 
 #### `epupp.tools` - Capture Elements
@@ -396,6 +398,22 @@ These namespaces are automatically available when the REPL connects - no `:epupp
 ```
 
 All three functions are `^:async` and return Promises. Options: `:format` (`"jpeg"` or `"png"`, default `"jpeg"`), `:quality` (0-100, default 75). Large data URLs can overwhelm the nREPL/WebSocket transport, killing the connection.
+
+#### `epupp.storage` - User Key-Value Storage
+
+`epupp.storage` is available automatically when the REPL connects. It can also be loaded via `epupp://epupp/storage.cljs` in `:epupp/inject`. Persist EDN-readable values in the extension's user storage bucket:
+
+```clojure
+(require '[epupp.storage :as storage])
+
+(await (storage/set! :my/settings {:ui/theme :theme/dark}))
+(await (storage/get :my/settings))
+(await (storage/keys))
+(await (storage/remove! :my/settings))
+(await (storage/clear!))
+```
+
+All functions are `^:async` and return Promises. Values must be EDN-readable. No FS REPL Sync is required. Storage shares the `chrome.storage.local` quota with scripts and settings. `clear!` empties only the user bucket (`epuppUserKv`), not scripts or extension settings.
 
 ### Library Namespaces
 

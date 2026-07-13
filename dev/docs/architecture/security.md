@@ -122,7 +122,7 @@ Key message categories:
 
 | Auth Model | Messages | Purpose |
 |------------|----------|---------|
-| `:auth/none` | `ws-connect`, `load-manifest`, `check-script-exists`, `get-sponsored-username` | Open access (read-only or low-risk) |
+| `:auth/none` | `ws-connect`, `load-manifest`, `check-script-exists`, `get-sponsored-username`, `capture-element`, `storage-get`, `storage-set`, `storage-remove`, `storage-keys`, `storage-clear` | Open access (read-only or low-risk) |
 | `:auth/connected` | `ws-send` | Requires active REPL connection |
 | `:auth/fs-sync+ws` | `list-scripts`, `get-script`, `save-script`, `rename-script`, `delete-script` | Requires FS REPL Sync enabled for the requesting tab AND active WebSocket connection |
 | `:auth/domain-whitelist` | `web-installer-save-script` | Domain-gated save for web installer |
@@ -133,6 +133,8 @@ The registry in `content_bridge.cljs` is the authoritative whitelist - see it fo
 **Domain whitelist for web installer**: The `web-installer-save-script` message only succeeds from whitelisted domains (github.com, gist.github.com, gitlab.com, codeberg.org, localhost, 127.0.0.1). Non-whitelisted domains trigger a copy-paste fallback in the installer UI.
 
 When adding new forwarded message types, consider: "What if any page script could call this?" If the answer involves privilege escalation, don't forward it.
+
+Any page script that can `postMessage` with `source: "epupp-page"` can call user storage (`storage-*` messages). The sandbox is the `epuppUserKv` blob in `chrome.storage.local`; it does not touch `scripts` or extension settings. Contrast with `epupp.fs`, which requires `:auth/fs-sync+ws` and can read or modify the userscript catalog.
 
 ## Host Permissions (Firefox)
 
