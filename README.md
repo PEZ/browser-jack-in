@@ -406,14 +406,19 @@ All three functions are `^:async` and return Promises. Options: `:format` (`"jpe
 ```clojure
 (require '[epupp.storage :as storage])
 
-(await (storage/set! :my/settings {:ui/theme :theme/dark}))
-(await (storage/get :my/settings))
-(await (storage/keys))
-(await (storage/remove! :my/settings))
-(await (storage/clear!))
+(defn ^:async demo-storage []
+  (await (storage/set! :my/settings {:ui/theme :theme/dark}))
+  {:got (await (storage/get :my/settings))
+   :keys (await (storage/keys))
+   :after-remove (do (await (storage/remove! :my/settings))
+                     (await (storage/get :my/settings)))
+   :keys-after-clear (do (await (storage/clear!))
+                         (await (storage/keys)))})
+
+(demo-storage)
 ```
 
-All functions are `^:async` and return Promises. Values must be EDN-readable. Storage shares the `chrome.storage.local` quota with scripts and settings. (Though the functions only access a user storage bucket there, so e.g. `clear!` empties only the user bucket, not scripts or extension settings.)
+Values must be EDN-readable. Storage shares the `chrome.storage.local` quota with scripts and settings.
 
 ### Library Namespaces
 
