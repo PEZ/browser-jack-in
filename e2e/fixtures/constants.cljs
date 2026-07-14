@@ -28,6 +28,6 @@
 
 (def builtin-script-count
   "Number of built-in scripts in test/dev builds.
-   Test/dev builds include internal helpers, ui, web installer,
+   Test/dev builds include internal helpers, ui, storage, web installer,
    sponsor, and security probe."
-  5)
+  6)
