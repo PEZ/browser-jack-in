@@ -178,7 +178,8 @@
         :runtime-error (get errors (:script/name script))}])))
 
 (defn- matching-url-shadow? [current-url shadow-item]
-  (and (not (script-utils/special-script? (:item shadow-item)))
+  (and (not (script-utils/internal-script? (:item shadow-item)))
+       (not (script-utils/special-script? (:item shadow-item)))
        (url-matching/get-matching-pattern current-url (:item shadow-item))))
 
 (defn matching-scripts-section [dispatch! {:scripts/keys [list current-url]
@@ -208,7 +209,9 @@
    {:keys [filter-fn sort-fn empty-text empty-hint]}]
   (let [sort-comparator (or sort-fn default-script-sort)
         filtered (->> scripts-shadow
-                      (filterv filter-fn)
+                      (filterv (fn [shadow-item]
+                                 (and (not (script-utils/internal-script? (:item shadow-item)))
+                                      (filter-fn shadow-item))))
                       (sort-by sort-comparator))
         modified-set (or recently-modified-scripts #{})
         error-map (or errors {})]
@@ -264,21 +267,22 @@
 ;; ============================================================
 
 (defn categorize-scripts [scripts current-url]
-  {:special (->> scripts (filterv script-utils/special-script?))
-   :matching (->> scripts
+  (let [scripts (->> scripts (filterv (complement script-utils/internal-script?)))]
+    {:special (->> scripts (filterv script-utils/special-script?))
+     :matching (->> scripts
+                    (filterv #(and (not (script-utils/special-script? %))
+                                   (url-matching/get-matching-pattern current-url %))))
+     :other-autorun (->> scripts
+                         (filterv (fn [s]
+                                    (and (not (script-utils/special-script? s))
+                                         (seq (:script/match s))
+                                         (not (url-matching/get-matching-pattern current-url s))))))
+     :manual (->> scripts
                   (filterv #(and (not (script-utils/special-script? %))
-                                 (url-matching/get-matching-pattern current-url %))))
-   :other-autorun (->> scripts
-                       (filterv (fn [s]
-                                  (and (not (script-utils/special-script? s))
-                                       (seq (:script/match s))
-                                       (not (url-matching/get-matching-pattern current-url s))))))
-   :manual (->> scripts
-                (filterv #(and (not (script-utils/special-script? %))
-                               (not (script-utils/library-script? %))
-                               (empty? (:script/match %)))))
-   :library (->> scripts
-                 (filterv (fn [s]
-                            (and (script-utils/library-script? s)
-                                 (not (script-utils/special-script? s))
-                                 (empty? (:script/match s))))))})
+                                 (not (script-utils/library-script? %))
+                                 (empty? (:script/match %)))))
+     :library (->> scripts
+                   (filterv (fn [s]
+                              (and (script-utils/library-script? s)
+                                   (not (script-utils/special-script? s))
+                                   (empty? (:script/match s))))))}))

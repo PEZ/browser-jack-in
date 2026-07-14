@@ -2,7 +2,7 @@
   "E2E tests for popup 3-way script grouping (manual / matching / other)."
   (:require ["@playwright/test" :refer [test expect]]
             [clojure.string :as str]
-            [fixtures.constants :refer [builtin-script-count]]
+            [fixtures.constants :refer [visible-builtin-script-count]]
             [fixtures.browser :refer [launch-browser get-extension-id]]
             [fixtures.pages :refer [create-popup-page create-panel-page]]
             [fixtures.messaging :refer [clear-storage]]
@@ -66,7 +66,7 @@
             other-section (.locator popup "[data-e2e-section=\"other-scripts\"]")]
 
         ;; Wait for all scripts to load (builtin + 3 user scripts)
-        (js-await (wait-for-script-count popup (+ builtin-script-count 3)))
+        (js-await (wait-for-script-count popup (+ visible-builtin-script-count 3)))
 
         ;; Manual script appears in manual-scripts section
         (js-await (-> (expect (.locator manual-section ".script-item[data-script-name=\"manual_test.cljs\"]"))
@@ -115,7 +115,7 @@
             other-section (.locator popup "[data-e2e-section=\"other-scripts\"]")]
 
         ;; Wait for builtins to load
-        (js-await (wait-for-script-count popup builtin-script-count))
+        (js-await (wait-for-script-count popup visible-builtin-script-count))
 
         ;; Special section exists and is visible
         (js-await (-> (expect special-section)
@@ -158,7 +158,7 @@
             special-section (.locator popup "[data-e2e-section=\"special\"]")]
 
         ;; Wait for builtins to load
-        (js-await (wait-for-script-count popup builtin-script-count))
+        (js-await (wait-for-script-count popup visible-builtin-script-count))
 
         ;; Special section exists
         (js-await (-> (expect special-section)

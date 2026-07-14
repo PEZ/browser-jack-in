@@ -412,3 +412,9 @@
 
       (when (confirm "Proceed with release?")
         (execute-release! new-version dev-version unreleased-content issue-numbers)))))
+
+(defn test-watch-squint!
+  "Watch src/ and test/; full squint compile into build/test on change.
+   Avoids squint watch nested-directory relative-import bugs."
+  []
+  (p/shell "node" "scripts/watch-squint-tests.mjs"))

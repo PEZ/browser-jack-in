@@ -27,7 +27,11 @@
 ;; =============================================================================
 
 (def builtin-script-count
-  "Number of built-in scripts in test/dev builds.
-   Test/dev builds include internal helpers, ui, storage, tools, web installer,
-   sponsor, and security probe."
+  "Total built-in scripts in test/dev builds (includes epupp/internal/*).
+   Use for panel scripts-list counts (data-e2e-scripts-count)."
   7)
+
+(def visible-builtin-script-count
+  "Built-ins shown in the popup UI (excludes epupp/internal/*).
+   Use for popup .script-item waits."
+  6)

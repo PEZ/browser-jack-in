@@ -55,16 +55,17 @@
                   :task (apply babashka.process/shell "npx squint compile" *command-line-args*)}
 
   ;; Test tasks
-  test:watch:squint {:doc "Watch and compile test files"
-                     :task (babashka.process/shell "npx squint watch --paths src test --output-dir build/test")}
+  test:watch:squint {:doc "Watch src+test and full-compile into build/test (avoids squint watch nested import bug)"
+                     :task (tasks/test-watch-squint!)}
 
   test:watch:vitest {:doc "Run Vitest in watch mode"
-                     :task (babashka.process/shell "npx vitest --changed=false")}
+                     :task (babashka.process/shell "npx vitest")}
 
   -test:watch {:depends [test:watch:squint test:watch:vitest]}
 
-  test:watch {:doc "Start test watchers (Squint + Vitest) in parallel"
-              :task (run '-test:watch {:parallel true})}
+  test:watch {:doc "Compile tests once, then watch (full recompile + Vitest) in parallel"
+              :task (do (babashka.process/shell "npx squint compile --paths src test --output-dir build/test")
+                        (run '-test:watch {:parallel true}))}
 
   test {:doc "Run tests once"
         :task (do (babashka.process/shell "npx squint compile --paths src test --output-dir build/test")

@@ -2,7 +2,7 @@
   "E2E tests for the Libraries popup section.
 
    Tests that:
-   1. Built-in libraries (helpers.cljs, ui.cljs) appear in the Libraries section
+   1. Built-in libraries (ui.cljs, storage.cljs, tools.cljs) appear in the Libraries section
    2. User library with :epupp/library? true appears in Libraries section
    3. Library with auto-run-match appears in matching section, NOT Libraries"
   (:require ["@playwright/test" :refer [test expect]]
@@ -65,11 +65,17 @@
 
         ;; Verify built-in libraries appear in the Libraries section
         (let [lib-section (.locator popup "[data-e2e-section=\"libraries\"]")]
-          ;; helpers.cljs should be in the Libraries section
+          ;; helpers.cljs is internal and should NOT appear in popup
           (js-await (-> (expect (.locator lib-section ".script-item[data-script-name='epupp/internal/helpers.cljs']"))
-                        (.toBeVisible #js {:timeout 2000})))
+                        (.not.toBeVisible #js {:timeout 2000})))
           ;; ui.cljs should be in the Libraries section
           (js-await (-> (expect (.locator lib-section ".script-item[data-script-name='epupp/ui.cljs']"))
+                        (.toBeVisible #js {:timeout 2000})))
+          ;; storage.cljs should be in the Libraries section
+          (js-await (-> (expect (.locator lib-section ".script-item[data-script-name='epupp/storage.cljs']"))
+                        (.toBeVisible #js {:timeout 2000})))
+          ;; tools.cljs should be in the Libraries section
+          (js-await (-> (expect (.locator lib-section ".script-item[data-script-name='epupp/tools.cljs']"))
                         (.toBeVisible #js {:timeout 2000}))))
 
         (js-await (assert-no-errors! popup))
@@ -166,7 +172,7 @@
 
 (.describe test "Library Section: popup categorization"
            (fn []
-             (test "Library Section: built-in libraries appear in Libraries section"
+             (test "Library Section: public built-in libraries appear in Libraries section"
                    test_builtin_libraries_in_libraries_section)
 
              (test "Library Section: user library with :epupp/library? appears in Libraries"

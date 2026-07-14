@@ -114,3 +114,50 @@
     (test "library-only script (no match) goes to libraries section" test-classify-library-only-no-match)
     (test "library with match patterns goes to matching, not libraries" test-classify-library-with-match-goes-to-matching)
     (test "non-library script (no match) goes to manual section" test-classify-non-library-no-match-goes-to-manual)))
+
+;; ============================================================
+;; internal-script? predicate tests
+;; ============================================================
+
+(defn- test-internal-script-true-for-epupp-internal-path []
+  (let [script {:script/name "epupp/internal/helpers.cljs"}]
+    (-> (expect (script-utils/internal-script? script))
+        (.toBe true))))
+
+(defn- test-internal-script-false-for-other-names []
+  (let [script {:script/name "epupp/ui.cljs"}]
+    (-> (expect (script-utils/internal-script? script))
+        (.toBe false))))
+
+(defn- test-internal-script-false-when-name-missing []
+  (-> (expect (script-utils/internal-script? {}))
+      (.toBe false)))
+
+(describe "internal-script? predicate"
+  (fn []
+    (test "returns true for epupp/internal/ scripts" test-internal-script-true-for-epupp-internal-path)
+    (test "returns false for other script names" test-internal-script-false-for-other-names)
+    (test "returns false when script name is missing" test-internal-script-false-when-name-missing)))
+
+;; ============================================================
+;; filtered-script-section internal exclusion tests
+;; ============================================================
+
+(defn- shadow-visible-in-filtered-section? [shadow-item section-filter-fn]
+  (and (not (script-utils/internal-script? (:item shadow-item)))
+       (section-filter-fn shadow-item)))
+
+(defn- test-filtered-section-excludes-internal-script []
+  (let [internal-shadow {:item {:script/name "epupp/internal/helpers.cljs"
+                                :script/match []}}
+        manual-filter (fn [{:keys [item]}]
+                        (and (not (script-utils/special-script? item))
+                             (not (script-utils/library-script? item))
+                             (empty? (:script/match item))))]
+    (-> (expect (shadow-visible-in-filtered-section? internal-shadow manual-filter))
+        (.toBe false))))
+
+(describe "filtered-script-section internal exclusion"
+  (fn []
+    (test "excludes epupp/internal/ scripts even when section filter matches"
+          test-filtered-section-excludes-internal-script)))

@@ -294,6 +294,12 @@
   [script]
   (boolean (:script/library? script)))
 
+(defn internal-script?
+  "True when script name is under epupp/internal/ (implementation deps, not for popup UI)."
+  [script]
+  (let [name (or (:script/name script) "")]
+    (.startsWith name "epupp/internal/")))
+
 (defn name-matches-builtin?
   "Check if a normalized script name matches any builtin script's normalized name.
    Used to prevent creating scripts with names that would shadow builtins."

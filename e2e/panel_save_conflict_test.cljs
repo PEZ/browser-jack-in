@@ -1,7 +1,7 @@
 (ns e2e.panel-save-conflict-test
   "E2E tests for panel name conflict detection and overwrite functionality."
   (:require ["@playwright/test" :refer [test expect]]
-            [fixtures.constants :refer [builtin-script-count]]
+            [fixtures.constants :refer [builtin-script-count visible-builtin-script-count]]
             [fixtures.browser :refer [launch-browser get-extension-id]]
             [fixtures.pages :refer [create-panel-page]]
             [fixtures.messaging :refer [clear-storage]]
@@ -58,7 +58,7 @@
                                        {:name "Script B" :match "*://github.com/*"
                                         :code "(println \"Script B\")"
                                         :expected-filename "script_b.cljs"}))
-      (js-await (open-popup-and-inspect! context ext-id (+ builtin-script-count 2) "script_a.cljs"))
+      (js-await (open-popup-and-inspect! context ext-id (+ visible-builtin-script-count 2) "script_a.cljs"))
 
       ;; === PHASE 4: Edit script A and change name to script B's name ===
       (let [panel (js-await (create-panel-page context ext-id))
@@ -96,7 +96,7 @@
                                        {:name "Target Script" :match "*://github.com/*"
                                         :code "(println \"Target content\")"
                                         :expected-filename "target_script.cljs"}))
-      (js-await (open-popup-and-inspect! context ext-id (+ builtin-script-count 2) "original_script.cljs"))
+      (js-await (open-popup-and-inspect! context ext-id (+ visible-builtin-script-count 2) "original_script.cljs"))
 
       ;; === PHASE 4: Rename to target name and click Overwrite ===
       (let [panel (js-await (create-panel-page context ext-id))
@@ -119,7 +119,7 @@
             popup-url (str "chrome-extension://" ext-id "/popup.html")]
         (js-await (.goto popup popup-url #js {:timeout 1000}))
         (js-await (wait-for-popup-ready popup))
-        (js-await (wait-for-script-count popup (+ builtin-script-count 2)))
+        (js-await (wait-for-script-count popup (+ visible-builtin-script-count 2)))
         (js-await (-> (expect (.locator popup ".script-item:has-text(\"target_script.cljs\")")) (.toBeVisible)))
         (js-await (-> (expect (.locator popup ".script-item:has-text(\"original_script.cljs\")")) (.toBeVisible)))
         (js-await (assert-no-errors! popup))

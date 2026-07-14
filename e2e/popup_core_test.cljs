@@ -2,7 +2,7 @@
   "E2E tests for popup core functionality - REPL setup, scripts, hints."
   (:require ["@playwright/test" :refer [test expect]]
             [clojure.string :as str]
-            [fixtures.constants :refer [builtin-script-count]]
+            [fixtures.constants :refer [visible-builtin-script-count]]
             [fixtures.browser :refer [launch-browser get-extension-id]]
             [fixtures.pages :refer [create-popup-page create-panel-page]]
             [fixtures.messaging :refer [clear-storage]]
@@ -99,7 +99,7 @@
       ;; Names are normalized: "Script One" -> "script_one.cljs"
       (let [popup (js-await (create-popup-page context ext-id))]
         ;; built-in + 2 user scripts
-        (js-await (wait-for-script-count popup (+ builtin-script-count 2)))
+        (js-await (wait-for-script-count popup (+ visible-builtin-script-count 2)))
 
         ;; Verify script action buttons exist (inspect, run, delete)
         (let [item (.locator popup ".script-item:has-text(\"script_one.cljs\")")]
@@ -124,7 +124,7 @@
           (js-await (.click delete-btn))
           ;; remaining: built-in + script_one.cljs
           (js-await (-> (expect (.locator popup ".script-item"))
-                        (.toHaveCount (+ builtin-script-count 1) #js {:timeout 2000}))))
+                        (.toHaveCount (+ visible-builtin-script-count 1) #js {:timeout 2000}))))
 
         (js-await (.close popup)))
 

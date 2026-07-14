@@ -6,7 +6,7 @@
    - document-start scripts are injected via registration system"
   (:require ["@playwright/test" :refer [test expect]]
             [clojure.string :as str]
-            [fixtures.constants :refer [builtin-script-count]]
+            [fixtures.constants :refer [visible-builtin-script-count]]
             [fixtures.browser :refer [launch-browser get-extension-id]]
             [fixtures.pages :refer [create-panel-page create-popup-page]]
             [fixtures.wait :refer [wait-for-panel-ready wait-for-popup-ready
@@ -32,7 +32,7 @@
   [context ext-id script-filename]
   (let [popup (js-await (create-popup-page context ext-id))]
     (js-await (wait-for-popup-ready popup))
-    (js-await (wait-for-script-count popup (+ builtin-script-count 1)))
+    (js-await (wait-for-script-count popup (+ visible-builtin-script-count 1)))
     (let [script-item (.locator popup (str ".script-item:has-text(\"" script-filename "\")"))
           checkbox (.locator script-item "input[type='checkbox']")]
       (js-await (-> (expect checkbox) (.not.toBeChecked)))

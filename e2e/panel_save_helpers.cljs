@@ -1,7 +1,7 @@
 (ns panel-save-helpers
   (:require ["@playwright/test" :refer [expect]]
             [clojure.string :as string]
-            [fixtures.constants :refer [builtin-script-count]]
+            [fixtures.constants :refer [visible-builtin-script-count]]
             [fixtures.pages :refer [create-panel-page]]
             [fixtures.messaging :refer [clear-storage]]
             [fixtures.wait :refer [wait-for-panel-ready wait-for-popup-ready
@@ -68,7 +68,7 @@
         popup-url (str "chrome-extension://" ext-id "/popup.html")]
     (js-await (.goto popup popup-url #js {:timeout 1000}))
     (js-await (wait-for-popup-ready popup))
-    (js-await (wait-for-script-count popup (+ builtin-script-count expected-count)))
+    (js-await (wait-for-script-count popup (+ visible-builtin-script-count expected-count)))
     (doseq [n visible]
       (js-await (-> (expect (.locator popup (str ".script-item:has-text(\"" n "\")")))
                     (.toBeVisible))))

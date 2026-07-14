@@ -1,7 +1,7 @@
 (ns e2e.panel-save-create-test
   "E2E tests for DevTools panel save create functionality."
   (:require ["@playwright/test" :refer [test expect]]
-            [fixtures.constants :refer [builtin-script-count]]
+            [fixtures.constants :refer [visible-builtin-script-count]]
             [fixtures.browser :refer [launch-browser get-extension-id]]
             [fixtures.pages :refer [create-panel-page]]
             [fixtures.messaging :refer [clear-storage]]
@@ -63,7 +63,7 @@
         popup-url (str "chrome-extension://" ext-id "/popup.html")]
     (js-await (.goto popup popup-url #js {:timeout 1000}))
     (js-await (wait-for-popup-ready popup))
-    (js-await (wait-for-script-count popup (+ builtin-script-count 1)))
+    (js-await (wait-for-script-count popup (+ visible-builtin-script-count 1)))
     (let [script-item (.locator popup ".script-item:has-text(\"my_cool_script.cljs\")")
           inspect-btn (.locator script-item "button.script-inspect")]
       (js-await (.click inspect-btn))
@@ -95,7 +95,7 @@
         popup-url (str "chrome-extension://" ext-id "/popup.html")]
     (js-await (.goto popup popup-url #js {:timeout 1000}))
     (js-await (wait-for-popup-ready popup))
-    (js-await (wait-for-script-count popup (+ builtin-script-count 2)))
+    (js-await (wait-for-script-count popup (+ visible-builtin-script-count 2)))
     (js-await (-> (expect (.locator popup ".script-item:has-text(\"my_cool_script.cljs\")"))
                   (.toBeVisible)))
     (js-await (-> (expect (.locator popup ".script-item:has-text(\"new_script_name.cljs\")"))
