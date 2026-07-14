@@ -6,8 +6,11 @@ Changes to Epupp
 
 ## [Unreleased]
 
+## [0.0.21] - 2026-07-14
+
 - Add `epupp.storage` API
 - Make **epupp.tools** available to userscripts via `epupp://epupp/tools.cljs`
+
 
 ## [0.0.20] - 2026-05-13
 
