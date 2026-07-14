@@ -413,7 +413,7 @@ All three functions are `^:async` and return Promises. Options: `:format` (`"jpe
 (await (storage/clear!))
 ```
 
-All functions are `^:async` and return Promises. Values must be EDN-readable. No FS REPL Sync is required. Storage shares the `chrome.storage.local` quota with scripts and settings. `clear!` empties only the user bucket (`epuppUserKv`), not scripts or extension settings.
+All functions are `^:async` and return Promises. Values must be EDN-readable. Storage shares the `chrome.storage.local` quota with scripts and settings. (Though the functions only access a user storage bucket there, so e.g. `clear!` empties only the user bucket, not scripts or extension settings.)
 
 ### Library Namespaces
 
