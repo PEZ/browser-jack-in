@@ -93,11 +93,11 @@
    {:id "epupp-fs"
     :path "bundled/epupp/fs.cljs"}
    {:id "epupp-internal-helpers"
-    :path "bundled/epupp/internal/helpers.cljs"}
+    :path "userscripts/epupp/internal/helpers.cljs"}
    {:id "epupp-storage"
-    :path "bundled/epupp/storage.cljs"}
+    :path "userscripts/epupp/storage.cljs"}
    {:id "epupp-tools"
-    :path "bundled/epupp/tools.cljs"}])
+    :path "userscripts/epupp/tools.cljs"}])
 
 (defn ^:async fetch-text!
   [url]
@@ -176,7 +176,7 @@
     true))
 
 (defn ^:async inject-epupp-api!
-  "Inject Epupp REPL API namespaces from bundled Scittle source files."
+  "Inject Epupp REPL API namespaces from packaged Scittle source files."
   [tab-id]
   (try
     (let [trigger-url (js/chrome.runtime.getURL "trigger-scittle.js")]
@@ -197,9 +197,6 @@
       true)
     (catch :default err
       (log/error "Background:REPL" "Failed to inject Epupp API:" err)
-      (js-await (test-logger/log-event! "EPUPP_API_INJECT_ERROR"
-                                        {:tab-id tab-id
-                                         :error (.-message err)}))
       false)))
 
 (defn ^:async connect-tab!

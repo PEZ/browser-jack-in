@@ -63,15 +63,17 @@ sequenceDiagram
 
 ## The `epupp` Namespace
 
-At connect time, Epupp injects its API namespaces from bundled Scittle source files:
+At connect time, Epupp injects its API namespaces from Scittle source files:
 
 | File | Namespace | Purpose |
 |------|-----------|--------|
 | `bundled/epupp/repl.cljs` | `epupp.repl` | REPL utilities including `manifest!` for library loading |
 | `bundled/epupp/fs.cljs` | `epupp.fs` | File system operations: `show`, `ls`, `save!`, `mv!`, `rm!` |
-| `bundled/epupp/internal/helpers.cljs` | `epupp.internal.helpers` | Shared helpers (dependency of `epupp.tools` and `epupp.storage`) |
-| `bundled/epupp/storage.cljs` | `epupp.storage` | User key-value storage: `get`, `set!`, `remove!`, `keys`, `clear!` |
-| `bundled/epupp/tools.cljs` | `epupp.tools` | Element and viewport screenshot capture |
+| `userscripts/epupp/internal/helpers.cljs` | `epupp.internal.helpers` | Shared helpers (dependency of `epupp.tools` and `epupp.storage`) |
+| `userscripts/epupp/storage.cljs` | `epupp.storage` | User key-value storage: `get`, `set!`, `remove!`, `keys`, `clear!` |
+| `userscripts/epupp/tools.cljs` | `epupp.tools` | Element and viewport screenshot capture |
+
+REPL-only APIs (`repl`, `fs`) live under `extension/bundled/epupp/`. Dual-delivery APIs (`helpers`, `storage`, `tools`) have a single source under `extension/userscripts/epupp/` — used both as built-in libraries (via `epupp://` inject) and injected at REPL connect.
 
 The injection uses the same pattern as userscripts: background fetches file content via `chrome.runtime.getURL`, sends it to the content bridge via `inject-userscript` message (creating inline `<script type="application/x-scittle">` tags), and triggers Scittle evaluation.
 

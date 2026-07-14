@@ -50,7 +50,8 @@
 (defn- test-bundled-builtin-ids-include-internal-helpers []
   (let [ids (storage/bundled-builtin-ids)]
     (-> (expect ids) (.toContain "epupp-builtin-internal-helpers"))
-    (-> (expect ids) (.toContain "epupp-builtin-storage"))))
+    (-> (expect ids) (.toContain "epupp-builtin-storage"))
+    (-> (expect ids) (.toContain "epupp-builtin-tools"))))
 
 ;; ============================================================
 ;; Built-in update detection tests
@@ -157,7 +158,7 @@
           (fn []
             (test "removes stale built-ins" test-removes-stale-builtins)
             (test "existing built-in preserves enabled state" test-existing-builtin-preserves-enabled-state)
-            (test "bundled built-in ids include internal helpers and storage" test-bundled-builtin-ids-include-internal-helpers)))
+            (test "bundled built-in ids include internal helpers, storage, and tools" test-bundled-builtin-ids-include-internal-helpers)))
 
 (describe "Built-in script update detection"
           (fn []

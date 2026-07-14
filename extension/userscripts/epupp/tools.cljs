@@ -1,3 +1,8 @@
+{:epupp/script-name "epupp/tools.cljs"
+ :epupp/description "Element and viewport screenshot capture."
+ :epupp/library? true
+ :epupp/inject ["epupp://epupp/internal/helpers.cljs"]}
+
 (ns epupp.tools
   (:require [epupp.internal.helpers :as helpers]))
 

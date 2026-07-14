@@ -53,6 +53,10 @@
     :path "userscripts/epupp/storage.cljs"
     :name "epupp/storage.cljs"
     :always-enabled? true}
+   {:script/id "epupp-builtin-tools"
+    :path "userscripts/epupp/tools.cljs"
+    :name "epupp/tools.cljs"
+    :always-enabled? true}
    {:script/id "epupp-builtin-web-userscript-installer"
     :path "userscripts/epupp/web_userscript_installer.cljs"
     :name "epupp/web_userscript_installer.cljs"

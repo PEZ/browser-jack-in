@@ -363,6 +363,7 @@ External CSS URLs are supported alongside `scittle://` and `epupp://` dependenci
 |------------|-----------|-------------|
 | `epupp://epupp/ui.cljs` | `epupp.ui` | Epupp branding components: icon, header, banner hiccup |
 | `epupp://epupp/storage.cljs` | `epupp.storage` | User key-value storage in extension (`get`/`set!`/`remove!`/`keys`/`clear!`) |
+| `epupp://epupp/tools.cljs` | `epupp.tools` | Element and viewport screenshot capture |
 
 Built-in libraries are always available - just add the inject URL and require the namespace.
 
@@ -375,11 +376,11 @@ These namespaces are automatically available when the REPL connects - no `:epupp
 | `epupp.repl` | REPL utilities including `manifest!` for library loading |
 | `epupp.fs` | File system operations: `ls`, `show`, `save!`, `mv!`, `rm!` |
 | `epupp.storage` | User key-value storage (also available via inject) |
-| `epupp.tools` | Element and viewport screenshot capture |
+| `epupp.tools` | Element and viewport screenshot capture (also available via inject) |
 
 #### `epupp.tools` - Capture Elements
 
-`epupp.tools` is available automatically when the REPL connects. Capture screenshots of DOM elements or the visible viewport as data URL images:
+`epupp.tools` is available automatically when the REPL connects. It can also be loaded via `epupp://epupp/tools.cljs` in `:epupp/inject`. Capture screenshots of DOM elements or the visible viewport as data URL images:
 
 ```clojure
 (require '[epupp.tools :as tools])

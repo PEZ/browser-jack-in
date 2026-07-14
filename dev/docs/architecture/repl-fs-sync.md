@@ -95,12 +95,13 @@ before returning to the REPL caller.
 
 When a tab connects, the background worker injects the Scittle API namespaces
 into the page. The list of injected files is maintained in `epupp-api-files`.
-`inject-epupp-api!` fetches each bundled `.cljs` file and sends it to the
-content bridge using `inject-userscript`. After all files are injected it
-fires `trigger-scittle.js` to evaluate and register the namespaces.
+`inject-epupp-api!` fetches each `.cljs` file (REPL-only from `bundled/epupp/`,
+dual-delivery from `userscripts/epupp/`) and sends it to the content bridge
+using `inject-userscript`. After all files are injected it fires
+`trigger-scittle.js` to evaluate and register the namespaces.
 
 This means the REPL caller can directly require `epupp.fs`, `epupp.repl`,
-and `epupp.tools` in the page environment. The injected code runs in Scittle,
+`epupp.storage`, and `epupp.tools` in the page environment. The injected code runs in Scittle,
 while the content bridge and background worker run in Squint and service
 worker contexts.
 
@@ -204,6 +205,8 @@ panel so UI can show success and error banners.
 - [src/storage.cljs](src/storage.cljs)
 - [extension/bundled/epupp/fs.cljs](extension/bundled/epupp/fs.cljs)
 - [extension/bundled/epupp/repl.cljs](extension/bundled/epupp/repl.cljs)
+- [extension/userscripts/epupp/storage.cljs](extension/userscripts/epupp/storage.cljs)
+- [extension/userscripts/epupp/tools.cljs](extension/userscripts/epupp/tools.cljs)
 - [extension/trigger-scittle.js](extension/trigger-scittle.js)
 
 ### Related Research

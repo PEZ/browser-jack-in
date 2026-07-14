@@ -19,7 +19,7 @@ See [connected-repl.md](connected-repl.md) for full details including message fl
     - Set `SCITTLE_NREPL_WEBSOCKET_PORT` global
     - Inject `vendor/scittle.nrepl.js` or reconnect existing client
     - Poll until WebSocket reaches OPEN state
-    - **Inject Epupp API files** (`bundled/epupp/*.cljs` - provides `epupp.repl/manifest!`, `epupp.fs/*`, `epupp.storage/*`, and `epupp.tools/*`)
+    - **Inject Epupp API files** — REPL-only from `bundled/epupp/` (`repl`, `fs`); dual-delivery from `userscripts/epupp/` (`helpers`, `storage`, `tools`)
 4. `ws-bridge` intercepts WebSocket for `/_nrepl` URLs
 5. Messages flow: Page ↔ Content Bridge ↔ Background ↔ Babashka relay
 
