@@ -1,6 +1,6 @@
 # Epupp: Live Tamper your Web
 
-A web browser extension that lets you tamper with web pages, live and/or with userscripts.
+A web browser extension that lets you tamper with web pages, live and/or with userscripts. Powered by [Scittle](https://github.com/babashka/scittle)
 
 <div align="center">
   <a href="https://www.youtube.com/watch?v=CuEWN5yYVa8">

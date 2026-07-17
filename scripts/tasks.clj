@@ -31,7 +31,7 @@
   "Download Scittle ecosystem libraries to extension/vendor.
    Skips download if all files already exist."
   []
-  (let [scittle-version "0.8.31"
+  (let [scittle-version "0.8.32"
         react-version "18"
         scittle-base (str "https://cdn.jsdelivr.net/npm/scittle@" scittle-version "/dist/")
         react-base "https://cdn.jsdelivr.net/npm/"

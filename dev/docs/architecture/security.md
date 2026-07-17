@@ -7,7 +7,7 @@ graph TB
     subgraph MAIN["MAIN World — Page JS Context"]
         direction LR
         WS["WS Bridge<br/><i>postMessage relay</i>"]
-        SCI["Scittle / SCI<br/><i>Pure AST interpreter</i><br/><i>Extension-origin script</i>"]
+        SCI["Scittle / SCI<br/><i>Interpreter / JIT</i><br/><i>Extension-origin script</i>"]
         US["Userscripts<br/><i>&lt;script type=application/x-scittle&gt;</i>"]
         DOM["DOM<br/><i>Full page access</i>"]
         SCI --> US
@@ -53,7 +53,7 @@ graph TB
 ```
 
 **Key boundaries:**
-- **Orange** (MAIN world) - the page's JS context. Scittle, userscripts, and the WS bridge all run here with full DOM access. Page CSP applies, but extension-origin scripts (Scittle) bypass `script-src` restrictions.
+- **Orange** (MAIN world) - the page's JS context. Scittle, userscripts, and the WS bridge all run here with full DOM access. Page CSP still governs eval/Function in MAIN world; extension-origin lets Scittle *load* despite strict `script-src`.
 - **Blue** (ISOLATED world) - the content bridge sits between page and extension. Has `chrome.runtime` access but no DOM. Validates every message against the registry before forwarding.
 - **Green** (Extension context) - completely outside page CSP. The background worker holds the actual WebSocket to localhost and manages storage.
 - **Grey** (Developer machine) - the nREPL relay and editor, connected via the background worker's WebSocket.
@@ -62,15 +62,17 @@ graph TB
 
 A natural first question: how does Epupp evaluate arbitrary code in the page context when sites like GitHub and YouTube have strict Content Security Policies? The answer has several layers.
 
-### SCI is a pure interpreter
+### SCI: interpreter with optional JIT
 
-[Scittle](https://github.com/babashka/scittle) embeds SCI (Small Clojure Interpreter), which walks the ClojureScript AST directly. It never calls `eval()` or `new Function()`. CSP's `script-src` restrictions target those native JS evaluation mechanisms - a pure interpreter sidesteps the problem entirely.
+[Scittle](https://github.com/babashka/scittle) embeds SCI (Small Clojure Interpreter). SCI primarily walks the ClojureScript AST as an interpreter. Recent SCI versions (Epupp ships 0.15.56 via Scittle 0.8.32) can also JIT-compile function bodies via `new Function()` by default. When `eval`/`Function` are unavailable - for example when CSP blocks them in a given execution context - SCI falls back to the interpreter.
 
-### Extension-origin scripts bypass page CSP
+### Extension-origin scripts can load despite page CSP
 
-Scittle's JS files are loaded as `<script src="chrome-extension://EXTENSION_ID/vendor/scittle.js">` tags, listed in `web_accessible_resources` in the manifest. The browser treats these as extension-origin code, not page-origin code. Page CSP policies (like GitHub's `script-src github.githubassets.com`) apply to the page's own origin - they don't govern what extension-origin scripts can do.
+Scittle's JS files are loaded as `<script src="chrome-extension://EXTENSION_ID/vendor/scittle.js">` tags, listed in `web_accessible_resources` in the manifest. The browser treats these as extension-origin code, not page-origin code. That lets the browser fetch and run the Scittle library even when page `script-src` would block page-origin or third-party script tags (e.g. GitHub's `script-src github.githubassets.com`).
 
-This means that even `js/eval` works from within Scittle on strict-CSP sites - not because Epupp does anything special, but because the browser considers the calling script's origin, not the page's CSP. We don't rely on this (SCI doesn't need `eval()`), but it's good to understand why it happens.
+That loading exemption does not carry over to MAIN-world evaluation. Scittle and userscripts run in the page's MAIN world context. When page CSP blocks `eval` and `new Function()` - as on GitHub and YouTube - SCI cannot JIT and falls back to the interpreter. Epupp still works; you only get JIT speedup on pages that allow Function/eval.
+
+Measured: a tight SCI loop runs ~1ms on unrestricted pages (e.g. blog.agical.se) where JIT is active, and ~20ms on CSP-strict pages (GitHub, YouTube) where SCI uses the interpreter.
 
 ### Userscript code uses non-executable script types
 
@@ -96,11 +98,11 @@ Some sites (YouTube, GitHub) enforce Trusted Types, which block raw string assig
 | CSP restriction | How Epupp handles it |
 |-----------------|---------------------|
 | `script-src` blocks inline scripts | Userscript code uses `application/x-scittle` type (not executed by browser) |
-| `script-src` blocks `eval()` | SCI is a pure interpreter - never calls `eval()`. Extension-origin scripts also bypass page `script-src` |
+| `script-src` blocks `eval()` | SCI JIT uses `new Function()` when page CSP allows it (~1ms loops); falls back to interpreter when blocked (~20ms on GitHub/YouTube). Loading Scittle via `chrome-extension://` bypasses page `script-src` for script tags only - not eval/Function |
 | CSP blocks WebSocket to localhost | Background worker holds the WebSocket (extension context, outside page CSP) |
 | Trusted Types | Passthrough `default` policy created before Scittle runs |
 
-NB: This works on both Chrome and Firefox without browser-specific APIs like the Chrome User Script API. The interpreter approach avoids the CSP problem rather than requiring special browser APIs to bypass it.
+NB: This works on both Chrome and Firefox without browser-specific APIs like the Chrome User Script API. Userscript injection via non-executable script types plus SCI evaluation avoid the browser executing inline page scripts. SCI JITs when page CSP allows `Function`/eval (unrestricted pages); on CSP-strict sites it interprets instead.
 
 ## Message Origin Isolation
 

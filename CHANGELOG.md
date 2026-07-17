@@ -6,6 +6,9 @@ Changes to Epupp
 
 ## [Unreleased]
 
+- Bump Scittle to 0.8.32 (SCI 0.15.56 with CLJS JIT)
+  - Scripts JIT-compile on pages that allow `eval`/`Function`; otherwise SCI falls back to the interpreter (e.g. GitHub, YouTube)
+
 ## [0.0.21] - 2026-07-14
 
 - Add `epupp.storage` API
