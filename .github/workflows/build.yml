@@ -12,24 +12,24 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
 
       - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.4
+        uses: DeLaGuardo/setup-clojure@13.6.0
         with:
           bb: latest
 
       - name: Cache Babashka dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.gitlibs
@@ -39,7 +39,7 @@ jobs:
             bb-deps-${{ runner.os }}-
 
       - name: Cache Scittle vendor files
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: extension/vendor
           key: scittle-vendor-${{ runner.os }}-${{ hashFiles('scripts/tasks.clj') }}
@@ -54,7 +54,7 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Upload release artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: browser-extensions-${{ github.run_id }}-${{ steps.version.outputs.version }}
           path: dist/*.zip
@@ -62,24 +62,24 @@ jobs:
   build-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
 
       - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.4
+        uses: DeLaGuardo/setup-clojure@13.6.0
         with:
           bb: latest
 
       - name: Cache Babashka dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.gitlibs
@@ -89,7 +89,7 @@ jobs:
             bb-deps-${{ runner.os }}-
 
       - name: Cache Scittle vendor files
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: extension/vendor
           key: scittle-vendor-${{ runner.os }}-${{ hashFiles('scripts/tasks.clj') }}
@@ -103,7 +103,7 @@ jobs:
           npx squint compile --paths src e2e --output-dir build/e2e
 
       - name: Upload test build
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-build-${{ github.run_id }}
           path: |
@@ -115,19 +115,19 @@ jobs:
     needs: [build-test]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
 
       - name: Download test build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: test-build-${{ github.run_id }}
 
@@ -142,24 +142,24 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4, 5, 6]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
 
       - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.4
+        uses: DeLaGuardo/setup-clojure@13.6.0
         with:
           bb: latest
 
       - name: Cache Babashka dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.gitlibs
@@ -169,7 +169,7 @@ jobs:
             bb-deps-${{ runner.os }}-
 
       - name: Download test build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: test-build-${{ github.run_id }}
 
@@ -184,7 +184,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report-${{ github.run_id }}-shard-${{ matrix.shard }}
           path: |
@@ -199,7 +199,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Extract release notes from CHANGELOG
         id: changelog
@@ -213,13 +213,13 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: browser-extensions-${{ github.run_id }}-${{ needs.build-release.outputs.version }}
           path: dist
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
           body: ${{ steps.changelog.outputs.notes }}
           files: dist/*.zip
@@ -234,14 +234,14 @@ jobs:
       contents: read
     steps:
       - name: Download release artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: browser-extensions-${{ github.run_id }}-${{ needs.build-release.outputs.version }}
           path: dist
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Upload and publish to Chrome Web Store
         env:
@@ -267,16 +267,16 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.ref }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Download release artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: browser-extensions-${{ github.run_id }}-${{ needs.build-release.outputs.version }}
           path: dist
